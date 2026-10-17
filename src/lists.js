@@ -152,8 +152,8 @@ export function viewRecords(form) {
       <span class="lv-count ph-hide">${rows.length} of ${all.length}</span>
     </div>
     ${LV.sel.size ? bulkBar(form, selRecs, editable, selHidden, settable) : ''}
-    ${rows.length ? table(form, c, shown, rows, allOn, someOn, cfg) + cards(form, shown, rows, allOn, `${rows.length} of ${all.length}`) : `<div class="panel empty"><p>No ${esc(form.name.toLowerCase())} match ${H.search().trim() ? `“${esc(H.search())}”` : 'these filters'}.</p>${filterCount(cfg) ? '<button class="btn" data-lv="filter-clear">Clear filters</button>' : ''}</div>`}
-    ${LV.sheet ? sheetHTML(form, c, shown, cfg, filterable, all, view, admin) : ''}
+    ${rows.length ? table(form, c, shown, rows, allOn, someOn, cfg) + cards(form, shown, rows, allOn, `${rows.length} of ${all.length}`, cfg.density) : `<div class="panel empty"><p>No ${esc(form.name.toLowerCase())} match ${H.search().trim() ? `“${esc(H.search())}”` : 'these filters'}.</p>${filterCount(cfg) ? '<button class="btn" data-lv="filter-clear">Clear filters</button>' : ''}</div>`}
+    ${LV.sheet ? sheetHTML(form, c, shown, cfg, filterable, all, view, admin, dirty) : ''}
     ${LV.confirm ? confirmDialog(form, selRecs, editable) : ''}${LV.setAsk && LV.setAsk.form.id === form.id ? setAskDialog() : ''}
   </div>`;
 }
@@ -173,8 +173,9 @@ function viewsBar(c, view, dirty, admin) {
     right = `<div class="lv-dirty">
       <span class="lv-msg">Changed from “${esc(view.name)}”</span>
       <button class="btn ghost" type="button" data-lv="reset">Reset</button>
-      ${canSaveView(view, me(), admin) ? `<button class="btn" type="button" data-lv="save"${LV.busy ? ' disabled' : ''}>Save view${view.shared ? ' for everyone' : ''}</button>` : ''}
-      <button class="btn primary" type="button" data-lv="save-new">Save as new view</button>
+      ${canSaveView(view, me(), admin) ? `<button class="btn ph-hide" type="button" data-lv="save"${LV.busy ? ' disabled' : ''}>Save view${view.shared ? ' for everyone' : ''}</button>` : ''}
+      <button class="btn primary ph-hide" type="button" data-lv="save-new">Save as new view</button>
+      <button class="btn primary ph-only" type="button" data-lv="sheet" aria-haspopup="dialog">Save…</button>
     </div>`;
   } else {
     const items = [];
@@ -192,8 +193,12 @@ const ICON_MORE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="current
 const densitySeg = (cfg, cls = '') => `<div class="lv-seg ${cls}" role="group" aria-label="Row height">${[['cozy', 'Comfortable'], ['compact', 'Compact']].map(([d, n]) => `<button type="button" class="${cfg.density === d ? 'on' : ''}" aria-pressed="${cfg.density === d}" data-lv="density" data-v="${d}">${n}</button>`).join('')}</div>`;
 
 /** Phones: the ⋯ sheet with everything that isn't needed on every visit. */
-function sheetHTML(form, c, shown, cfg, filterable, all, view, admin) {
+function sheetHTML(form, c, shown, cfg, filterable, all, view, admin, dirty = false) {
   const items = [];
+  if (dirty && !LV.naming) {
+    if (canSaveView(view, me(), admin)) items.push(`<button type="button" class="lv-opt" data-lv="save"${LV.busy ? ' disabled' : ''}>Save changes to “${esc(view.name)}”${view.shared ? ' for everyone' : ''}</button>`);
+    items.push(`<button type="button" class="lv-opt" data-lv="save-new">Save as a new view</button>`);
+  }
   if (!view.builtin && canSaveView(view, me(), admin)) items.push(`<button type="button" class="lv-opt" data-lv="rename">Rename this view</button>`);
   if (!view.builtin && admin) items.push(`<button type="button" class="lv-opt" data-lv="share">${view.shared ? 'Make this view private' : 'Share this view with everyone'}</button>`);
   if (canDeleteView(view, me(), admin)) items.push(`<button type="button" class="lv-opt danger${LV.confirmView ? ' armed' : ''}" data-lv="view-del">${LV.confirmView ? 'Tap again to confirm' : view.builtin ? 'Go back to the form’s list columns' : 'Delete this view'}</button>`);
@@ -337,13 +342,22 @@ function table(form, c, shown, rows, allOn, someOn, cfg) {
   </table></div></div>`;
 }
 
-function cards(form, shown, rows, allOn, count = '') {
-  return `<div class="lv-cards">
+function cards(form, shown, rows, allOn, count = '', density = 'cozy') {
+  const compact = density === 'compact';
+  // Compact on a phone: two tight lines, the main field with one value beside it, then up to two more
+  const numAt = shown.findIndex((col) => col.num);
+  const tight = (r) => {
+    const vals = shown.map((col, i) => ({ i, text: r.cells[i].text })).filter((x) => x.text);
+    const right = vals.find((x) => x.i === numAt) || vals[0];
+    const rest = vals.filter((x) => x !== right).slice(0, 2).map((x) => x.text);
+    return `<span class="lv-c1"><b>${esc(r.title)}</b>${right ? `<span class="lv-cv">${esc(right.text)}</span>` : ''}</span>${rest.length ? `<span class="lv-c2">${esc(rest.join(' · '))}</span>` : ''}`;
+  };
+  return `<div class="lv-cards${compact ? ' compact' : ''}">
     <div class="lv-allrow"><label class="lv-sw lv-allcard"><input type="checkbox" data-lvc="all"${allOn ? ' checked' : ''}>Select all</label>${count ? `<span class="lv-ccount">${esc(count)}</span>` : ''}</div>
     ${rows.map((r) => {
       const sel = LV.sel.has(r.rec.id);
       const meta = shown.map((col, i) => (r.cells[i].text ? `<span${r.cells[i].long ? ' class="lv-long"' : ''}>${esc(col.label)}: ${esc(r.cells[i].text)}</span>` : '')).filter(Boolean).slice(0, 4).join('');
-      return `<div class="lv-card${sel ? ' sel' : ''}"><label class="lv-cklab"><input type="checkbox" data-lvc="sel" data-v="${r.rec.id}" aria-label="Select ${esc(r.title)}"${sel ? ' checked' : ''}></label><button class="card" data-act="open-record" data-id="${r.rec.id}"><b>${esc(r.title)}</b>${meta ? `<div class="meta">${meta}</div>` : ''}</button></div>`;
+      return `<div class="lv-card${sel ? ' sel' : ''}"><label class="lv-cklab"><input type="checkbox" data-lvc="sel" data-v="${r.rec.id}" aria-label="Select ${esc(r.title)}"${sel ? ' checked' : ''}></label><button class="card" data-act="open-record" data-id="${r.rec.id}">${compact ? tight(r) : `<b>${esc(r.title)}</b>${meta ? `<div class="meta">${meta}</div>` : ''}`}</button></div>`;
     }).join('')}
   </div>`;
 }
@@ -640,8 +654,8 @@ document.addEventListener('click', (e) => {
     case 'cols-reset': { const form = formNow(); if (form) { const view = ctxFor(form).views.find((x) => x.id === LV.viewId); setCfg({ cols: (view?.cfg || LV.base).cols.slice() }); } break; }
     case 'filter-clear': setCfg({ filters: {} }); break;
     case 'reset': LV.cfg = structuredClone(LV.base); repaint(); break;
-    case 'save': saveCurrent(); break;
-    case 'save-new': LV.naming = { mode: 'new', name: '', shared: false, focus: true }; LV.pop = null; repaint(); break;
+    case 'save': LV.sheet = false; saveCurrent(); break;
+    case 'save-new': LV.naming = { mode: 'new', name: '', shared: false, focus: true }; LV.pop = null; LV.sheet = false; repaint(); break;
     case 'rename': { const form = formNow(); const vv = form && ctxFor(form).views.find((x) => x.id === LV.viewId); LV.naming = { mode: 'rename', name: vv?.name || '', focus: true }; LV.pop = null; LV.sheet = false; repaint(); break; }
     case 'share': toggleShare(); break;
     case 'view-del': removeView(); break;

@@ -142,8 +142,13 @@
 .lv-sheet .lv-opt{min-height:44px;text-align:left}
 .lv-sheet-adm{border-top:1px solid var(--line);padding-top:10px}
 .lv-sheet .im-menu{position:static;box-shadow:none;width:auto;margin-top:6px}
+/* Shown only on phones */
+.ph-only{display:none!important}
 @media (max-width:640px){
   .ph-hide{display:none!important}
+  .ph-only{display:inline-flex!important}
+  .lv-dirty{flex-wrap:nowrap;width:100%;margin-left:0}
+  .lv-dirty .lv-msg{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .head{flex-wrap:nowrap;align-items:center}
   .head .ttl{min-width:0;align-items:center}
   .head .ttl h1{font-size:1.5rem}
@@ -157,3 +162,13 @@
   .lv-tools .lv-search{flex:1;min-width:0}
   .lv-sortchip{display:flex}
 }
+
+/* Compact on phones: two tight lines per record */
+.lv-cards.compact{gap:4px}
+.lv-cards.compact .lv-card{border-radius:10px}
+.lv-cards.compact .lv-cklab{margin:2px 0 0}
+.lv-cards.compact .card{padding-top:8px;padding-bottom:8px;min-height:44px;gap:2px}
+.lv-c1{display:flex;align-items:baseline;gap:10px;min-width:0;width:100%}
+.lv-c1 b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lv-cv{flex:none;font-variant-numeric:tabular-nums;font-weight:500}
+.lv-c2{display:block;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%}
