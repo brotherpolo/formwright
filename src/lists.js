@@ -22,6 +22,7 @@ const UNDO_MS = 6000;
 const LV = {
   formId: null, viewId: null, cfg: null, base: null, pop: null, sel: new Set(),
   naming: null, confirm: false, confirmView: false, awaitId: null, busy: false, wantId: null,
+  sheet: false, // phones: the ⋯ list options sheet is open
 };
 let pending = null; // { ids:Set, timer, formId, label } — deletes waiting out the undo window
 
@@ -132,7 +133,7 @@ export function viewRecords(form) {
   const head = `
   <div class="head">
     <div class="ttl">${badge(form, 1)}<div><h1>${esc(form.name)}</h1>${form.description ? `<p class="sub">${esc(form.description)}</p>` : ''}</div></div>
-    <div class="actions">${admin ? `<button class="btn ghost" data-act="edit-form" data-id="${form.id}">Edit form</button>` : ''}${importButton(form)}${mayCreate ? `<button class="btn primary" data-act="new-record" data-id="${form.id}">+ New ${esc(itemName(form).toLowerCase())}</button>` : ''}</div>
+    <div class="actions">${admin ? `<button class="btn ghost ph-hide" data-act="edit-form" data-id="${form.id}">Edit form</button>` : ''}${admin ? `<span class="ph-hide">${importButton(form)}</span>` : ''}${mayCreate ? `<button class="btn primary" data-act="new-record" data-id="${form.id}" aria-label="New ${esc(itemName(form).toLowerCase())}">+ New<span class="ph-hide"> ${esc(itemName(form).toLowerCase())}</span></button>` : ''}</div>
   </div>${scope}`;
 
   if (!all.length) {
@@ -144,16 +145,15 @@ export function viewRecords(form) {
     ${viewsBar(c, view, dirty, admin)}
     <div class="lv-tools">
       <input class="in lv-search" id="search" type="search" placeholder="Search ${esc(form.name.toLowerCase())}" value="${esc(H.search())}" aria-label="Search records">
-      ${filterable.length ? filterTool(filterable, all, cfg) : ''}
-      ${columnsTool(c, shown)}
-      <div class="lv-seg" role="group" aria-label="Row height">
-        ${[['cozy', 'Comfortable'], ['compact', 'Compact']].map(([d, n]) => `<button type="button" class="${cfg.density === d ? 'on' : ''}" aria-pressed="${cfg.density === d}" data-lv="density" data-v="${d}">${n}</button>`).join('')}
-      </div>
-      ${sortTool(c, shown, cfg)}
-      <span class="lv-count">${rows.length} of ${all.length}</span>
+      ${sortChip(c, shown, cfg)}
+      ${LV.sheet ? '' : `<span class="ph-hide lv-tool">${filterable.length ? filterTool(filterable, all, cfg) : ''}</span>
+      <span class="ph-hide lv-tool">${columnsTool(c, shown)}</span>
+      ${densitySeg(cfg, 'ph-hide')}`}
+      <span class="lv-count ph-hide">${rows.length} of ${all.length}</span>
     </div>
     ${LV.sel.size ? bulkBar(form, selRecs, editable, selHidden, settable) : ''}
-    ${rows.length ? table(form, c, shown, rows, allOn, someOn, cfg) + cards(form, shown, rows, allOn) : `<div class="panel empty"><p>No ${esc(form.name.toLowerCase())} match ${H.search().trim() ? `“${esc(H.search())}”` : 'these filters'}.</p>${filterCount(cfg) ? '<button class="btn" data-lv="filter-clear">Clear filters</button>' : ''}</div>`}
+    ${rows.length ? table(form, c, shown, rows, allOn, someOn, cfg) + cards(form, shown, rows, allOn, `${rows.length} of ${all.length}`) : `<div class="panel empty"><p>No ${esc(form.name.toLowerCase())} match ${H.search().trim() ? `“${esc(H.search())}”` : 'these filters'}.</p>${filterCount(cfg) ? '<button class="btn" data-lv="filter-clear">Clear filters</button>' : ''}</div>`}
+    ${LV.sheet ? sheetHTML(form, c, shown, cfg, filterable, all, view, admin) : ''}
     ${LV.confirm ? confirmDialog(form, selRecs, editable) : ''}${LV.setAsk && LV.setAsk.form.id === form.id ? setAskDialog() : ''}
   </div>`;
 }
@@ -183,7 +183,29 @@ function viewsBar(c, view, dirty, admin) {
     if (canDeleteView(view, me(), admin)) items.push(`<button type="button" class="lv-opt danger${LV.confirmView ? ' armed' : ''}" data-lv="view-del">${LV.confirmView ? 'Tap again to confirm' : view.builtin ? 'Go back to the form’s list columns' : 'Delete view'}</button>`);
     if (items.length) right = `<div class="lv-anchor lv-right"><button type="button" class="btn ghost" data-lv="pop" data-v="view" aria-expanded="${LV.pop === 'view'}" aria-label="View options">View options</button>${LV.pop === 'view' ? `<div class="lv-pop right">${items.join('')}</div>` : ''}</div>`;
   }
-  return `<div class="lv-views"><div class="lv-tabs" role="tablist" aria-label="Saved views">${tabs}</div>${right}</div>`;
+  const phone = `<div class="lv-phonebar"><select class="in" data-lvc="viewsel" aria-label="View">${c.views.map((v) => `<option value="${esc(v.id)}"${v.id === view.id ? ' selected' : ''}>${esc(v.name)}${v.builtin ? '' : v.shared ? ' · Everyone' : ' · Just me'}</option>`).join('')}</select>
+    <button type="button" class="btn lv-more" data-lv="sheet" aria-haspopup="dialog" aria-expanded="${LV.sheet}" aria-label="List options: filter, columns, sort, row height${admin ? ', form settings' : ''}">${ICON_MORE}</button></div>`;
+  return `<div class="lv-views">${phone}<div class="lv-tabs" role="tablist" aria-label="Saved views">${tabs}</div>${dirty || LV.naming ? right : `<span class="ph-hide">${right}</span>`}</div>`;
+}
+
+const ICON_MORE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
+const densitySeg = (cfg, cls = '') => `<div class="lv-seg ${cls}" role="group" aria-label="Row height">${[['cozy', 'Comfortable'], ['compact', 'Compact']].map(([d, n]) => `<button type="button" class="${cfg.density === d ? 'on' : ''}" aria-pressed="${cfg.density === d}" data-lv="density" data-v="${d}">${n}</button>`).join('')}</div>`;
+
+/** Phones: the ⋯ sheet with everything that isn't needed on every visit. */
+function sheetHTML(form, c, shown, cfg, filterable, all, view, admin) {
+  const items = [];
+  if (!view.builtin && canSaveView(view, me(), admin)) items.push(`<button type="button" class="lv-opt" data-lv="rename">Rename this view</button>`);
+  if (!view.builtin && admin) items.push(`<button type="button" class="lv-opt" data-lv="share">${view.shared ? 'Make this view private' : 'Share this view with everyone'}</button>`);
+  if (canDeleteView(view, me(), admin)) items.push(`<button type="button" class="lv-opt danger${LV.confirmView ? ' armed' : ''}" data-lv="view-del">${LV.confirmView ? 'Tap again to confirm' : view.builtin ? 'Go back to the form’s list columns' : 'Delete this view'}</button>`);
+  return `<div class="lv-sheetbg" data-lv="sheet-bg"><div class="lv-sheet" role="dialog" aria-modal="true" aria-labelledby="lv-sheet-h">
+    <span class="lv-grab" aria-hidden="true"></span>
+    <div class="lv-sheet-h"><b id="lv-sheet-h">List options</b><button type="button" class="ibtn" data-lv="sheet-close" aria-label="Close">✕</button></div>
+    <div class="lv-sheet-row">${filterable.length ? filterTool(filterable, all, cfg) : ''}${columnsTool(c, shown)}</div>
+    <div class="lv-sheet-sec"><span class="lv-sheet-l">Sort</span>${sortTool(c, shown, cfg)}</div>
+    <div class="lv-sheet-sec"><span class="lv-sheet-l">Row height</span>${densitySeg(cfg)}</div>
+    ${items.length ? `<div class="lv-sheet-sec"><span class="lv-sheet-l">This view</span>${items.join('')}</div>` : ''}
+    ${admin ? `<div class="lv-sheet-sec lv-sheet-adm"><span class="lv-sheet-l">Administrators</span><button type="button" class="lv-opt" data-act="edit-form" data-id="${form.id}">Edit form</button>${importButton(form)}</div>` : ''}
+  </div></div>`;
 }
 
 function filterTool(fields, recs, cfg) {
@@ -260,10 +282,14 @@ async function setOwnerOf(to) {
   LV.busy = false; repaint();
 }
 
-/** Phones (cards have no headings to tap): sort by the main field or a shown column, and which way. */
-function sortTool(c, shown, cfg) {
+/** Phones: a small chip beside search: tap to reverse; ▾ picks another field. */
+function sortChip(c, shown, cfg) {
+  const o = sortInfo(c, shown, cfg);
+  return `<div class="lv-sortchip"><button type="button" class="lv-chipdir" data-lv="sortdir" aria-label="Sorted by ${esc(o.cur.label)}, ${esc(o.words)}. Tap to reverse."><b aria-hidden="true">${o.asc ? '↑' : '↓'}</b> ${esc(o.short)}</button>
+    <label class="lv-chippick"><span aria-hidden="true">▾</span><select data-lvc="sortby" aria-label="Sort by">${o.opts.map((x) => `<option value="${esc(x.key)}"${x.key === o.cur.key ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label></div>`;
+}
+function sortInfo(c, shown, cfg) {
   const opts = [{ key: 'title', label: c.titleField?.label || 'Title', field: c.titleField }].concat(shown.map((x) => ({ key: x.key, label: x.label, field: x.field, num: x.num })));
-  // the record's own dates are always there (the list starts sorted by Last updated)
   ['sys:updated', 'sys:created'].forEach((k) => { if (!opts.some((o) => o.key === k) && c.byKey.has(k)) opts.push({ key: k, label: c.byKey.get(k).label, date: true }); });
   const cur = opts.find((o) => o.key === cfg.sort.key) || opts[0];
   const t = cur.field?.type || '';
@@ -271,6 +297,12 @@ function sortTool(c, shown, cfg) {
   const num = !date && (cur.num || ['number', 'decimal', 'currency', 'percent', 'range', 'rating', 'autonumber', 'formula'].includes(t));
   const asc = cfg.sort.key === cur.key ? cfg.sort.dir === 'asc' : cur.key === 'title';
   const words = date ? (asc ? 'Oldest first' : 'Newest first') : num ? (asc ? 'Low to high' : 'High to low') : (asc ? 'A to Z' : 'Z to A');
+  const short = cur.label.length > 12 ? cur.label.split(/\s+/).slice(-1)[0].slice(0, 12) : cur.label;
+  return { opts, cur, asc, words, short };
+}
+/** The sheet's sort: field and order in words. */
+function sortTool(c, shown, cfg) {
+  const { opts, cur, asc, words } = sortInfo(c, shown, cfg);
   return `<div class="lv-sortm" role="group" aria-label="Sort">
     <label class="lv-sortsel"><span class="sr">Sort by</span><select class="in" data-lvc="sortby" aria-label="Sort by">${opts.map((o) => `<option value="${esc(o.key)}"${o.key === cur.key ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select></label>
     <button type="button" class="btn lv-sortdir" data-lv="sortdir" aria-label="Order: ${esc(words)}. Tap to reverse." title="Tap to reverse"><span aria-hidden="true">${asc ? '↑' : '↓'}</span> ${esc(words)}</button>
@@ -305,9 +337,9 @@ function table(form, c, shown, rows, allOn, someOn, cfg) {
   </table></div></div>`;
 }
 
-function cards(form, shown, rows, allOn) {
+function cards(form, shown, rows, allOn, count = '') {
   return `<div class="lv-cards">
-    <label class="lv-sw lv-allcard"><input type="checkbox" data-lvc="all"${allOn ? ' checked' : ''}>Select all shown</label>
+    <div class="lv-allrow"><label class="lv-sw lv-allcard"><input type="checkbox" data-lvc="all"${allOn ? ' checked' : ''}>Select all</label>${count ? `<span class="lv-ccount">${esc(count)}</span>` : ''}</div>
     ${rows.map((r) => {
       const sel = LV.sel.has(r.rec.id);
       const meta = shown.map((col, i) => (r.cells[i].text ? `<span${r.cells[i].long ? ' class="lv-long"' : ''}>${esc(col.label)}: ${esc(r.cells[i].text)}</span>` : '')).filter(Boolean).slice(0, 4).join('');
@@ -559,7 +591,7 @@ export function useView(formId, viewId) {
 
 export function resetLists() {
   if (pending) { clearTimeout(pending.timer); pending = null; undoBar(null); }
-  Object.assign(LV, { formId: null, viewId: null, cfg: null, base: null, pop: null, sel: new Set(), naming: null, confirm: false, confirmView: false, awaitId: null, busy: false });
+  Object.assign(LV, { formId: null, viewId: null, cfg: null, base: null, pop: null, sel: new Set(), naming: null, confirm: false, confirmView: false, awaitId: null, busy: false, sheet: false });
 }
 
 /* ---------- events ---------- */
@@ -577,7 +609,10 @@ document.addEventListener('click', (e) => {
   if (!el) return;
   const a = el.dataset.lv, v = el.dataset.v;
   if (a === 'del-cancel' && el.classList.contains('lv-scrim') && e.target !== el) return; // clicks inside the dialog
+  if (a === 'sheet-bg' && e.target !== el) return; // clicks inside the sheet
   switch (a) {
+    case 'sheet': LV.sheet = true; LV.pop = null; repaint(); setTimeout(() => document.querySelector('#lv .lv-sheet [data-lv="sheet-close"]')?.focus(), 0); break;
+    case 'sheet-close': case 'sheet-bg': LV.sheet = false; LV.pop = null; repaint(); setTimeout(() => document.querySelector('#lv [data-lv="sheet"]')?.focus(), 0); break;
     case 'view': pickView(v); break;
     case 'pop': LV.pop = LV.pop === v ? null : v; repaint(); break;
     case 'pop-close': LV.pop = null; repaint(); break;
@@ -607,7 +642,7 @@ document.addEventListener('click', (e) => {
     case 'reset': LV.cfg = structuredClone(LV.base); repaint(); break;
     case 'save': saveCurrent(); break;
     case 'save-new': LV.naming = { mode: 'new', name: '', shared: false, focus: true }; LV.pop = null; repaint(); break;
-    case 'rename': { const form = formNow(); const vv = form && ctxFor(form).views.find((x) => x.id === LV.viewId); LV.naming = { mode: 'rename', name: vv?.name || '', focus: true }; LV.pop = null; repaint(); break; }
+    case 'rename': { const form = formNow(); const vv = form && ctxFor(form).views.find((x) => x.id === LV.viewId); LV.naming = { mode: 'rename', name: vv?.name || '', focus: true }; LV.pop = null; LV.sheet = false; repaint(); break; }
     case 'share': toggleShare(); break;
     case 'view-del': removeView(); break;
     case 'name-cancel': LV.naming = null; repaint(); break;
@@ -632,6 +667,7 @@ document.addEventListener('change', (e) => {
   const k = t.dataset.lvc;
   const where = t.closest('.lv-cards') ? '#lv .lv-cards ' : '#lv ';
   const refocus = (sel) => document.querySelector(where + sel)?.focus();
+  if (k === 'viewsel') { LV.sheet = false; pickView(t.value); return; }
   if (k === 'sortby') {
     const form = formNow(); const col = form ? ctxFor(form).byKey.get(t.value) : null;
     setCfg({ sort: { key: t.value, dir: t.value === 'title' ? 'asc' : firstDir(col) } });
@@ -675,5 +711,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key !== 'Escape') return;
   if (LV.confirm) { LV.confirm = false; repaint(); }
+  else if (LV.pop && LV.sheet && document.getElementById('lv')) { LV.pop = null; repaint(); }
+  else if (LV.sheet && document.getElementById('lv')) { LV.sheet = false; repaint(); document.querySelector('#lv [data-lv="sheet"]')?.focus(); }
   else if (LV.pop && document.getElementById('lv')) { LV.pop = null; repaint(); }
 });

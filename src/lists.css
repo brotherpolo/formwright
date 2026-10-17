@@ -110,9 +110,50 @@
   .lv-pop,.lv-pop.right{position:fixed;left:12px;right:12px;top:auto;bottom:12px;width:auto;max-height:70dvh;box-shadow:0 -8px 40px rgba(15,20,40,.28)}
 }
 
-/* Sorting on phones: cards have no column headings to tap */
-.lv-sortm{display:none;align-items:center;gap:6px}
-.lv-sortsel select{max-width:46vw}
+.lv-allrow{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lv-ccount{font-size:13px;color:var(--muted)}
+
+/* Phones: a compact list toolbar. Views as a dropdown with ⋯ beside it; search with a sort chip;
+   filter, columns, sort, row height and the form's settings in the ⋯ sheet. */
+.lv-phonebar,.lv-sortchip{display:none}
+.lv-sortchip{align-items:stretch;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);flex:none}
+.lv-chipdir{border:0;background:none;font:inherit;color:var(--fg);padding:0 10px;min-height:40px;white-space:nowrap;cursor:pointer}
+.lv-chipdir b{font-weight:700}
+.lv-chippick{position:relative;display:grid;place-items:center;width:30px;border-left:1px solid var(--line);color:var(--muted)}
+.lv-chippick select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px}
+.lv-sortm{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.lv-sortsel select{max-width:60vw}
 .lv-sortdir{min-height:40px;padding:6px 12px;white-space:nowrap}
 .lv-sortdir span{font-weight:700}
-@media (max-width:640px){.lv-sortm{display:flex;flex-basis:100%}}
+.lv-sheetbg{position:fixed;inset:0;background:rgba(10,12,20,.42);z-index:60;display:flex;align-items:flex-end}
+.lv-sheet{background:var(--surface);color:var(--fg);width:100%;border-radius:18px 18px 0 0;padding:8px 16px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px;max-height:85dvh;overflow:auto;box-shadow:0 -10px 30px rgba(0,0,0,.18)}
+.lv-grab{align-self:center;width:40px;height:4px;border-radius:2px;background:var(--line-strong)}
+.lv-sheet-h{display:flex;align-items:center;justify-content:space-between}
+.lv-sheet-h b{font-family:var(--display);font-size:1.15rem}
+.lv-sheet-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.lv-sheet-row .lv-anchor{min-width:0}
+.lv-sheet-row .lv-anchor>.btn{width:100%;min-height:46px}
+.lv-sheet-row .lv-anchor:has(.lv-pop){grid-column:1/-1}
+.lv-sheet .lv-pop{position:static;width:auto;max-width:none;max-height:none;box-shadow:none;margin-top:8px}
+.lv-sheet-sec{display:flex;flex-direction:column;gap:6px}
+.lv-sheet-l{font-size:13px;font-weight:600;color:var(--muted)}
+.lv-sheet .lv-seg{display:grid;grid-template-columns:1fr 1fr}
+.lv-sheet .lv-seg button{min-height:44px}
+.lv-sheet .lv-opt{min-height:44px;text-align:left}
+.lv-sheet-adm{border-top:1px solid var(--line);padding-top:10px}
+.lv-sheet .im-menu{position:static;box-shadow:none;width:auto;margin-top:6px}
+@media (max-width:640px){
+  .ph-hide{display:none!important}
+  .head{flex-wrap:nowrap;align-items:center}
+  .head .ttl{min-width:0;align-items:center}
+  .head .ttl h1{font-size:1.5rem}
+  .head .ttl .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .head .actions{flex:none}
+  .lv-tabs{display:none}
+  .lv-phonebar{display:flex;gap:8px;flex:1;min-width:0}
+  .lv-phonebar select{flex:1;min-width:0;font-weight:600}
+  .lv-more{width:44px;padding:0;flex:none}
+  .lv-tools{flex-wrap:nowrap}
+  .lv-tools .lv-search{flex:1;min-width:0}
+  .lv-sortchip{display:flex}
+}
