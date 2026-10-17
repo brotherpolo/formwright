@@ -546,7 +546,7 @@ function tasksInner(){
   const form=rec?formById(rec.formId):null;
   const noun=form?itemName(form).toLowerCase():'record';
   const k='t:tasks',p=form?subPrefs(form.id,k):prefsOf({},'',k);
-  const addBtn=canUseTasks()?`<button class="btn sm" data-act="add-task">+ Add task</button>`:'';
+  const addBtn=canUseTasks()?`<button class="btn sm soft" data-act="add-task">+ Add task</button>`:'';
   const ready=tw.status==='ready'&&tw.recordId===view.recordId;
   const openTasks=ready?tw.tasks.filter(t=>!t.done):[];
   const tOpen=!(form&&folded(form.id,k));
@@ -1171,7 +1171,7 @@ function childSection(form,cf,rec,ro){
   const lim=limitRows(rows,p.show);
   const titleLabel=ctx.tf?.label||itemName(cf);
   const detachable=r=>!ro&&canEditRecord(store.me,r);
-  const buttons=`${canCreate(store.me,cf.id)?`<button class="btn sm" data-act="add-child" data-id="${cf.id}">+ Add ${esc(itemName(cf).toLowerCase())}</button>`:''}${ro?'':`<button class="btn sm" data-act="child-attach" data-id="${cf.id}">Attach existing</button>`}`;
+  const buttons=`${canCreate(store.me,cf.id)?`<button class="btn sm soft" data-act="add-child" data-id="${cf.id}">+ Add ${esc(itemName(cf).toLowerCase())}</button>`:''}${ro?'':`<button class="btn sm soft" data-act="child-attach" data-id="${cf.id}">Attach existing</button>`}`;
   const tools=total?colsTool(k,ui.subPop===k,cols.map(c=>({key:c.key,label:c.label,src:c.src})),ctx.catalog,{fixed:titleLabel})+showMenu(k,p.show,total)+sortMenu(k,[{key:'title',label:titleLabel},...cols],sort,''):'';
   const bar=toolBar({search:total>5||kq?subSearch(k,cf.name,kq,rows.length,total):'',tools,buttons});
   const det=r=>detachable(r.rec)?`<button type="button" class="ibtn at-det" data-act="child-detach" data-id="${r.rec.id}" aria-label="Detach ${esc(r.title)} (keeps it)" title="Detach: take it off this ${esc(itemName(form).toLowerCase())} but keep it">${DETACH_ICON}</button>`:'';
@@ -1320,7 +1320,7 @@ function gridSection(form,rel,cf,d,parentRo){
   const gHead=`<div class="section-h"><h2>${foldBtn(k,gOpen,`${badge(cf)}<span>${esc(cf.name)}</span> <span class="count">${allRows.filter(r=>!r.isNew).length}</span>`,gSum)}</h2><span class="chip acc">Grid</span></div>`;
   if(!gOpen)return `<section class="section gsec" id="grid-${cf.id}">${gHead}</section>`;
   const usable=(cf.fields||[]).filter(f=>f.type!=='heading');
-  const buttons=`${mayAdd?`<button type="button" class="btn sm" data-act="grid-add" data-grid="${cf.id}">+ Add ${esc(itemName(cf).toLowerCase())}</button>`:''}${parentRo?'':`<button type="button" class="btn sm" data-act="grid-attach" data-grid="${cf.id}">Attach existing</button>`}`;
+  const buttons=`${mayAdd?`<button type="button" class="btn sm soft" data-act="grid-add" data-grid="${cf.id}">+ Add ${esc(itemName(cf).toLowerCase())}</button>`:''}${parentRo?'':`<button type="button" class="btn sm soft" data-act="grid-attach" data-grid="${cf.id}">Attach existing</button>`}`;
   const tools=colsTool(k,ui.subPop===k,cols.map(f=>({key:f.id,label:f.label})),usable.map(f=>({key:f.id,label:f.label,group:''})),{min:1})+(allRows.length?showMenu(k,p.show,allRows.filter(r=>!r.isNew).length):'');
   const hint=(sort?'Click a heading again to reverse. ':'Click a heading to sort. ')+(mayAdd?'New rows stay at the top until you save.':'');
   const bar=toolBar({search:allRows.length>5||q?subSearch(k,cf.name,q,found.filter(r=>!r.isNew).length,allRows.filter(r=>!r.isNew).length,allRows.some(r=>r.isNew)):'',tools,buttons,hint});

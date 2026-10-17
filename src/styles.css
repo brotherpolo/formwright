@@ -1016,3 +1016,8 @@ tr.wf-over td.title{color:var(--danger)}
   :root[data-rail] .side-foot{flex-direction:column;padding:10px 0 0;justify-content:center}
   :root[data-rail] .nav-find{margin-bottom:6px}
 }
+
+/* Add / attach buttons on a record page: shaded in the theme colour so they're easy to spot */
+.btn.soft{background:var(--accent-soft);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);font-weight:600}
+.btn.soft:hover{background:color-mix(in srgb,var(--accent) 18%,var(--surface));border-color:var(--accent)}
+.btn.soft:disabled{opacity:.55}
