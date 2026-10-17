@@ -434,6 +434,21 @@ function setRail(on,quiet){
   renderSide();
   if(!quiet){$('[data-act="side-rail"]')?.focus({preventScroll:true});window.dispatchEvent(new Event('resize'));}
 }
+/** The record's Activity side panel folded to a strip on the right (wide screens; remembered on this device; boot.js applies it). */
+const asideFolded=()=>document.documentElement.dataset.aside==='0';
+function setAsideFold(on){
+  if(on)document.documentElement.dataset.aside='0';else delete document.documentElement.dataset.aside;
+  try{localStorage.setItem('fw.aside',on?'0':'1');}catch(e){/* private mode */}
+  if(view.name==='record')renderMain();
+  setTimeout(()=>$(on?'.rs-strip':'.rs-fold')?.focus({preventScroll:true}),0);
+  window.dispatchEvent(new Event('resize'));
+}
+/** What's in Activity: stage moves and sent emails, for the folded strip's badge. */
+function asideCount(){
+  const f=rdraft&&formById(rdraft.formId);
+  return (wfOn(f)&&sw.list?sw.list.length:0)+(ew.recordId===view.recordId?ew.list.length:0);
+}
+function paintAsideCount(){const el=$('.rs-strip');if(!el)return;const n=asideCount();el.querySelector('.rs-n')?.replaceChildren(String(n));el.querySelector('.rs-n')?.toggleAttribute('hidden',!n);el.setAttribute('aria-label',`Show Activity${n?` (${n})`:''}`);}
 /** Administration in the sidebar: folded unless you open it (remembered on this device) or you're on one of its pages. */
 const admOpen=()=>{if(ADMIN_VIEWS.has(view.name))return true;try{return localStorage.getItem('fw.adminOpen')==='1';}catch(e){return false;}};
 function renderSide(){
@@ -653,8 +668,10 @@ function viewRecord(form){
     const mails=sentEmailsHTML();
     if(wfOn(form)||mails)tabs.push({k:'activity',label:'Activity',n:0,html:`${wfOn(form)?`<div id="rec-history">${historyHTML(form)}</div>`:''}<div id="rec-emails">${mails}</div>`});
     const cur=tabs.some(t=>t.k===ui.rsTab)?ui.rsTab:(tabs[0]||{}).k;
+    const n=asideCount();
     if(tabs.length)asideHTML=`<aside class="rec-aside" aria-label="Activity">
-      <div class="rs-tabs" role="tablist" aria-label="Side panel">${tabs.map(t=>`<button type="button" role="tab" id="rs-t-${t.k}" aria-controls="rs-p-${t.k}" aria-selected="${t.k===cur}" class="rs-tab${t.k===cur?' on':''}" data-act="rs-tab" data-v="${t.k}"${t.k===cur?'':' tabindex="-1"'}>${t.label}${t.n?` <span class="rs-n">${t.n}</span>`:''}</button>`).join('')}</div>
+      <button type="button" class="rs-strip" data-act="aside-fold" aria-keyshortcuts="Alt+Period" aria-label="Show Activity${n?` (${n})`:''}" title="Show Activity (Alt+.)"><span aria-hidden="true" class="rs-chev">«</span><span class="rs-vert" aria-hidden="true">Activity</span><span class="rs-n" aria-hidden="true"${n?'':' hidden'}>${n}</span></button>
+      <div class="rs-tabs" role="tablist" aria-label="Side panel">${tabs.map(t=>`<button type="button" role="tab" id="rs-t-${t.k}" aria-controls="rs-p-${t.k}" aria-selected="${t.k===cur}" class="rs-tab${t.k===cur?' on':''}" data-act="rs-tab" data-v="${t.k}"${t.k===cur?'':' tabindex="-1"'}>${t.label}${t.n?` <span class="rs-n">${t.n}</span>`:''}</button>`).join('')}<button type="button" class="ibtn rs-fold" data-act="aside-fold" aria-keyshortcuts="Alt+Period" aria-label="Hide the side panel" title="Hide the side panel (Alt+.)">»</button></div>
       ${tabs.map(t=>`<div class="rs-panel${t.k===cur?' on':''}" id="rs-p-${t.k}" role="tabpanel" aria-labelledby="rs-t-${t.k}">${t.html}</div>`).join('')}
     </aside>`;
   }
@@ -735,7 +752,7 @@ function syncStageWatch(){
   if(want===sw.recordId)return;
   if(sw.unsub){sw.unsub();sw.unsub=null;}
   Object.assign(sw,{recordId:want,list:[]});
-  if(want)sw.unsub=watchStages(want,list=>{sw.list=list;const el=$('#rec-history');if(el){const f=formById(recById(want)?.formId);if(f)el.innerHTML=historyHTML(f);}});
+  if(want)sw.unsub=watchStages(want,list=>{sw.list=list;const el=$('#rec-history');if(el){const f=formById(recById(want)?.formId);if(f)el.innerHTML=historyHTML(f);}paintAsideCount();});
 }
 const groupName=id=>store.groups.find(g=>g.id===id)?.name||'';
 const roleName=id=>store.roles.find(r=>r.id===id)?.name||'';
@@ -905,7 +922,7 @@ function sentEmailsHTML(){
     <div class="mail-list">${lim.rows.map(row).join('')}</div>${moreLine(k,lim.rows.length,list.length,list.length===1?'email':'emails')}</div></section>`;
 }
 // Activity shows only when there's something in it: the first sent email (or the last one deleted) redraws the page
-function repaintEmails(){const el=$('#rec-emails'),h=sentEmailsHTML();const f=rdraft&&formById(rdraft.formId);if(!wfOn(f)&&!!el!==!!h){renderMain();return;}if(el)el.innerHTML=h;}
+function repaintEmails(){const el=$('#rec-emails'),h=sentEmailsHTML();const f=rdraft&&formById(rdraft.formId);if(!wfOn(f)&&!!el!==!!h){renderMain();return;}if(el)el.innerHTML=h;paintAsideCount();}
 
 /* One sent email in a pop-up: who, when, to, subject, message and the PDF as it was sent. */
 function closeMailView(){const v=ui.mailView;if(v?.url)try{URL.revokeObjectURL(v.url)}catch(e){/* already gone */}ui.mailView=null;}
@@ -2204,6 +2221,7 @@ document.addEventListener('click',async e=>{
     case 'ap-scheme':applyScheme(document,el.dataset.v,localStorage);renderSide();$('[data-act="ap-scheme"].on')?.focus();break;
     case 'ap-density':applyDensity(document,el.dataset.v,localStorage);renderSide();$('[data-act="ap-density"].on')?.focus();break;
     case 'side-rail':setRail(!railOn());break;
+    case 'aside-fold':setAsideFold(!asideFolded());break;
     case 'adm-fold':{const open=!admOpen();try{localStorage.setItem('fw.adminOpen',open?'1':'0');}catch(e){}renderSide();$('[data-act="adm-fold"]')?.focus();break;}
     case 'fs-all':{const q=$('#fs-q');if(q){q.focus();ui.fsOpen=true;paintFormResults();}break;}
     case 'palette':palette.open();break;
@@ -2451,6 +2469,12 @@ document.addEventListener('keydown',e=>{
   if(!(e.altKey&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&e.code==='KeyB'))return;
   if(!booted||window.matchMedia('(max-width:820px)').matches)return;
   e.preventDefault();setRail(!railOn());
+},true);
+// Alt+. (Option+. on a Mac): fold the record's Activity panel to a strip on the right, or open it again (wide screens)
+document.addEventListener('keydown',e=>{
+  if(!(e.altKey&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&e.code==='Period'))return;
+  if(!booted||view.name!=='record'||!$('.rec-aside')||!window.matchMedia('(min-width:1280px)').matches)return;
+  e.preventDefault();setAsideFold(!asideFolded());
 },true);
 // Alt+E (Option+E on a Mac), or Ctrl+Shift+C when the browser's developer tools are closed:
 // Read view ⇄ Edit view on a saved record. e.code, because Option+E on a Mac types an accent.

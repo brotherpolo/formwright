@@ -987,7 +987,21 @@ tr.wf-over td.title{color:var(--danger)}
   .rs-panel.on{display:block}
   .rs-panel .section{margin:0}
   .rs-panel .section-h{padding-top:10px}
+  .rs-tabs{align-items:center}
+  .rs-fold{flex:none;margin:0 4px;font-size:18px}
+  /* folded: a slim strip down the right edge, the form takes the width */
+  :root[data-aside="0"] .rec-layout.has-aside{grid-template-columns:minmax(0,1fr) 44px}
+  :root[data-aside="0"] .rec-aside{overflow:visible;border-radius:12px}
+  :root[data-aside="0"] .rec-aside > :not(.rs-strip){display:none}
+  :root[data-aside="0"] .rs-strip{display:flex}
 }
+.rs-strip{display:none;flex-direction:column;align-items:center;gap:10px;width:100%;min-height:150px;padding:12px 0;border:0;border-radius:inherit;background:none;color:var(--muted);font:inherit;cursor:pointer}
+.rs-strip:hover{background:var(--sunk);color:var(--fg)}
+.rs-strip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.rs-chev{font-size:18px;line-height:1}
+.rs-vert{writing-mode:vertical-rl;font-weight:600;font-size:13px;letter-spacing:.02em}
+.rs-strip .rs-n{display:inline-block;min-width:20px;padding:1px 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:11.5px;font-weight:600;text-align:center}
+.rs-strip .rs-n[hidden]{display:none}
 /* the sidebar's own colours reach its icons and buttons (dark sidebar in Spruce) */
 .side .glyph.navg{background:var(--side-hover);border-color:var(--side-line);color:var(--side-muted)}
 .side .btn.ghost,.side .ibtn{color:var(--side-fg)}
