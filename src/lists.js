@@ -344,13 +344,19 @@ function table(form, c, shown, rows, allOn, someOn, cfg) {
 
 function cards(form, shown, rows, allOn, count = '', density = 'cozy') {
   const compact = density === 'compact';
-  // Compact on a phone: two tight lines, the main field with one value beside it, then up to two more
-  const numAt = shown.findIndex((col) => col.num);
+  // Compact on a phone: two tight lines. Line 1 is the main field with the first number column on the
+  // right (always the same column, so the numbers line up; blank when that record has none).
+  // Line 2 is up to two more values, tidied to one line.
+  const numAt = shown.findIndex((col) => col.sum);
+  const numCol = shown[numAt];
+  const money = numCol && (numCol.field?.type === 'currency' || numCol.field?.format === 'currency');
+  const tidy = (t) => String(t || '').replace(/\s+/g, ' ').replace(/^(?:\s|[•·*]|[-–—](?=\s))+/, '').trim();
   const tight = (r) => {
-    const vals = shown.map((col, i) => ({ i, text: r.cells[i].text })).filter((x) => x.text);
-    const right = vals.find((x) => x.i === numAt) || vals[0];
-    const rest = vals.filter((x) => x !== right).slice(0, 2).map((x) => x.text);
-    return `<span class="lv-c1"><b>${esc(r.title)}</b>${right ? `<span class="lv-cv">${esc(right.text)}</span>` : ''}</span>${rest.length ? `<span class="lv-c2">${esc(rest.join(' · '))}</span>` : ''}`;
+    const vals = shown.map((col, i) => ({ i, text: tidy(r.cells[i].text) })).filter((x) => x.text);
+    const right = numAt >= 0 ? vals.find((x) => x.i === numAt) : null;
+    const rest = vals.filter((x) => x.i !== numAt).slice(0, 2).map((x) => x.text);
+    const cv = right ? `<span class="lv-cv">${esc(right.text)}${money ? '' : ` <small>${esc(numCol.label)}</small>`}</span>` : '';
+    return `<span class="lv-c1"><b>${esc(r.title)}</b>${cv}</span>${rest.length ? `<span class="lv-c2">${esc(rest.join(' · '))}</span>` : ''}`;
   };
   return `<div class="lv-cards${compact ? ' compact' : ''}">
     <div class="lv-allrow"><label class="lv-sw lv-allcard"><input type="checkbox" data-lvc="all"${allOn ? ' checked' : ''}>Select all</label>${count ? `<span class="lv-ccount">${esc(count)}</span>` : ''}</div>
