@@ -1,7 +1,8 @@
 // Administration → Automations: the list and the editor. Automations run on the server
 // (Cadence functions/automate.js); here admins set them up, test them on a record and read
 // their run history. Wording and checks: autologic.js. Conditions reuse the rule builder.
-import { store, saveAutomation, setAutomationOn, deleteAutomation, loadRuns, testAutomation } from './store.js';
+import { store, saveAutomation, setAutomationOn, deleteAutomation, loadRuns, testAutomation, previewAutomation, decidePendingSend } from './store.js';
+import { FREQS, WEEKDAYS, MONTHS, NTHS, DEFAULT_HOUR, normalize, hourText, nextRuns, shortDay, ordinal, scheduleText, scheduleProblems } from './autosched.js';
 import { esc, uid, clone, toast, badge, itemName } from './ui.js';
 import { opsFor, opOf } from './rules.js';
 import { condsHTML, rulesClick, rulesChange, rulesCtx } from './rulesui.js';
@@ -10,7 +11,7 @@ import { TRIGGERS, ACTS, SET_MODES, NO_SET, MAX_ACTS, blankAutomation, blankAct,
 let H = { formById: null, parentsOf: null, recordsOf: null, recTitle: null, go: null, renderMain: null, forms: () => [] };
 export function initAutos(helpers) { H = { ...H, ...helpers }; }
 
-const AM = { id: null, draft: null, dirty: false, busy: false, armed: false, problems: null, runs: null, runsBusy: false, test: { recordId: '', busy: false, out: null, err: null }, leaveArmed: false };
+const AM = { id: null, draft: null, dirty: false, busy: false, armed: false, problems: null, runs: null, runsBusy: false, test: { recordId: '', busy: false, out: null, err: null }, leaveArmed: false, prev: { busy: false, out: null, err: null }, deciding: {} };
 const people = () => [...store.users].map((u) => ({ id: u.id, name: store.profiles[u.id]?.displayName || u.displayName || (u.email || '').split('@')[0] || 'Unnamed', email: u.email || '' })).sort((a, b) => a.name.localeCompare(b.name));
 const personName = (id) => people().find((p) => p.id === id)?.name || 'someone';
 const ctxText = { formById: (id) => H.formById(id), parentsOf: (id) => H.parentsOf(id), person: personName, role: (id) => (store.roles || []).find((r) => r.id === id)?.name || 'a removed role' };
@@ -30,10 +31,43 @@ export function viewAutomations() {
       <div class="ctl"><label class="switch"><input type="checkbox" data-am-on="${esc(a.id)}"${a.on ? ' checked' : ''} aria-label="${esc(a.name)} on or off"><span class="tr"></span><span>${a.on ? 'On' : 'Off'}</span></label>
       <button class="btn sm primary" data-act="am-edit" data-id="${esc(a.id)}">Edit</button></div></div>`;
   }).join('');
-  return `<div class="head"><div class="ttl"><div><h1>Automations</h1><p class="sub">“When this happens, do that.” Automations run on the server, whatever changes a record: someone on a phone, an import, Set field or another automation, and at 7:00 a.m. for dates. Only administrators see this page.</p></div></div>
+  return `<div class="head"><div class="ttl"><div><h1>Automations</h1><p class="sub">“When this happens, do that.” Automations run on the server, whatever changes a record: someone on a phone, an import, Set field or another automation, at 7:00 a.m. for dates, and on a schedule (daily, weekly, monthly…). Only administrators see this page.</p></div></div>
     <div class="actions"><button class="btn primary" data-act="am-new">+ New automation</button></div></div>
     ${err ? `<div class="panel am-warn" role="alert">${err === 'permission-denied' ? 'Automations need the latest Cadence security rules and functions. Deploy them from Cloud Shell (see the install steps).' : 'Couldn’t load automations. Check your connection.'}</div>` : ''}
+    ${waitingHTML()}
     ${list.length ? `<div class="panel flist">${cards}</div>` : `<div class="panel empty"><h2>No automations yet</h2><p>For example: when an invoice’s Status becomes Approved, create a Cadence task to send it; or 3 days before a project’s Due date, email its owner.</p><button class="btn primary" data-act="am-new">+ New automation</button></div>`}`;
+}
+
+/* ---------- approve first: what's waiting for an OK ---------- */
+const localNow = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+function pendingRow(p, onRecord) {
+  const busy = AM.deciding[p.id];
+  return `<div class="am-wait" data-pid="${esc(p.id)}"><div class="grow">${onRecord ? `<b>“${esc(p.automationName || 'An automation')}” is waiting for your OK to send this.</b>` : `<button type="button" class="au-link" data-act="open-record" data-id="${esc(p.recordId)}">${esc(p.title || 'A record')}</button> <span class="help">· ${esc(p.automationName || '')}</span>`}
+    ${(p.steps || []).length ? `<ul class="am-wsteps">${p.steps.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}</div>
+    <div class="am-wbtns"><button type="button" class="btn sm ghost" data-act="am-pno" data-id="${esc(p.id)}"${busy ? ' disabled' : ''}>Don’t send</button><button type="button" class="btn sm primary" data-act="am-pok" data-id="${esc(p.id)}"${busy ? ' disabled' : ''}>${busy === 'send' ? 'Sending…' : 'Send now'}</button></div></div>`;
+}
+function waitingHTML() {
+  const list = store.pendingSends || [];
+  if (!list.length) return '';
+  return `<section class="panel am-waiting" aria-labelledby="am-wh"><h2 class="dz-h" id="am-wh">Waiting for your OK <span class="chip acc">${list.length}</span></h2><p class="help">Scheduled automations set to “approve first”. Nothing is sent until you choose Send now.</p>${list.map((p) => pendingRow(p, false)).join('')}</section>`;
+}
+/** On a record page (administrators): its scheduled send waiting for an OK, if any. */
+export function pendingBanner(recordId) {
+  const list = (store.pendingSends || []).filter((p) => p.recordId === recordId);
+  return list.length ? `<div class="panel am-banner" role="region" aria-label="Waiting for your OK">${list.map((p) => pendingRow(p, true)).join('')}</div>` : '';
+}
+async function decide(id, send) {
+  if (AM.deciding[id]) return;
+  AM.deciding[id] = send ? 'send' : 'drop'; H.renderMain();
+  try {
+    const out = await decidePendingSend(id, send);
+    if (send && out && out.ok === false) toast(`Not sent: ${(out.errors || [])[0] || 'something went wrong'}`);
+    else toast(send ? 'Sent' : 'Won’t be sent');
+  } catch (e) {
+    console.error(e);
+    toast(/not-found/.test(String(e?.code)) && !e?.message ? 'This needs the latest Cadence functions. Deploy them first (see the install steps).' : e?.message || 'That didn’t finish. Try again.');
+  }
+  delete AM.deciding[id]; H.renderMain();
 }
 
 /* ---------- the editor ---------- */
@@ -42,7 +76,7 @@ export function openAutomation(id, formId) {
   AM.id = a ? a.id : uid('au');
   AM.draft = a ? clone(a) : blankAutomation(formId || H.forms()[0]?.id || '');
   AM.dirty = !a; AM.busy = false; AM.armed = false; AM.problems = null; AM.leaveArmed = false;
-  AM.runs = null; AM.test = { recordId: '', busy: false, out: null, err: null };
+  AM.runs = null; AM.test = { recordId: '', busy: false, out: null, err: null }; AM.prev = { busy: false, out: null, err: null };
   H.go({ name: 'automation', autoId: AM.id });
   if (a) refreshRuns();
 }
@@ -84,6 +118,7 @@ function triggerHTML(a, form) {
       ${t.rel === 'before' || t.rel === 'after' ? `<input class="in am-num" type="number" min="0" max="365" step="1" data-am="tdays" value="${esc(t.days ?? 1)}" aria-label="Days">` : ''}
       <select class="in am-sel" data-am="tdate" aria-label="Date field"><option value="">Pick a date field…</option>${ds.map((x) => `<option value="${x.id}"${x.id === t.dateField ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>
       <p class="help">Checked every morning at 7:00 a.m. (Toronto time), once per record per day.${ds.length ? '' : ' This form has no date fields yet.'}</p>`;
+  } else if (t.type === 'schedule') { more = scheduleHTML(t, form);
   } else if (t.type === 'emailed') more = '<p class="help">Runs after someone sends this record with Email PDF.</p>';
   else if (t.type === 'stage') {
     const st = form.workflow?.on ? form.workflow.stages || [] : [];
@@ -91,6 +126,60 @@ function triggerHTML(a, form) {
   }
   else more = '<p class="help">Runs once, when the record is first saved (by hand, an import, or another automation).</p>';
   return `<div class="am-row"><span class="am-lab">When ${esc((form ? itemName(form) : 'a record').toLowerCase())}</span>${sel}</div>${more}`;
+}
+
+/* ---------- the frequency builder ---------- */
+const todayKey = () => localNow().slice(0, 10);
+const opt = (v, label, on) => `<option value="${esc(String(v))}"${on ? ' selected' : ''}>${esc(label)}</option>`;
+function scheduleHTML(t0, form) {
+  const t = normalize(t0), f = FREQS.find((x) => x.key === t.freq);
+  const it = esc(itemName(form).toLowerCase());
+  const freqSel = `<select class="in am-sel" data-am="tfreq" aria-label="Day, week, month, quarter or year">${FREQS.map((x) => opt(x.key, t.n === 1 ? x.one : x.many, x.key === t.freq)).join('')}</select>`;
+  let detail = '';
+  if (t.freq === 'day') detail = `<label class="switch"><input type="checkbox" data-am="twk"${t.weekdaysOnly ? ' checked' : ''}><span class="tr"></span><span>Weekdays only (Monday to Friday)</span></label>`;
+  if (t.freq === 'week') detail = `<div class="am-row" role="group" aria-label="Days of the week"><span class="am-lab">On</span><span class="am-days">${WEEKDAYS.map((w, i) => `<label class="am-day${t.days.includes(i + 1) ? ' on' : ''}"><input type="checkbox" data-am="twday" value="${i + 1}"${t.days.includes(i + 1) ? ' checked' : ''} aria-label="${w}"><span aria-hidden="true">${w.slice(0, 3)}</span></label>`).join('')}</span></div>`;
+  if (['month', 'quarter', 'year'].includes(t.freq)) {
+    const on = t.on;
+    const where = t.freq === 'year' ? `<span class="am-lab">In</span><select class="in am-sel" data-am="tmon" aria-label="Month">${MONTHS.map((m, i) => opt(i + 1, m, t.month === i + 1)).join('')}</select>`
+      : t.freq === 'quarter' ? `<span class="am-lab">In the quarter’s</span><select class="in am-sel" data-am="tq" aria-label="Which month of the quarter">${opt('first', 'first month (Jan, Apr, Jul, Oct)', t.qmonth === 'first')}${opt('last', 'last month (Mar, Jun, Sep, Dec)', t.qmonth === 'last')}</select>` : '';
+    const kind = `<select class="in am-sel" data-am="tonk" aria-label="Day number or weekday">${opt('date', 'on day', on.kind === 'date')}${opt('nth', 'on the', on.kind === 'nth')}</select>`;
+    const pick = on.kind === 'date'
+      ? `<select class="in am-sel" data-am="tdom" aria-label="Day of the month">${Array.from({ length: 31 }, (_, i) => opt(i + 1, ordinal(i + 1), on.day === i + 1)).join('')}${opt('last', 'last day', on.day === 'last')}</select>`
+      : `<select class="in am-sel" data-am="tnth" aria-label="Which one">${NTHS.map((x) => opt(x.v, x.label, on.nth === x.v)).join('')}</select><select class="in am-sel" data-am="twhat" aria-label="Weekday or business day">${WEEKDAYS.map((w, i) => opt(i + 1, w, on.what === i + 1)).join('')}${opt('biz', 'business day (Mon–Fri)', on.what === 'biz')}</select>`;
+    detail = `<div class="am-row">${where}${kind}${pick}</div>${on.kind === 'date' && on.day !== 'last' && on.day > 28 ? `<p class="help">In months without a ${ordinal(on.day)}, it runs on their last day.</p>` : ''}`;
+  }
+  const probs = scheduleProblems(t0);
+  const next = probs.length ? [] : nextRuns(t, localNow(), 3);
+  const yr = Number(todayKey().slice(0, 4));
+  return `<div class="am-sched">
+    <div class="am-row"><span class="am-lab">Every</span><input class="in am-num" type="number" min="1" max="${f.max}" step="1" data-am="tn" value="${esc(t0.n ?? t.n)}" aria-label="Every how many">${freqSel}</div>
+    ${detail}
+    <div class="am-row">${t.n > 1 ? `<span class="am-lab">Starting</span><input class="in" type="date" data-am="tstart" value="${esc(t.start || '')}" aria-label="Start date">` : ''}<span class="am-lab">At</span><select class="in am-sel" data-am="thour" aria-label="Time">${Array.from({ length: 24 }, (_, i) => opt(i, hourText(i), i === t.hour)).join('')}</select><span class="help">Toronto time</span></div>
+    <div class="am-confirm" role="status" aria-live="polite"><b>${esc(scheduleText(t))}</b>${probs.length ? `<span class="err">${esc(probs[0])}</span>` : `<span>Next: ${next.map((k) => esc(shortDay(k, yr))).join(' · ') || 'never (check the dates)'}</span>`}</div>
+    <p class="help">Each time, for each ${it} where the “Only if” below holds.</p>
+    ${t.freq === 'day' ? '' : `<label class="switch"><input type="checkbox" data-am="theads"${t.headsUp ? ' checked' : ''}><span class="tr"></span><span>Email me the day before with what’s going out</span></label>`}
+    <label class="switch"><input type="checkbox" data-am="tapprove"${t.approve ? ' checked' : ''}><span class="tr"></span><span>Approve first: give me a task to OK each one, instead of doing it straight away</span></label>
+    <p class="help">${t.approve ? 'Each one waits on its record (and at the top of Automations) with Send now and Don’t send.' : 'If an email can’t go (no address, or Gmail refuses it), the steps after it are skipped, so nothing is marked as sent when it wasn’t, and you get a Cadence task.'}</p>
+  </div>`;
+}
+/** A change to the schedule: start from what's there, apply it, keep it tidy. */
+function setSchedule(d, fn) {
+  const t = normalize(d.trigger);
+  fn(t);
+  d.trigger = normalize(t);
+  if (d.trigger.n > 1 && !d.trigger.start) d.trigger.start = todayKey();
+  if (d.trigger.n === 1) delete d.trigger.start; // only shown (and used for counting) when every is more than 1
+  AM.prev.out = null;
+}
+function freqDefaults(t, freq) {
+  const today = todayKey(), dow = ((new Date().getDay() + 6) % 7) + 1;
+  t.freq = freq;
+  delete t.weekdaysOnly; delete t.days; delete t.qmonth; delete t.month;
+  if (freq === 'week') t.days = [dow];
+  if (freq === 'month') t.on = t.on || { kind: 'nth', nth: -1, what: 'biz' };
+  if (freq === 'quarter') { t.qmonth = 'last'; t.on = t.on || { kind: 'nth', nth: -1, what: 'biz' }; }
+  if (freq === 'year') { t.month = Number(today.slice(5, 7)); t.on = { kind: 'date', day: Number(today.slice(8, 10)) }; }
+  if (freq === 'day' || freq === 'week') delete t.on;
 }
 
 function setRows(x, ai, tf, srcForm) {
@@ -174,6 +263,7 @@ export function viewAutomation() {
     ${AM.problems && AM.problems.length ? `<div class="panel am-warn" role="alert"><b>Before saving</b><ul>${AM.problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
     </div>
     <aside class="am-side">
+      ${form && a.trigger?.type === 'schedule' ? previewHTML() : ''}
       <section class="panel am-sec"><h2 class="dz-h">Test run</h2><p class="help">See what it would do to one record. Nothing is changed or sent.</p>
         ${form ? `<select class="in" data-am="trec" aria-label="Record to test"><option value="">Pick a ${esc(itemName(form).toLowerCase())}…</option>${recs.map(({ r, t: tt }) => `<option value="${esc(r.id)}"${r.id === t.recordId ? ' selected' : ''}>${esc(tt)}</option>`).join('')}</select>
         <button type="button" class="btn" data-act="am-test"${t.busy || !t.recordId ? ' disabled' : ''}>${t.busy ? 'Working it out…' : 'Test run'}</button>` : ''}
@@ -187,6 +277,15 @@ export function viewAutomation() {
     <div class="panel savebar" style="border-radius:var(--r)">${exists ? `<button class="btn danger${AM.armed ? ' armed' : ''}" data-act="am-del">${AM.armed ? 'Tap again to delete' : 'Delete'}</button>` : ''}<span class="grow" id="am-dirty">${AM.dirty ? 'Unsaved changes' : 'All changes saved'}</span>
       <button class="btn ghost" data-act="am-back">${AM.dirty ? (AM.leaveArmed ? 'Tap again to discard' : 'Discard') : 'Done'}</button><button class="btn primary" data-act="am-save"${AM.busy ? ' disabled' : ''}>${AM.busy ? 'Saving…' : 'Save'}</button></div>
   </div>`;
+}
+
+function previewHTML() {
+  const p = AM.prev, o = p.out;
+  return `<section class="panel am-sec am-prev"><h2 class="dz-h">Preview</h2><p class="help">Which ones it would run on if it ran now, and what it would do. Nothing is changed or sent. Uses what’s on screen, even before you save.</p>
+    <button type="button" class="btn" data-act="am-preview"${p.busy ? ' disabled' : ''}>${p.busy ? 'Working it out…' : 'Preview'}</button>
+    ${p.err ? `<p class="err">${esc(p.err)}</p>` : ''}
+    ${o ? `<div class="am-out"><p>Next run: <b>${esc(o.nextText)}</b>${/\.$/.test(o.nextText) ? '' : '.'} Right now <b>${o.items.length} of ${o.checked}</b> ${o.items.length === 1 ? 'matches' : 'match'}.</p>${o.items.length ? `<ul>${o.items.map((it) => `<li><button type="button" class="au-link" data-act="open-record" data-id="${esc(it.recordId)}">${esc(it.title)}</button><ul>${it.steps.map((s) => `<li class="${s.kind === 'skip' ? (s.noAddr ? 'err' : 'muted') : ''}">${esc(s.text)}${s.noAddr ? ' (you’d get a task instead)' : ''}</li>`).join('')}</ul></li>`).join('')}</ul>` : '<p class="help">None match the “Only if” right now.</p>'}</div>` : ''}
+  </section>`;
 }
 
 /* ---------- editing ---------- */
@@ -220,6 +319,15 @@ export async function onClick(a, el) {
     case 'am-adds': { const x = act(el); if (!x) return true; (x.sets = x.sets || []).push({ field: '', mode: 'value', value: '' }); dirty(); H.renderMain(); return true; }
     case 'am-dels': { const x = act(el); if (!x) return true; x.sets.splice(+el.dataset.s, 1); dirty(); H.renderMain(); return true; }
     case 'am-runs': refreshRuns(); return true;
+    case 'am-pok': decide(el.dataset.id, true); return true;
+    case 'am-pno': decide(el.dataset.id, false); return true;
+    case 'am-preview': {
+      if (AM.prev.busy) return true;
+      AM.prev = { busy: true, out: null, err: null }; H.renderMain();
+      try { AM.prev.out = await previewAutomation(JSON.parse(JSON.stringify(d))); }
+      catch (e) { console.error(e); AM.prev.err = /not-found|internal/.test(String(e?.code)) && !/record/.test(e?.message || '') ? 'Preview needs the latest Cadence functions. Deploy them first (see the install steps).' : e?.message || 'The preview didn’t run. Try again.'; }
+      AM.prev.busy = false; H.renderMain(); return true;
+    }
     case 'am-test': {
       if (!AM.test.recordId || AM.test.busy) return true;
       AM.test.busy = true; AM.test.err = null; AM.test.out = null; H.renderMain();
@@ -266,7 +374,21 @@ export function onChange(t) {
   switch (t.dataset.am) {
     case 'on': d.on = t.checked; redraw(); return true;
     case 'form': if (d.formId !== t.value) { Object.assign(d, blankAutomation(t.value), { name: d.name, on: d.on }); } redraw(); return true;
-    case 'ttype': d.trigger = { type: t.value }; if (t.value === 'date') d.trigger.rel = 'on'; redraw(); return true;
+    case 'ttype': d.trigger = { type: t.value }; if (t.value === 'date') d.trigger.rel = 'on'; if (t.value === 'schedule') Object.assign(d.trigger, { freq: 'month', n: 1, on: { kind: 'nth', nth: -1, what: 'biz' }, hour: DEFAULT_HOUR, headsUp: true, approve: true }); AM.prev.out = null; redraw(); return true;
+    case 'tn': { const v = Number(t.value); if (!Number.isInteger(v) || v < 1) { d.trigger.n = t.value; AM.prev.out = null; redraw(); return true; } setSchedule(d, (x) => { x.n = v; }); redraw(); return true; }
+    case 'tfreq': setSchedule(d, (x) => freqDefaults(x, t.value)); redraw(); return true;
+    case 'twk': setSchedule(d, (x) => { x.weekdaysOnly = t.checked; }); redraw(); return true;
+    case 'twday': setSchedule(d, (x) => { const have = new Set(x.days || []); if (t.checked) have.add(Number(t.value)); else have.delete(Number(t.value)); x.days = [...have]; }); redraw(); return true;
+    case 'tonk': setSchedule(d, (x) => { x.on = t.value === 'nth' ? { kind: 'nth', nth: 1, what: 1 } : { kind: 'date', day: 1 }; }); redraw(); return true;
+    case 'tdom': setSchedule(d, (x) => { x.on = { kind: 'date', day: t.value === 'last' ? 'last' : Number(t.value) }; }); redraw(); return true;
+    case 'tnth': setSchedule(d, (x) => { x.on = { ...x.on, kind: 'nth', nth: Number(t.value) }; }); redraw(); return true;
+    case 'twhat': setSchedule(d, (x) => { x.on = { ...x.on, kind: 'nth', what: t.value === 'biz' ? 'biz' : Number(t.value) }; }); redraw(); return true;
+    case 'tq': setSchedule(d, (x) => { x.qmonth = t.value; }); redraw(); return true;
+    case 'tmon': setSchedule(d, (x) => { x.month = Number(t.value); }); redraw(); return true;
+    case 'tstart': setSchedule(d, (x) => { x.start = t.value; }); redraw(); return true;
+    case 'thour': setSchedule(d, (x) => { x.hour = Math.max(0, Math.min(23, Math.round(Number(t.value) || 0))); }); redraw(); return true;
+    case 'theads': d.trigger.headsUp = t.checked; redraw(); return true;
+    case 'tapprove': d.trigger.approve = t.checked; redraw(); return true;
     case 'tfield': d.trigger = { type: 'changed', field: t.value || undefined }; if (!t.value) delete d.trigger.field; redraw(); return true;
     case 'top': { d.trigger.op = t.value || undefined; if (!t.value) delete d.trigger.op; const f = field(form, d.trigger.field); const o = f && opOf(f, t.value); d.trigger.value = o && o.value === 'many' ? [] : ''; redraw(); return true; }
     case 'tval': { const f = field(form, d.trigger.field); if ('many' in t.dataset) { const have = new Set(Array.isArray(d.trigger.value) ? d.trigger.value : []); if (t.checked) have.add(t.value); else have.delete(t.value); d.trigger.value = (f?.options || []).filter((o) => have.has(o)); } else d.trigger.value = parseVal(f, t); redraw(); return true; }

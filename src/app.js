@@ -35,7 +35,7 @@ import { fieldItem, fileName as pdfFileName } from './pdfdoc.js';
 import { copyValues, relinkRow } from './duplogic.js';
 import { shrinkPhoto } from './photo.js';
 import { evaluate as evalRules, toClear, withoutCleared, NO_RULES, holdsValue, pruneRules, impactOf, sameRules, changedRuleLabels } from './rules.js';
-import { initAutos } from './autos.js';
+import { initAutos, pendingBanner } from './autos.js';
 import { initDashMail } from './dashmailui.js';
 import { initWfDesign, viewWorkflow, wfClick, wfChange, wfInput } from './wfdesign.js';
 import { checkWorkflow } from './workflow.js';
@@ -688,6 +688,7 @@ function viewRecord(form){
   <div class="crumbs">${crumbs}</div>
   <div class="head"><div class="ttl">${badge(form,1)}<div><h1>${esc(title)}${rec&&rec.stage&&wfOn(form)&&stageById(form,rec.stage)?` <span class="stage-chip">${esc(stageName(form,rec))}</span>`:''}</h1>${rec?`<p class="sub">${recordMeta(rec)}</p>`:''}${!rec&&rdraft.duplicateOf?`<p class="sub dupnote">A copy of <b>${esc(rdraft.duplicateTitle||'')}</b>${rdraft.dupRows?` with its ${rdraft.dupRows} row${rdraft.dupRows>1?'s':''}`:''}. Nothing is saved until you click Save${rdraft.dupKids?`; its ${esc(rdraft.dupKids)} aren’t copied`:''}.</p>`:''}${!rec&&rdraft.copied?`<p class="sub">${rdraft.copied} field${rdraft.copied>1?'s':''} copied from the ${esc(itemName(pform||{}).toLowerCase())}.</p>`:''}</div></div>${foldAllBtn}</div>
   <div class="rec-layout${asideHTML?' has-aside':''}"><div class="rec-main">
+  ${rec&&isAdmin(store.me)?pendingBanner(rec.id):''}
   ${parentPick}
   ${wfBar(form,rec)}
   <div class="panel">

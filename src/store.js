@@ -46,6 +46,7 @@ export const store = {
   imports: [], // admins: past imports, newest first
   automations: [], automationsError: null, // admins: Administration → Automations
   dashMails: {}, // admins: scheduled dashboard emails, by dashboard id
+  pendingSends: [], // admins: scheduled automations waiting for an OK (approve first)
   mentions: [], // My work → Mentions: comments where someone @mentioned you, newest first
   recordsLoading: new Set(),
   onChange: () => {},
@@ -229,6 +230,9 @@ function syncAdminSubs() {
     adminUnsubs.push(onSnapshot(collection(db, 'dashMails'),
       (s) => { store.dashMails = Object.fromEntries(s.docs.map((d) => [d.id, { ...d.data(), id: d.id }])); changed(); },
       () => { store.dashMails = {}; })); // older security rules: no schedules yet
+    adminUnsubs.push(onSnapshot(collection(db, 'pendingSends'),
+      (s) => { store.pendingSends = s.docs.map((d) => ({ ...d.data(), id: d.id })).sort((a, b) => (a.at || 0) - (b.at || 0)); changed(); },
+      () => { store.pendingSends = []; })); // older security rules: nothing waiting
     adminUnsubs.push(
       onSnapshot(
         collection(db, 'automations'),
@@ -258,6 +262,7 @@ function syncAdminSubs() {
     store.imports = [];
     store.automations = [];
     store.dashMails = {};
+    store.pendingSends = [];
   }
 }
 
@@ -717,6 +722,14 @@ export async function testDashMail(dashboardId) {
 }
 export async function testAutomation(automation, recordId) {
   return (await httpsCallable(fns(), 'automationTest')({ automation, recordId })).data;
+}
+/** Admins: a scheduled automation's batch if it ran now. → { next, nextText, checked, items: [{ recordId, title, steps }] } */
+export async function previewAutomation(automation) {
+  return (await httpsCallable(fns(), 'automationPreview')({ automation })).data;
+}
+/** Admins: OK (send: true) or drop one waiting in pendingSends. → { ok, sent, did, errors } */
+export async function decidePendingSend(id, send) {
+  return (await httpsCallable(fns(), 'automationSend')({ id, send: !!send })).data;
 }
 
 /** Admins: delete sent emails and their kept PDFs. what: { ids: [emailId] } or { all: true }. → { deleted: n } */

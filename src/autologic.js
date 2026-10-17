@@ -1,6 +1,7 @@
 // Automations: the wording and the checks. Pure functions (no DOM, no Firebase), unit-tested.
 // The server runs them (Cadence functions/automate.js); autos.js is the editor.
 import { condText } from './rules.js';
+import { scheduleText, scheduleProblems } from './autosched.js';
 
 export const TRIGGERS = [
   { key: 'created', label: 'is created' },
@@ -8,6 +9,7 @@ export const TRIGGERS = [
   { key: 'date', label: 'reaches a date' },
   { key: 'emailed', label: 'is emailed (Email PDF)' },
   { key: 'stage', label: 'moves to a workflow stage' },
+  { key: 'schedule', label: 'is due on a schedule' },
 ];
 export const ACTS = [
   { key: 'set', label: 'Set fields' },
@@ -43,6 +45,7 @@ export function triggerText(a, form) {
   const field = (id) => (form?.fields || []).find((f) => f.id === id);
   if (t.type === 'created') return `When ${an(it)} is created`;
   if (t.type === 'emailed') return `When ${an(it)} is emailed`;
+  if (t.type === 'schedule') return `${scheduleText(t)}, for each ${it}${t.approve ? ' (after you OK it)' : ''}`;
   if (t.type === 'stage') { const st = (form?.workflow?.stages || []).find((x) => x.id === t.to); return `When ${an(it)} moves to ${st ? st.name : 'any stage'}`; }
   if (t.type === 'date') {
     const f = field(t.dateField), n = Math.max(0, Math.round(Number(t.days) || 0));
@@ -91,6 +94,8 @@ export function checkAutomation(a, form, ctx = {}) {
   const t = a.trigger || {};
   if (t.type === 'date' && !has(form, t.dateField)) out.push('Pick the date field it waits for.');
   if (t.type === 'changed' && t.field && !has(form, t.field)) out.push('The field it watches no longer exists.');
+  if (t.type === 'schedule') out.push(...scheduleProblems(t));
+  if (t.type === 'schedule' && !(a.conds || []).some((c) => (c.group ? (c.conds || []).some((x) => x.field) : c.field))) out.push('Add at least one “Only if” condition, so it doesn’t run on every record of the form each month.');
   if (t.type === 'stage' && !form.workflow?.on) out.push('This form has no workflow (form designer → Workflow).');
   if (t.type === 'stage' && t.to && !(form.workflow?.stages || []).some((x) => x.id === t.to)) out.push('That stage no longer exists.');
   if (t.type === 'changed' && t.op && ['is', 'not', 'eq', 'ne', 'on', 'contains', 'has'].includes(t.op) && (t.value === '' || t.value == null)) out.push('Fill in what the field changes to.');

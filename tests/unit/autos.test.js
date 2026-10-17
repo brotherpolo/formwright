@@ -58,3 +58,15 @@ test('record kit: text, calculations, parent and children, rules in the PDF mode
   const look = k.look(forms[1], recs[1]);
   assert.equal(look({ src: 'p', field: 'n' }).v, 'Northwind');
 });
+
+test('scheduled (monthly) automations: wording and checks', () => {
+  const form = { id: 'f_inv', name: 'Invoices', itemName: 'Invoice', fields: [{ id: 'st', type: 'select', label: 'Status', options: ['Draft', 'Sent'] }] };
+  const a = { name: 'Month end', formId: 'f_inv', on: true, trigger: { type: 'schedule', every: 'monthEndBiz', hour: 17, headsUp: true, approve: true }, join: 'all', conds: [], acts: [{ do: 'email', to: { owner: true }, subject: 'x', pdf: true }] };
+  assert.equal(triggerText(a, form), 'Every month on the last business day at 5:00 p.m., for each invoice (after you OK it)');
+  assert.equal(triggerText({ trigger: { type: 'schedule', every: 'monthEnd', hour: 9 } }, form), 'Every month on the last day at 9:00 a.m., for each invoice');
+  assert.ok(checkAutomation(a, form).some((p) => /Only if/.test(p)), 'needs a condition, or it would run on every record');
+  const ok = { ...a, conds: [{ src: 'self', field: 'st', op: 'is', value: 'Draft' }] };
+  assert.deepEqual(checkAutomation(ok, form), []);
+  assert.ok(checkAutomation({ ...ok, trigger: { type: 'schedule', freq: 'week', days: [] } }, form).some((p) => /day of the week/.test(p)));
+  assert.match(autoText(ok, { formById: () => form }), /^Every month on the last business day at 5:00 p\.m\., for each invoice \(after you OK it\), only if Status is Draft: email the owner with the PDF\.$/);
+});
