@@ -1,16 +1,18 @@
 // Formwright application: navigation, record screens and the form designer.
 import './designer.css';
 import './grids.css';
-import { readTheme, applyTheme, nextTheme, themeLabel } from './theme.js';
+import { readTheme, applyTheme, nextTheme, themeLabel, readScheme, applyScheme, schemeLabel, SCHEMES, readDensity, applyDensity, densityLabel, DENSITIES } from './theme.js';
 // Admin screens (users and groups) live in admin.js; data access in store.js.
 
 import { fillAutoNumbers, setAutoNumber, autoCounter, emailRecord, watchEmails, deleteSentEmails, fileBlob, getExportSettings } from './store.js';
 import { DEFAULT_SUBJECT, DEFAULT_MESSAGE, fillTemplate, parseEmails, emailSuggestions } from './emaillogic.js';
 import { runImport, rewriteValues, moveStage, watchStages } from './store.js';
+import { canUseTasks } from './store.js';
 import { store, uploadFile, deleteFormCascade, loadExamples as writeExamples, watchTasks, setTaskDone, saveRecordBundle, recomputeAllAccess, attachRecords } from './store.js';
 import { cadenceUrl } from './firebase.js';
 import { parseRoute, routeFor } from './route.js';
 import { effectiveHome, viewStarterHome } from './dash.js';
+import { afterDashRender } from './dashanim.js';
 import { nounOf as nounOfForm } from './dashlogic.js';
 import { initReports, closeCatalogPop, viewReportsList, viewReport, reportName, leaveReport, reportBusy, viewDashboards, viewDashboard, dashName, maybeMigrate, reportDirty, dashDirty, forgetDrafts, counts, drillNav, fitTiles } from './dash.js';
 import { initLists, viewRecords, afterRecords, resetLists, useView } from './lists.js';
@@ -20,7 +22,8 @@ import { storeKey as subStoreKey, readSubs, prefsOf, setPrefs, colsFor, toggleCo
 import { colsTool, showMenu, sortMenu, toolBar, moreLine, headCell as subHead } from './subui.js';
 import { headingOf, readFolds, isFolded, setFold, setFolds, foldKeys } from './foldlogic.js';
 import { sectionOrder, moveSection, TASKS as TASKS_KEY } from './sectionlogic.js';
-import { searchForms, allSearchable, designerMatch } from './navlogic.js';
+import { searchForms, allSearchable, designerMatch, pushRecent, sidebarFormList } from './navlogic.js';
+import * as palette from './palette.js';
 import { copyPatch, linkPatch, attachChange, detachChange, searchHit } from './attachlogic.js';
 import { initImports, viewImport, viewImports, importBusy, importRunning, importTitle, resetImports } from './imports.js';
 import { sortTasks, dueInfo, whoLine, cadenceLink, donePatch, repeats, repeatLabel, dateKey, taskText } from './tasks.js';
@@ -33,11 +36,18 @@ import { fieldItem, fileName as pdfFileName } from './pdfdoc.js';
 import { copyValues, relinkRow } from './duplogic.js';
 import { shrinkPhoto } from './photo.js';
 import { evaluate as evalRules, toClear, withoutCleared, NO_RULES, holdsValue, pruneRules, impactOf, sameRules, changedRuleLabels } from './rules.js';
-import { initAutos } from './autos.js';
+import { initAutos, pendingBanner } from './autos.js';
+import { personAv } from './avatar.js';
+import { initDashMail } from './dashmailui.js';
 import { initWfDesign, viewWorkflow, wfClick, wfChange, wfInput } from './wfdesign.js';
 import { checkWorkflow } from './workflow.js';
 import { fieldByName, sysOf, uniqueSysNames, shownName } from './fieldnames.js';
 import * as fv from './formver.js';
+import * as tm from './taskmodal.js';
+import * as cmt from './comments.js';
+import * as notices from './notices.js';
+import * as wordui from './wordui.js';
+import * as allwork from './allwork.js';
 import { typeColors, categoryStyle, canvasRows, blockOf, moveBefore, stepTarget, sectionOf, snapBefore, sectionStep } from './dzlogic.js';
 import { richEditorHTML, richViewHTML, initRichUI } from './richui.js';
 import { fromEditor, richBlocks, RICH_KEY } from './richtext.js';
@@ -45,10 +55,10 @@ import { STAGE_FIELD, wfOn, stagesOf, stageById, stageIndex, firstStage, stageNa
 import { initRules, viewRules, rulesClick, rulesChange, rulesInput, rulesListHTML, parentUse, rulesCtx } from './rulesui.js';
 import { formatAuto, nextAuto, missingNumbers, autoSettings } from './autonum.js';
 import { signOutUser } from './auth.js';
-import { $, esc, uid, clone, isEmpty, toast, COLORS, colorOf, itemName, badge } from './ui.js';
+import { $, esc, uid, clone, isEmpty, toast, COLORS, colorOf, itemName, badge, lazy } from './ui.js';
 import examples from './examples.json';
 
-const ADMIN_VIEWS = new Set(['designer', 'formEdit', 'users', 'groups', 'groupEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation']);
+const ADMIN_VIEWS = new Set(['designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation']);
 
 // other words people search field types by
 const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold'};
@@ -177,10 +187,11 @@ const ui={search:'',openField:null,tab:'fields',palette:false,confirm:null,leave
 function dirty(){return (view.name==='record'&&rdraft?.dirty)||(view.name==='formEdit'&&fdraft?.dirty)||(view.name==='report'&&reportDirty(view.reportId))||(view.name==='dashboard'&&dashDirty(view.dashboardId))||admin.isDirty(view)}
 function guard(){if(importRunning()){toast('The import is still running. Wait for it to finish.');return false;}if(dirty()&&!ui.leaveOk){ui.leaveOk=true;toast('You have unsaved changes. Tap again to leave without saving.');setTimeout(()=>ui.leaveOk=false,4000);return false;}ui.leaveOk=true;return true;}
 export function goRec(draft,v){if(!guard())return;rdraft=draft;go(v);}
-export function go(v,push=true){ui.subPop=null;ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
+export function go(v,push=true){ui.subPop=null;ui.recMore=false;if(v.name==='record'&&v.recordId!==view.recordId)ui.rsTab='comments';ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
   if(ADMIN_VIEWS.has(v.name)&&!isAdmin(store.me)){toast('Only administrators can open that.');return false;}
   if((v.name==='records'||v.name==='record')&&!canViewForm(store.me,v.formId)){toast('You don’t have access to that form.');return false;}
   if(!guard())return false;
+  if((v.name==='records'||v.name==='record')&&v.formId)noteRecentForm(v.formId);
   ui.leaveOk=false;ui.confirm=null;
   if(view.name==='report')leaveReport();
   if((view.name==='report'&&reportDirty(view.reportId))||(view.name==='dashboard'&&dashDirty(view.dashboardId)))forgetDrafts();
@@ -366,6 +377,7 @@ function onData(){
   if(ADMIN_VIEWS.has(view.name)&&!isAdmin(store.me)){ui.leaveOk=true;home();return;}
   if((view.name==='records'||view.name==='record')&&!canViewForm(store.me,view.formId)){ui.leaveOk=true;home();return;}
   renderSide();
+  notices.check(); // pop-ups for mentions and records that just became yours
   if(admin.isDirty(view))return;
   if(view.name==='formEdit')return;
   if(view.name==='record'&&rdraft?.dirty)return;
@@ -395,6 +407,9 @@ function formResults(){
 function paintFormResults(){
   const box=$('#fs-res'),q=$('#fs-q');if(!box||!q)return;
   box.innerHTML=formResults();box.hidden=!fsShown();
+  // wide enough for full form names: it floats over the page beside the sidebar (not in the phone drawer)
+  if(!box.hidden&&window.innerWidth>820){const r=q.getBoundingClientRect();Object.assign(box.style,{position:'fixed',left:r.left+'px',top:(r.bottom+4)+'px',right:'auto',minWidth:r.width+'px',maxWidth:Math.max(r.width,Math.min(520,window.innerWidth-r.left-16))+'px',maxHeight:Math.max(200,Math.min(480,window.innerHeight-r.bottom-20))+'px'});}
+  else box.removeAttribute('style');
   q.setAttribute('aria-expanded',box.hidden?'false':'true');
   const hi=box.querySelector('.fs-item.hi');if(hi){q.setAttribute('aria-activedescendant',hi.id);hi.scrollIntoView({block:'nearest'});}else q.removeAttribute('aria-activedescendant');
 }
@@ -408,35 +423,87 @@ function themeButton(){
   const now=t==='auto'?'Auto (follows this device)':themeLabel(t);
   return `<button type="button" class="ibtn theme-btn" data-act="theme" aria-label="Theme: ${now}. Switch to ${themeLabel(nx)}" title="Theme: ${now} · click for ${themeLabel(nx)}">${THEME_ICON[t]}</button>`;
 }
+/* Forms opened recently on this device (the sidebar's Forms list leans on them). */
+const RECENT_KEY='fw.recentForms';
+function recentForms(){try{const v=JSON.parse(localStorage.getItem(RECENT_KEY)||'[]');return Array.isArray(v)?v:[];}catch(e){return [];}}
+function noteRecentForm(id){try{localStorage.setItem(RECENT_KEY,JSON.stringify(pushRecent(recentForms(),id)));}catch(e){/* private mode */}}
+/** The sidebar folded to a strip of icons on wide screens (remembered on this device; boot.js applies it before the page draws). */
+const railOn=()=>document.documentElement.dataset.rail==='1';
+function setRail(on,quiet){
+  if(on)document.documentElement.dataset.rail='1';else delete document.documentElement.dataset.rail;
+  try{localStorage.setItem('fw.rail',on?'1':'0');}catch(e){/* private mode */}
+  closeFormSearch();
+  renderSide();
+  if(!quiet){$('[data-act="side-rail"]')?.focus({preventScroll:true});window.dispatchEvent(new Event('resize'));}
+}
+/** The record's Activity side panel folded to a strip on the right (wide screens; remembered on this device; boot.js applies it). */
+const asideFolded=()=>document.documentElement.dataset.aside==='0';
+function setAsideFold(on){
+  if(on)document.documentElement.dataset.aside='0';else delete document.documentElement.dataset.aside;
+  try{localStorage.setItem('fw.aside',on?'0':'1');}catch(e){/* private mode */}
+  if(view.name==='record')renderMain();
+  setTimeout(()=>$(on?'.rs-strip':'.rs-fold')?.focus({preventScroll:true}),0);
+  window.dispatchEvent(new Event('resize'));
+}
+/** What's in Activity: stage moves and sent emails, for the folded strip's badge. */
+function asideCount(){
+  const f=rdraft&&formById(rdraft.formId);
+  return (wfOn(f)&&sw.list?sw.list.length:0)+(ew.recordId===view.recordId?ew.list.length:0);
+}
+function paintAsideCount(){const el=$('.rs-strip');if(!el)return;const n=asideCount();el.querySelector('.rs-n')?.replaceChildren(String(n));el.querySelector('.rs-n')?.toggleAttribute('hidden',!n);el.setAttribute('aria-label',`Show Activity${n?` (${n})`:''}`);}
+/** Administration in the sidebar: folded unless you open it (remembered on this device) or you're on one of its pages. */
+const admOpen=()=>{if(ADMIN_VIEWS.has(view.name))return true;try{return localStorage.getItem('fw.adminOpen')==='1';}catch(e){return false;}};
 function renderSide(){
   const fsFocus=document.activeElement?.id==='fs-q'?document.activeElement.selectionStart:null; // a redraw while searching keeps the cursor
-  const fs=sidebarForms();
   const activeForm=(view.name==='records'||view.name==='record')?view.formId:null;
   const me=store.me||{};const name=store.profiles[me.uid]?.displayName||store.user?.displayName||store.user?.email||'You';
-  const adm=isAdmin(me);
+  const adm=isAdmin(me),can=f=>canViewForm(store.me,f.id);
+  const total=allSearchable(store.forms,can).length;
+  const list=sidebarFormList(store.forms,can,recentForms(),6);
+  const rail=railOn();
+  const tip=label=>rail?` title="${esc(label)}" aria-label="${esc(label)}"`:'';
+  const navBtn=(act,on,label,glyph,extra='')=>`<button class="nav${on?' on':''}" data-act="${act}"${on?' aria-current="page"':''}${tip(label)}><span class="glyph navg">${glyph}</span><span class="t">${label}</span>${extra}</button>`;
+  const ao=adm&&(admOpen()||rail);
   $('#side').innerHTML=`
-    <div class="brand"><span class="brand-mark"><i></i></span><b>Formwright</b></div>
-    <div class="navlabel" id="fs-lab">Forms</div>
+    <div class="brand"><span class="brand-mark"><i></i></span><b>Formwright</b><button type="button" class="ibtn side-tog" data-act="side-rail" aria-pressed="${rail}" aria-keyshortcuts="Alt+B" aria-label="${rail?'Expand the sidebar':'Collapse the sidebar'}" title="${rail?'Expand the sidebar':'Collapse the sidebar'} (Alt+B)">${rail?'»':'«'}</button></div>
+    ${rail?`<button type="button" class="nav nav-find" data-act="palette"${tip('Search everything (Ctrl K)')}><span class="glyph navg"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></span><span class="t">Search</span></button>`:''}
     <div class="fsearch">
       <svg class="fs-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
-      <input type="search" class="in" id="fs-q" role="combobox" aria-autocomplete="list" aria-controls="fs-res" aria-expanded="${fsShown()?'true':'false'}" aria-labelledby="fs-lab" placeholder="Search forms" autocomplete="off" value="${esc(ui.fq||'')}">
+      <input type="search" class="in" id="fs-q" role="combobox" aria-autocomplete="list" aria-controls="fs-res" aria-expanded="${fsShown()?'true':'false'}" aria-label="Search forms" placeholder="Search forms" autocomplete="off" value="${esc(ui.fq||'')}">
+      <button type="button" class="fs-k" data-act="palette" aria-keyshortcuts="Control+K" title="Search everything: forms, records, pages (Ctrl K)">Ctrl K</button>
       <div id="fs-res" class="fs-res" role="listbox" aria-label="Forms"${fsShown()?'':' hidden'}>${formResults()}</div>
     </div>
-    <div class="navlabel" style="margin-top:12px">Insights</div>
-    <button class="nav${onHome()?' on':''}" data-act="nav-home"${onHome()?' aria-current="page"':''}><span class="glyph navg">⌂</span><span class="t">Home</span></button>
-    ${store.forms.some(f=>wfOn(f))?`<button class="nav${view.name==='mywork'?' on':''}" data-act="nav-mywork"><span class="glyph navg">☰</span><span class="t">My work</span><span class="n">${myWorkCount()||''}</span></button>`:''}
-    <button class="nav${(view.name==='dashboards'||view.name==='dashboard')&&!onHome()?' on':''}" data-act="nav-dashboards"><span class="glyph navg">▦</span><span class="t">Dashboards</span><span class="n">${counts().dashboards}</span></button>
-    <button class="nav${view.name==='reports'||view.name==='report'?' on':''}" data-act="nav-reports"><span class="glyph navg">▤</span><span class="t">Reports</span><span class="n">${counts().reports}</span></button>
-    ${adm?`<div class="navlabel" style="margin-top:12px">Administration</div>
-    <button class="nav${view.name==='designer'||view.name==='formEdit'?' on':''}" data-act="nav-designer"><span class="glyph navg">⚙</span><span class="t">Form designer</span><span class="n">${store.forms.length}</span></button>
-    <button class="nav${view.name==='groups'||view.name==='groupEdit'?' on':''}" data-act="nav-groups"><span class="glyph navg">◫</span><span class="t">Security groups</span><span class="n">${store.groups.length}</span></button>
-    <button class="nav${view.name==='users'?' on':''}" data-act="nav-users"><span class="glyph navg">☺</span><span class="t">Users</span><span class="n">${store.users.length}</span></button>
-    <button class="nav${view.name==='imports'?' on':''}" data-act="nav-imports"><span class="glyph navg">⇪</span><span class="t">Import history</span><span class="n">${store.imports.length}</span></button>
-    <button class="nav${view.name==='exports'?' on':''}" data-act="nav-exports"><span class="glyph navg">⇩</span><span class="t">PDF exports</span></button>
-    <button class="nav${view.name==='automations'||view.name==='automation'?' on':''}" data-act="nav-automations"><span class="glyph navg">↯</span><span class="t">Automations</span><span class="n">${store.automations.filter(a=>a.on).length||''}</span></button>
-    <button class="nav${view.name==='audit'?' on':''}" data-act="nav-audit"><span class="glyph navg">⌕</span><span class="t">Audit trail</span></button>`:''}
-    <div class="side-foot"><div class="who"><b>${esc(name)}</b><span>${adm?'Administrator':'Member'}</span></div>${themeButton()}<button class="btn sm ghost" data-act="sign-out">Sign out</button></div>`;
+    <div class="navlabel">Workspace</div>
+    ${navBtn('nav-home',onHome(),'Home','⌂')}
+    <button class="nav${view.name==='mywork'?' on':''}" data-act="nav-mywork"${view.name==='mywork'?' aria-current="page"':''}${tip('My work')}><span class="glyph navg">☰</span><span class="t">My work</span>${cmt.unreadCount()?`<span class="nb" title="${cmt.unreadCount()} unread mention${cmt.unreadCount()===1?'':'s'}"><span class="sr">, </span>${cmt.unreadCount()}<span class="sr"> unread</span></span>`:''}<span class="n">${myWorkCount()||''}</span></button>
+    ${navBtn('nav-dashboards',(view.name==='dashboards'||view.name==='dashboard')&&!onHome(),'Dashboards','▦',`<span class="n">${counts().dashboards}</span>`)}
+    ${navBtn('nav-reports',view.name==='reports'||view.name==='report','Reports','▤',`<span class="n">${counts().reports}</span>`)}
+    <div class="navlabel">Forms</div>
+    ${list.length?list.map(f=>`<button class="nav nav-form${f.id===activeForm?' on':''}" data-act="nav-form" data-id="${f.id}"${f.id===activeForm?' aria-current="page"':''} title="${esc(f.name)}"${rail?` aria-label="${esc(f.name)}"`:''}>${badge(f)}<span class="t">${esc(f.name)}</span><span class="n">${recordsOf(f.id).length}</span></button>`).join(''):'<p class="nav-empty">No forms shared with you yet.</p>'}
+    ${total>list.length?`<button class="nav nav-all" data-act="${rail?'palette':'fs-all'}"${tip(`All forms (${total})`)}><span class="glyph navg rail-only" aria-hidden="true">⋯</span><span class="t">All forms (${total})</span><span aria-hidden="true">→</span></button>`:''}
+    ${adm?`${rail?'<div class="rail-sep" role="separator"></div>':''}<button class="nav nav-fold" data-act="adm-fold" aria-expanded="${ao}"><span class="t">Administration</span><span class="fold-ic" aria-hidden="true">${ao?'▾':'▸'}</span></button>
+    ${ao?`<div class="nav-adm">
+    ${navBtn('nav-designer',view.name==='designer'||view.name==='formEdit','Form designer','⚙',`<span class="n">${store.forms.length}</span>`)}
+    ${navBtn('nav-groups',view.name==='groups'||view.name==='groupEdit','Security groups','◫',`<span class="n">${store.groups.length}</span>`)}
+    ${navBtn('nav-roles',view.name==='roles'||view.name==='roleEdit','Roles','◉',`<span class="n">${(store.roles||[]).length}</span>`)}
+    ${navBtn('nav-users',view.name==='users','Users','☺',`<span class="n">${store.users.length}</span>`)}
+    ${navBtn('nav-imports',view.name==='imports','Import history','⇪',`<span class="n">${store.imports.length}</span>`)}
+    ${navBtn('nav-exports',view.name==='exports','PDF exports','⇩')}
+    ${navBtn('nav-automations',view.name==='automations'||view.name==='automation','Automations','↯',`<span class="n">${store.automations.filter(a=>a.on).length||''}</span>`)}
+    ${navBtn('nav-audit',view.name==='audit','Audit trail','⌕')}</div>`:''}`:''}
+    <div class="side-foot">${ui.appear?appearanceHTML():''}${store.user?personAv(store.user.uid,name,{small:true}):''}<div class="who" title="${esc(name)}"><b>${esc(name)}</b><span>${adm?'Administrator':'Member'}</span></div><div class="foot-acts"><button type="button" class="ibtn theme-btn" data-act="appear" aria-expanded="${!!ui.appear}" aria-label="Appearance: mode, colour and density" title="Appearance">${THEME_ICON[readTheme(localStorage)]}<span class="foot-l">Appearance</span></button><button class="btn sm ghost" data-act="sign-out">Sign out</button></div></div>`;
   if(fsFocus!=null){const q=$('#fs-q');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(fsFocus,fsFocus)}catch(e){}paintFormResults();}}
+}
+/** Appearance (the sidebar's footer button): Light / Dark / Auto, a colour scheme and density, kept on this device. */
+function appearanceHTML(){
+  const t=readTheme(localStorage),sc=readScheme(localStorage),dn=readDensity(localStorage);
+  const sw={indigo:['#3346c8','#f3f4f7'],spruce:['#0f6b5c','#13332d'],sand:['#a8481a','#f6f1e8']};
+  return `<div class="appear" role="dialog" aria-label="Appearance" data-stop-scrim="1">
+    <b class="ap-h">Appearance</b>
+    <div class="ap-row"><span class="ap-l" id="ap-mode">Mode</span><div class="segs" role="group" aria-labelledby="ap-mode">${['auto','light','dark'].map(k=>`<button type="button" class="${t===k?'on':''}" aria-pressed="${t===k}" data-act="ap-mode" data-v="${k}">${themeLabel(k)}</button>`).join('')}</div></div>
+    <div class="ap-row"><span class="ap-l" id="ap-col">Colour</span><div class="ap-sw" role="group" aria-labelledby="ap-col">${SCHEMES.map(k=>`<button type="button" class="ap-scheme${sc===k?' on':''}" aria-pressed="${sc===k}" data-act="ap-scheme" data-v="${k}"><span class="ap-dot" style="background:${sw[k][0]};box-shadow:6px 0 0 ${sw[k][1]}" aria-hidden="true"></span>${schemeLabel(k)}</button>`).join('')}</div></div>
+    <div class="ap-row"><span class="ap-l" id="ap-den">Density</span><div class="segs" role="group" aria-labelledby="ap-den">${DENSITIES.map(k=>`<button type="button" class="${dn===k?'on':''}" aria-pressed="${dn===k}" data-act="ap-density" data-v="${k}">${densityLabel(k)}</button>`).join('')}</div></div>
+    <p class="help">Saved on this device only.</p></div>`;
 }
 function renderMain(){
   const m=$('#main');let h='',title='Formwright';
@@ -459,7 +526,9 @@ function renderMain(){
   else if(view.name==='home'){title='Home';h=`<div class="head"><div class="ttl"><div><h1>Home</h1><p class="sub">Home shows a dashboard: your own, or the one an administrator picked for everyone.</p></div></div></div><div class="panel empty"><h2>No home dashboard yet</h2><p>Open a dashboard and press <b>Set as my home</b>.${isAdmin(store.me)?' To give everyone a Home, share a dashboard and press <b>Make everyone’s default home</b>.':''}</p><button class="btn primary" data-act="nav-dashboards">Dashboards</button></div>`;}
   $('#topttl').textContent=title||'Formwright';
   const ae=document.activeElement,ks=ae&&ae.dataset?.ksearch?[ae.dataset.ksearch,ae.selectionStart]:null; // a redraw while searching keeps the cursor in the box
+  const ck=cmt.keep(); // a redraw while writing a comment keeps the cursor in it
   m.innerHTML=`<div class="wrap${wide?' wide':''}${wide==='full'?' full':''}">${h}</div>`;
+  cmt.restore(ck);
   if(ks){const s2=m.querySelector(`[data-ksearch="${CSS.escape(ks[0])}"]`);if(s2){s2.focus({preventScroll:true});try{s2.setSelectionRange(ks[1],ks[1])}catch(e){}}}
   document.querySelectorAll('canvas[data-sig]').forEach(initSig);
   if(view.name==='records')afterRecords();
@@ -467,7 +536,8 @@ function renderMain(){
   if(view.name==='record'&&rdraft){rdraft._rs=null;applyRules(rdraft);}
   if(view.name==='formEdit'&&pdraft&&(ui.tab==='rules'||ui.tab==='preview'))applyRules(pdraft);
   if(view.name==='dashboard')fitTiles();
-  syncTaskWatch();syncEmailWatch();syncStageWatch();
+  afterDashRender(); // a dashboard that's new on screen plays its entrance
+  syncTaskWatch();syncEmailWatch();syncStageWatch();cmt.sync();cmt.afterRender();wordui.sync();
 }
 
 /* ---------- Cadence tasks linked to the open record ---------- */
@@ -494,7 +564,7 @@ function tasksInner(){
   const form=rec?formById(rec.formId):null;
   const noun=form?itemName(form).toLowerCase():'record';
   const k='t:tasks',p=form?subPrefs(form.id,k):prefsOf({},'',k);
-  const addBtn=cadenceUrl?`<button class="btn sm" data-act="add-task">+ Add task</button>`:'';
+  const addBtn=canUseTasks()?`<button class="btn sm soft" data-act="add-task">+ Add task</button>`:'';
   const ready=tw.status==='ready'&&tw.recordId===view.recordId;
   const openTasks=ready?tw.tasks.filter(t=>!t.done):[];
   const tOpen=!(form&&folded(form.id,k));
@@ -516,16 +586,16 @@ function tasksInner(){
   const tools=colsTool(k,ui.subPop===k,cols,TASK_COLS.map(c=>({...c,group:''})),{fixed:'Task'})+showMenu(k,p.show,tw.tasks.length)+sortMenu(k,[{key:'title',label:'Task'},...cols],sort,'Open first, by due date');
   const bar=toolBar({search:tw.tasks.length>5||tq?subSearch(k,'Tasks',tq,found.length,tw.tasks.length):'',tools,buttons:addBtn});
   if(!found.length)return head+`<div class="panel subsec">${bar}<p class="note">No tasks match “${esc(tq)}”.</p></div>`;
-  const tick=t=>{const busy=tw.busy.has(t.id),rep=repeats(t);return `<button class="tcheck${t.done?' on':''}" data-act="task-done" data-id="${esc(t.id)}" aria-pressed="${!!t.done}" aria-label="${t.done?'Reopen':'Mark done'}: ${esc(t.title)}"${busy?' disabled':''}${rep&&!t.done?' title="Repeating tasks are completed in Cadence, so the next one is created"':''}>✓</button>`;};
+  const tick=t=>{const busy=tw.busy.has(t.id);return `<button class="tcheck${t.done?' on':''}" data-act="task-done" data-id="${esc(t.id)}" aria-pressed="${!!t.done}" aria-label="${t.done?'Reopen':'Mark done'}: ${esc(t.title)}"${busy?' disabled':''}>✓</button>`;};
   const tdCell=(c,x)=>`<td class="${[c.num?'num':'',x.tone?'tt-'+x.tone:'',x.long?'lv-long':''].filter(Boolean).join(' ')}"${x.long&&x.text?` title="${esc(x.text)}"`:''}>${esc(x.text)}</td>`;
   const table=`<div class="sub-box"><div class="tblwrap"><table class="tbl lv-tbl sub-tbl tt-tbl"><thead><tr><th class="tt-ck"><span class="sr">Done</span></th>${subHead(k,{key:'title',label:'Task'},sort)}${cols.map(c=>subHead(k,c,sort)).join('')}</tr></thead>
-    <tbody>${lim.rows.map(r=>`<tr class="${r.t.done?'done':''}"${cadenceUrl?` data-act="task-open" data-id="${esc(r.t.id)}"`:''}><td class="tt-ck">${tick(r.t)}</td><td class="title" title="${esc(r.title.text)}">${esc(r.title.text)}</td>${cols.map((c,i)=>tdCell(c,r.cells[i])).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+    <tbody>${lim.rows.map(r=>`<tr class="${r.t.done?'done':''}" data-act="task-open" data-id="${esc(r.t.id)}"><td class="tt-ck">${tick(r.t)}</td><td class="title" title="${esc(r.title.text)}">${esc(r.title.text)}</td>${cols.map((c,i)=>tdCell(c,r.cells[i])).join('')}</tr>`).join('')}</tbody></table></div></div>`;
   const cards=`<div class="sub-cards tlist">${lim.rows.map(({t})=>{
     const due=t.done?{text:'Done',tone:'ok'}:dueInfo(t.due,today);
     const rep=repeats(t);
     const meta=[`<span class="tdue ${due.tone}">${esc(due.text)}</span>`,whoLine(t,me),rep?repeatLabel(t):''].filter(Boolean);
     return `<div class="trow${t.done?' done':''}">${tick(t)}
-      <button class="tmain" data-act="task-open" data-id="${esc(t.id)}"${cadenceUrl?'':' disabled'}><b>${esc(t.title||'Untitled task')}</b><span class="tmeta">${meta.map(x=>x.startsWith('<')?x:`<span>${esc(x)}</span>`).join('')}</span></button>
+      <button class="tmain" data-act="task-open" data-id="${esc(t.id)}"><b>${esc(t.title||'Untitled task')}</b><span class="tmeta">${meta.map(x=>x.startsWith('<')?x:`<span>${esc(x)}</span>`).join('')}</span></button>
     </div>`;}).join('')}</div>`;
   return head+`<div class="panel subsec">${bar}${table}${cards}${moreLine(k,lim.rows.length,found.length,found.length===1?'task':'tasks')}</div>`;
 }
@@ -541,13 +611,8 @@ function taskRows(p,tq,today,now){
 }
 async function toggleTask(id){
   const t=tw.tasks.find(x=>x.id===id);if(!t)return;
-  if(repeats(t)&&!t.done){
-    if(cadenceUrl){window.open(cadenceLink(cadenceUrl,{task:t.id}),'cadence');toast('Complete repeating tasks in Cadence so the next one is created.');}
-    else toast('Complete repeating tasks in Cadence so the next one is created.');
-    return;
-  }
   tw.busy.add(id);paintTasks();
-  try{await setTaskDone(id,donePatch(!t.done,store.user.uid,Date.now()));}
+  try{const r=await tm.toggleDone(t);if(r==='next')toast('Done. The next one is in your tasks.');}
   catch(err){console.error('[formwright] task',err);toast('Couldn’t update that task. Try again.');}
   tw.busy.delete(id);paintTasks();
 }
@@ -576,6 +641,9 @@ function viewRecord(form){
   if(!rdraft||rdraft.formId!==form.id||rdraft.recordId!==(view.recordId||null)){rdraft=rec?{formId:form.id,recordId:rec.id,values:{},errors:{},dirty:false}:newRecordDraft(form,null);}
   if(rec&&!rdraft.dirty){rdraft.values=clone(rec.values||{});rdraft.parentId=rec.parentId||null;rdraft.parentFormId=rec.parentFormId||null;}
   const ro=rec?(rec.stage&&wfOn(form)?!canWork(rec,store.me):!canEditRecord(store.me,rec)):!canCreate(store.me,form.id);rdraft.readOnly=ro;
+  // Read view (existing records, and always for people who can't edit) or Edit view (new records); Alt+E (or Ctrl+Shift+C) swaps
+  if(!rdraft.mode)rdraft.mode=rec?'read':'edit';
+  const reading=!!rec&&(ro||rdraft.mode==='read');rdraft.reading=reading;
   const grels=gridRels(form);syncGrids(rdraft,rec,grels);
   const parent=rdraft.parentId?recById(rdraft.parentId):null;
   const pform=parent?formById(parent.formId):null;
@@ -586,14 +654,30 @@ function viewRecord(form){
   let parentPick='';
   if(parentForms.length){
     const opts=parentForms.map(pf=>`<optgroup label="${esc(pf.name)}">${recordsOf(pf.id).map(r=>`<option value="${r.id}"${r.id===rdraft.parentId?' selected':''}>${esc(recTitle(r,pf))}</option>`).join('')}</optgroup>`).join('');
-    parentPick=`<div class="panel parentcard"><div class="grow"><small>Belongs to</small><select class="in" id="parent-pick" style="margin-top:6px" aria-label="Parent record"${ro?' disabled':''}><option value="">No parent</option>${opts}</select></div>${parent?`<button class="btn sm" data-act="open-record" data-id="${parent.id}">Open ${esc(itemName(pform).toLowerCase())}</button>`:''}</div>`;
+    parentPick=`<div class="panel parentcard"><div class="grow"><small>Belongs to</small><select class="in" id="parent-pick" style="margin-top:6px" aria-label="Parent record"${ro||reading?' disabled':''}><option value="">No parent</option>${opts}</select></div>${parent?`<button class="btn sm" data-act="open-record" data-id="${parent.id}">Open ${esc(itemName(pform).toLowerCase())}</button>`:''}</div>`;
   }
   const children=(form.children||[]).filter(c=>c.display!=='grid').map(c=>({rel:c,cf:formById(c.formId)})).filter(x=>x.cf&&canViewForm(store.me,x.cf.id));
   const sec={}; // the sections under the fields, by child form id (or 'tasks'), shown in the form's chosen order
-  grels.forEach(({rel,cf})=>{sec[cf.id]=gridSection(form,rel,cf,rdraft,ro);});
+  grels.forEach(({rel,cf})=>{sec[cf.id]=gridSection(form,rel,cf,rdraft,ro||reading);});
   if(rec)children.forEach(({cf})=>{sec[cf.id]=childSection(form,cf,rec,ro);});
   if(rec)sec[TASKS_KEY]=`<section class="section" id="rec-tasks">${tasksInner()}</section>`;
-  const sectionsHTML=sectionOrder(form).map(k=>sec[k]||'').join('');
+  // Comments sit right under Tasks (or at the end when Tasks isn't shown)
+  if(rec)sec[TASKS_KEY]=(sec[TASKS_KEY]||'')+`<div id="rec-comments" class="rec-comments-sec">${cmt.html()}</div>`;
+  const sectionsHTML=sectionOrder(form).map(k=>sec[k]||'').join(''); // Tasks among them, full width, in the form's order
+  // Activity: a side panel on wide screens, below the form otherwise
+  let asideHTML='';
+  if(rec){
+    const tabs=[];
+    const mails=sentEmailsHTML();
+    if(wfOn(form)||mails)tabs.push({k:'activity',label:'Activity',n:0,html:`${wfOn(form)?`<div id="rec-history">${historyHTML(form)}</div>`:''}<div id="rec-emails">${mails}</div>`});
+    const cur=tabs.some(t=>t.k===ui.rsTab)?ui.rsTab:(tabs[0]||{}).k;
+    const n=asideCount();
+    if(tabs.length)asideHTML=`<aside class="rec-aside" aria-label="Activity">
+      <button type="button" class="rs-strip" data-act="aside-fold" aria-keyshortcuts="Alt+Period" aria-label="Show Activity${n?` (${n})`:''}" title="Show Activity (Alt+.)"><span aria-hidden="true" class="rs-chev">«</span><span class="rs-vert" aria-hidden="true">Activity</span><span class="rs-n" aria-hidden="true"${n?'':' hidden'}>${n}</span></button>
+      <div class="rs-tabs" role="tablist" aria-label="Side panel">${tabs.map(t=>`<button type="button" role="tab" id="rs-t-${t.k}" aria-controls="rs-p-${t.k}" aria-selected="${t.k===cur}" class="rs-tab${t.k===cur?' on':''}" data-act="rs-tab" data-v="${t.k}"${t.k===cur?'':' tabindex="-1"'}>${t.label}${t.n?` <span class="rs-n">${t.n}</span>`:''}</button>`).join('')}<button type="button" class="ibtn rs-fold" data-act="aside-fold" aria-keyshortcuts="Alt+Period" aria-label="Hide the side panel" title="Hide the side panel (Alt+.)">»</button></div>
+      ${tabs.map(t=>`<div class="rs-panel${t.k===cur?' on':''}" id="rs-p-${t.k}" role="tabpanel" aria-labelledby="rs-t-${t.k}">${t.html}</div>`).join('')}
+    </aside>`;
+  }
   let backHTML='';
   if(rec){
     const links=[];
@@ -604,27 +688,50 @@ function viewRecord(form){
   const foldAllBtn=fk.length>1||(fk.length===1&&fk[0].startsWith('h:'))?`<div class="actions"><button type="button" class="btn" data-act="fold-all" aria-label="${anyOpen?'Collapse all sections':'Expand all sections'}">${anyOpen?'Collapse all':'Expand all'}</button></div>`:'';
   const delKey='rec-'+(rec?.id||'');
   const kids=rec?store.records.filter(r=>r.parentId===rec.id).length:0;
+  // ⋯ More: the less-used actions, Delete last (it asks twice)
+  const more=[];
+  if(rec&&isAdmin(store.me))more.push(`<button type="button" role="menuitem" class="rb-item" data-act="rec-history">History</button>`);
+  if(rec&&canCreate(store.me,form.id))more.push(`<button type="button" role="menuitem" class="rb-item" data-act="rec-duplicate">Duplicate</button>`);
+  if(rec&&isAdmin(store.me))more.push(`<button type="button" role="menuitem" class="rb-item" data-act="email-pdf">Email PDF</button>`);
+  if(rec&&!ro)more.push(`<button type="button" role="menuitem" class="rb-item danger${ui.confirm===delKey?' armed':''}" data-act="del-record">${ui.confirm===delKey?(kids?`Tap again to delete (${kids} child record${kids>1?'s':''} stay)`:'Tap again to delete'):'Delete'}</button>`);
+  const moreHTML=more.length?`<div class="rb-more"><button type="button" class="btn" data-act="rec-more" aria-haspopup="menu" aria-expanded="${!!ui.recMore}" aria-label="More actions"><span aria-hidden="true">⋯</span> More</button>${ui.recMore?`<div class="rb-menu" role="menu" aria-label="More actions">${more.join('')}</div>`:''}</div>`:'';
   return `
   <div class="recbar" role="toolbar" aria-label="${esc(itemName(form))} actions">
-    ${rec&&!ro?`<button class="btn danger${ui.confirm===delKey?' armed':''}" data-act="del-record">${ui.confirm===delKey?(kids?`Tap again to delete (${kids} child record${kids>1?'s':''} stay)`:'Tap again to delete'):'Delete'}</button>`:''}
+    <button class="btn ghost" data-act="back">${rdraft.dirty?'Discard':'<span aria-hidden="true">←</span> Back'}</button>
     <span class="grow" id="dirtynote" role="status">${rdraft.dirty?'Unsaved changes':ro?'Read only':''}</span>
-    ${rec&&isAdmin(store.me)?`<button class="btn ghost" data-act="rec-history" title="This ${esc(itemName(form).toLowerCase())} in the audit trail">History</button>`:''}
-    ${rec&&isAdmin(store.me)?`<button class="btn" data-act="email-pdf" title="Email this ${esc(itemName(form).toLowerCase())} as a PDF">Email PDF</button>`:''}
-    ${rec&&canCreate(store.me,form.id)?`<button class="btn ghost" data-act="rec-duplicate" title="Start a new ${esc(itemName(form).toLowerCase())} with this one’s details">Duplicate</button>`:''}
-    ${rec?`<button class="btn" data-act="export-pdf" id="pdf-btn"${ui.pdfBusy?' disabled':''} title="Download this ${esc(itemName(form).toLowerCase())} as a PDF">${ui.pdfBusy?'Making PDF…':'Export PDF'}</button>`:''}
-    <button class="btn ghost" data-act="back">${rdraft.dirty?'Discard':'Back'}</button>
-    ${ro?'':`<button class="btn primary" data-act="save-record">${rec?'Save':'Save '+esc(itemName(form).toLowerCase())}</button>`}
+    ${rec?wordui.exportButton(ui.pdfBusy):''}
+    ${moreHTML}
+    ${rec&&!ro&&!reading?`<button class="btn ghost" data-act="rec-mode" aria-keyshortcuts="Alt+E Control+Shift+C" title="Back to Read view (Alt+E)">Done</button>`:''}
+    ${rec&&!ro&&reading?`<button class="btn primary" data-act="rec-mode" aria-keyshortcuts="Alt+E Control+Shift+C" title="Edit (Alt+E)"><span aria-hidden="true">✎</span> Edit</button>`:''}
+    ${ro||reading?'':`<button class="btn primary" data-act="save-record">${rec?'Save':'Save '+esc(itemName(form).toLowerCase())}</button>`}
   </div>
   <div class="crumbs">${crumbs}</div>
-  <div class="head"><div class="ttl">${badge(form,1)}<div><h1>${esc(title)}</h1>${rec?`<p class="sub">${recordMeta(rec)}</p>`:''}${!rec&&rdraft.duplicateOf?`<p class="sub dupnote">A copy of <b>${esc(rdraft.duplicateTitle||'')}</b>${rdraft.dupRows?` with its ${rdraft.dupRows} row${rdraft.dupRows>1?'s':''}`:''}. Nothing is saved until you click Save${rdraft.dupKids?`; its ${esc(rdraft.dupKids)} aren’t copied`:''}.</p>`:''}${!rec&&rdraft.copied?`<p class="sub">${rdraft.copied} field${rdraft.copied>1?'s':''} copied from the ${esc(itemName(pform||{}).toLowerCase())}.</p>`:''}</div></div>${foldAllBtn}</div>
+  <div class="head"><div class="ttl">${badge(form,1)}<div><h1>${esc(title)}${rec&&rec.stage&&wfOn(form)&&stageById(form,rec.stage)?` <span class="stage-chip">${esc(stageName(form,rec))}</span>`:''}</h1>${rec?`<p class="sub">${recordMeta(rec)}</p>`:''}${!rec&&rdraft.duplicateOf?`<p class="sub dupnote">A copy of <b>${esc(rdraft.duplicateTitle||'')}</b>${rdraft.dupRows?` with its ${rdraft.dupRows} row${rdraft.dupRows>1?'s':''}`:''}. Nothing is saved until you click Save${rdraft.dupKids?`; its ${esc(rdraft.dupKids)} aren’t copied`:''}.</p>`:''}${!rec&&rdraft.copied?`<p class="sub">${rdraft.copied} field${rdraft.copied>1?'s':''} copied from the ${esc(itemName(pform||{}).toLowerCase())}.</p>`:''}</div></div>${foldAllBtn}</div>
+  <div class="rec-layout${asideHTML?' has-aside':''}"><div class="rec-main">
+  ${rec&&isAdmin(store.me)?pendingBanner(rec.id):''}
   ${parentPick}
   ${wfBar(form,rec)}
   <div class="panel">
-    <fieldset class="fset"${ro?' disabled':''}>${formFieldsHTML(form,rdraft,'record')}</fieldset>
+    <fieldset class="fset${reading?' reading':''}"${ro&&!reading?' disabled':''}>${formFieldsHTML(form,rdraft,'record')}</fieldset>
   </div>
-  ${sectionsHTML}${rec&&wfOn(form)?`<div id="rec-history">${historyHTML(form)}</div>`:''}${backHTML}${rec?`<div id="rec-emails">${sentEmailsHTML()}</div>`:''}
+  ${sectionsHTML}${backHTML}
   ${!rec&&children.length?`<p class="help">Save this ${esc(itemName(form).toLowerCase())} to add ${children.map(c=>esc(c.cf.name.toLowerCase())).join(' and ')}.</p>`:''}
-  ${cellPopup()}${ui.mail&&ui.mail.rec===rec?.id?mailDialog(form,rec):''}${ui.cascade&&ui.cascade.parentId===rec?.id?cascadeDialog():''}${ui.mailView&&ui.mailView.rec===rec?.id?mailViewDialog():''}${ui.mailDelAll?.stage===2&&ew.recordId===rec?.id&&ew.list.length?delAllDialog():''}${ui.wfAsk&&ui.wfAsk.recId===rec?.id?wfAskDialog(form,rec):''}`;
+  </div>${asideHTML}</div>
+  ${cellPopup()}${ui.mail&&ui.mail.rec===rec?.id?mailDialog(form,rec):''}${ui.cascade&&ui.cascade.parentId===rec?.id?cascadeDialog():''}${ui.mailView&&ui.mailView.rec===rec?.id?mailViewDialog():''}${ui.mailDelAll?.stage===2&&ew.recordId===rec?.id&&ew.list.length?delAllDialog():''}${ui.wfAsk&&ui.wfAsk.recId===rec?.id?wfAskDialog(form,rec):''}${ui.modeAsk&&rec?modeAskDialog(form):''}`;
+}
+/** Leaving Edit view with unsaved changes: Save, Discard or Keep editing. */
+function modeAskDialog(form){
+  return `<div class="lv-scrim" data-act="mode-keep"><div class="lv-dlg" role="dialog" aria-modal="true" aria-labelledby="ma-h" data-stop-scrim="1">
+    <h2 id="ma-h">Save your changes?</h2><p>This ${esc(itemName(form).toLowerCase())} has changes that aren’t saved yet.</p>
+    <div class="lv-dlgacts"><button type="button" class="btn ghost" data-act="mode-keep">Keep editing</button><button type="button" class="btn danger" data-act="mode-discard">Discard</button><button type="button" class="btn primary" id="ma-save" data-act="mode-save">Save</button></div>
+  </div></div>`;
+}
+/** Read view ⇄ Edit view on a saved record (the Edit/Done button, Alt+E and Ctrl+Shift+C). */
+function toggleRecMode(){
+  if(view.name!=='record'||!rdraft||!rdraft.recordId||rdraft.readOnly)return false;
+  if(rdraft.mode==='read'){rdraft.mode='edit';renderMain();setTimeout(()=>{const el=document.querySelector('.fset .in:not([disabled]), .fset input:not([disabled]), .fset textarea, .fset [contenteditable="true"]');el?.focus({preventScroll:true});},0);return true;}
+  if(rdraft.dirty){ui.modeAsk=true;renderMain();setTimeout(()=>$('#ma-save')?.focus(),0);return true;}
+  rdraft.mode='read';renderMain();document.querySelector('[data-act="rec-mode"]')?.focus();return true;
 }
 
 const personName=id=>String(id||'').startsWith('auto:')?'an automation':store.profiles[id]?.displayName||(id===store.user?.uid?'you':'someone');
@@ -648,11 +755,14 @@ function syncStageWatch(){
   if(want===sw.recordId)return;
   if(sw.unsub){sw.unsub();sw.unsub=null;}
   Object.assign(sw,{recordId:want,list:[]});
-  if(want)sw.unsub=watchStages(want,list=>{sw.list=list;const el=$('#rec-history');if(el){const f=formById(recById(want)?.formId);if(f)el.innerHTML=historyHTML(f);}});
+  if(want)sw.unsub=watchStages(want,list=>{sw.list=list;const el=$('#rec-history');if(el){const f=formById(recById(want)?.formId);if(f)el.innerHTML=historyHTML(f);}paintAsideCount();});
 }
 const groupName=id=>store.groups.find(g=>g.id===id)?.name||'';
+const roleName=id=>store.roles.find(r=>r.id===id)?.name||'';
+const myRoles=()=>store.me?.roles||[];
 function whoHas(rec){
   if(rec.assignee)return rec.assignee===store.user?.uid?'you':realName(rec.assignee);
+  if(rec.assigneeRole){const n=roleName(rec.assigneeRole);return n?`anyone in ${n}${myRoles().includes(rec.assigneeRole)?' (you’re in it)':''}`:'a role';}
   if(rec.assigneeGroup){const n=groupName(rec.assigneeGroup);return n?`the ${n} group`:'a group';}
   return 'nobody yet';
 }
@@ -693,8 +803,8 @@ function historyHTML(form){
   const last=list[0];
   const head=`<div class="section-h"><h2>${foldBtn(k,open,`<span class="badge wf-badge" aria-hidden="true">⇢</span><span>Stage history</span> <span class="count">${list.length}</span>`,last?`${last.toName||''} · ${when(last.at)}`:'')}</h2></div>`;
   if(!open)return `<section class="section" id="wf-history">${head}</section>`;
-  const row=e=>`<li><div class="wf-h1"><b>${esc(realName(e.by))}</b> ${e.fromName?`moved it from <b>${esc(e.fromName)}</b> to <b>${esc(e.toName||'')}</b>`:`started it at <b>${esc(e.toName||'')}</b>`}${e.label?` <span class="chip">${esc(e.label)}</span>`:''}</div>
-    <div class="wf-h2">${esc(when(e.at))}${e.assignee?` · for ${esc(realName(e.assignee))}`:e.assigneeGroup?` · for ${esc(groupName(e.assigneeGroup)?'the '+groupName(e.assigneeGroup)+' group':'a group')}`:''}</div>${e.comment?`<blockquote class="wf-c">${esc(e.comment)}</blockquote>`:''}</li>`;
+  const row=e=>`<li><div class="wf-h1"><b>${esc(e.asRoleName?`${e.asRoleName} (${realName(e.by)})`:realName(e.by))}</b> ${e.fromName?`moved it from <b>${esc(e.fromName)}</b> to <b>${esc(e.toName||'')}</b>`:`started it at <b>${esc(e.toName||'')}</b>`}${e.label?` <span class="chip">${esc(e.label)}</span>`:''}</div>
+    <div class="wf-h2">${esc(when(e.at))}${e.assignee?` · for ${esc(realName(e.assignee))}`:e.assigneeRole?` · for ${esc(roleName(e.assigneeRole)||e.assigneeRoleName||'a role')}`:e.assigneeGroup?` · for ${esc(groupName(e.assigneeGroup)?'the '+groupName(e.assigneeGroup)+' group':'a group')}`:''}</div>${e.comment?`<blockquote class="wf-c">${esc(e.comment)}</blockquote>`:''}</li>`;
   return `<section class="section" id="wf-history">${head}<div class="panel subsec">${list.length?`<ol class="wf-hist">${list.map(row).join('')}</ol>`:'<p class="note">No moves yet.</p>'}</div></section>`;
 }
 function wfAskDialog(form,rec){
@@ -719,7 +829,7 @@ async function wfMove(moveId,jumpTo){
     const st=draftRules(rdraft);
     const vals=onScreen||fresh.values||{};
     const miss=missingToMove(form,fresh.stage,vals,isEmpty,st.hiddenFields);
-    if(miss.length){rdraft.errors={...(rdraft.errors||{})};miss.forEach(f=>{rdraft.errors[f.id]='Needed before moving on.';});renderMain();toast(`Fill in ${miss.map(f=>f.label).slice(0,3).join(', ')}${miss.length>3?' and more':''} first.`);document.querySelector('.fld.bad')?.scrollIntoView({block:'center',behavior:'smooth'});return;}
+    if(miss.length){rdraft.mode='edit';rdraft.errors={...(rdraft.errors||{})};miss.forEach(f=>{rdraft.errors[f.id]='Needed before moving on.';});renderMain();toast(`Fill in ${miss.map(f=>f.label).slice(0,3).join(', ')}${miss.length>3?' and more':''} first.`);document.querySelector('.fld.bad')?.scrollIntoView({block:'center',behavior:'smooth'});return;}
   }
   if(m.comment||m.jump){ui.wfAsk={recId:rec.id,to:m.to,label:m.label,need:!!m.comment,comment:'',busy:false};renderMain();setTimeout(()=>document.querySelector('[data-wf-comment]')?.focus(),0);return;}
   await doWfMove(fresh,form,m.target,m.label,'');
@@ -728,18 +838,39 @@ async function doWfMove(rec,form,target,label,comment){
   const next=assigneeFor(target,rec,store.user?.uid);
   ui.wfBusy=true;
   try{
-    await moveStage(rec.id,{stage:target.id,assignee:next.assignee||null,assigneeGroup:next.assigneeGroup||null,stageAt:Date.now()},
-      {from:rec.stage||null,fromName:rec.stage?stageName(form,rec):null,to:target.id,toName:target.name,label:String(label||'').slice(0,80),comment:String(comment||'').slice(0,2000),assignee:next.assignee||null,assigneeGroup:next.assigneeGroup||null});
+    // credit: a record waiting on a role I hold is moved "as" that role: Accounts (Farren)
+    const asRole=rec.assigneeRole&&myRoles().includes(rec.assigneeRole)?rec.assigneeRole:null;
+    await moveStage(rec.id,{stage:target.id,assignee:next.assignee||null,assigneeGroup:next.assigneeGroup||null,assigneeRole:next.assigneeRole||null,stageAt:Date.now()},
+      {from:rec.stage||null,fromName:rec.stage?stageName(form,rec):null,to:target.id,toName:target.name,label:String(label||'').slice(0,80),comment:String(comment||'').slice(0,2000),assignee:next.assignee||null,assigneeGroup:next.assigneeGroup||null,
+        assigneeRole:next.assigneeRole||null,assigneeRoleName:next.assigneeRole?roleName(next.assigneeRole).slice(0,80)||null:null,asRole,asRoleName:asRole?roleName(asRole).slice(0,80)||null:null});
     toast(`Moved to ${target.name} · ${whoHas({...rec,...next})}`);
     if(rdraft?.errors)Object.keys(rdraft.errors).forEach(k=>{if(rdraft.errors[k]==='Needed before moving on.')delete rdraft.errors[k];});
   }catch(e){console.error(e);toast(e?.code==='permission-denied'?'Only the person responsible, or an administrator, can move it. (Or the latest security rules aren’t deployed yet.)':'Moving it failed. Check your connection and try again.');}
   ui.wfBusy=false;renderMain();
 }
-/* My work: records waiting on you (or your groups) in any workflow. Admins can see everyone's. */
+/* My work: Mentions (comments where someone @mentioned you) and, when a form has a workflow,
+   Waiting on me (records waiting on you or your groups). Admins can see everyone's. */
+function myWorkTabs(tab,hasWf){
+  const unread=cmt.unreadCount(),n=myWorkCount();
+  const t=(v,label,extra)=>`<button type="button" role="tab" class="mw-tab" id="mw-t-${v}" aria-selected="${tab===v}" aria-controls="mw-p" data-act="mw-tab" data-v="${v}"${tab===v?'':' tabindex="-1"'}>${label}${extra}</button>`;
+  const adm=isAdmin(store.me);
+  return `<div class="mw-tabs" role="tablist" aria-label="My work">${t('mentions','Mentions',unread?` <span class="nb">${unread}<span class="sr"> unread</span></span>`:'')}${adm?t('allm','All mentions',''):''}${adm?t('allt','All tasks',''):''}${hasWf?t('waiting','Waiting on me',n?` <span class="count">${n}</span>`:''):''}</div>`;
+}
 function viewMyWork(){
+  const hasWf=store.forms.some(f=>wfOn(f));
+  const adm=isAdmin(store.me);
+  const tab=hasWf&&ui.mwTab==='waiting'?'waiting':adm&&(ui.mwTab==='allm'||ui.mwTab==='allt')?ui.mwTab:'mentions';
+  if(tab==='allm'||tab==='allt')return `<div class="head"><div class="ttl"><div><h1>My work</h1><p class="sub">${tab==='allm'?'Every @mention in comments, for administrators: who it was for, and whether they’ve read it.':'Cadence tasks linked to records, for administrators: who has them, and when they’re due. Reassign them here.'}</p></div></div></div>
+    ${myWorkTabs(tab,hasWf)}<div id="mw-p" role="tabpanel" aria-labelledby="mw-t-${tab}">${tab==='allm'?allwork.allMentionsHTML():allwork.allTasksHTML()}</div>`;
+  if(tab==='mentions')return `<div class="head"><div class="ttl"><div><h1>My work</h1><p class="sub">Comments where someone mentioned you${hasWf?', and records waiting on you in a workflow':''}.</p></div></div></div>
+    ${myWorkTabs(tab,hasWf)}<div id="mw-p" role="tabpanel" aria-labelledby="mw-t-mentions">${cmt.mentionsHTML()}</div>`;
+  return viewWaiting(tab,hasWf);
+}
+function viewWaiting(tab,hasWf){
   const me=store.user?.uid,groups=store.me?.groups||[],admin=isAdmin(store.me),who=admin?ui.wfWho||'me':'me',now=Date.now();
   const dues=new Map();
-  const recs=store.records.filter(r=>{const f=formById(r.formId);if(!f||!wfOn(f)||!r.stage||!stageById(f,r.stage))return false;return who==='all'||r.assignee===me||(r.assigneeGroup&&groups.includes(r.assigneeGroup));});
+  const roles=myRoles();
+  const recs=store.records.filter(r=>{const f=formById(r.formId);if(!f||!wfOn(f)||!r.stage||!stageById(f,r.stage))return false;return who==='all'||r.assignee===me||(r.assigneeGroup&&groups.includes(r.assigneeGroup))||(r.assigneeRole&&roles.includes(r.assigneeRole));});
   recs.forEach(r=>dues.set(r.id,dueOf(formById(r.formId),r)));
   const rank=r=>{const x=dues.get(r.id);return x?{overdue:0,today:1,soon:2,later:3}[x.state]:4;};
   recs.sort((a,b)=>rank(a)-rank(b)||String(dues.get(a.id)?.due||'').localeCompare(String(dues.get(b.id)?.due||''))||(a.stageAt||0)-(b.stageAt||0)); // overdue first, then by due date, then longest waiting
@@ -747,11 +878,12 @@ function viewMyWork(){
   const byForm=new Map();recs.forEach(r=>{if(!byForm.has(r.formId))byForm.set(r.formId,[]);byForm.get(r.formId).push(r);});
   const tables=[...byForm].map(([fid,rs])=>{const f=formById(fid);return `<section class="section"><div class="section-h"><h2>${badge(f)}<span>${esc(f.name)}</span> <span class="count">${rs.length}</span></h2></div>
     <div class="panel"><div class="tblwrap"><table class="tbl lv-tbl wf-tbl"><thead><tr><th>${esc(itemName(f))}</th><th>Stage</th>${who==='all'?'<th>Person responsible</th>':''}<th>Due</th><th class="num">Waiting</th></tr></thead><tbody>${rs.map(r=>`<tr data-act="open-record" data-id="${esc(r.id)}" class="${dues.get(r.id)?.state==='overdue'?'wf-over':''}"><td class="title">${esc(recTitle(r,f))}</td><td>${esc(stageName(f,r))}</td>${who==='all'?`<td>${esc(whoHas(r))}</td>`:''}<td>${dueChip(dues.get(r.id),true)||'<span class="help">–</span>'}</td><td class="num">${esc(waited(r.stageAt,now))}</td></tr>`).join('')}</tbody></table></div></div></section>`;}).join('');
-  return `<div class="head"><div class="ttl"><div><h1>My work</h1><p class="sub">${who==='all'?'Every record in a workflow and its person responsible':'Records you (or a group you’re in) are responsible for'}: overdue first, then by due date, then longest waiting.${nOver?` <b class="wf-overn">${nOver} overdue.</b>`:''}</p></div></div>
+  return `<div class="head"><div class="ttl"><div><h1>My work</h1><p class="sub">${who==='all'?'Every record in a workflow and its person responsible':'Records you (or a group or role you’re in) are responsible for'}: overdue first, then by due date, then longest waiting.${nOver?` <b class="wf-overn">${nOver} overdue.</b>`:''}</p></div></div>
     ${admin?`<div class="actions"><div class="segs" role="group" aria-label="Whose work"><button type="button" class="${who==='me'?'on':''}" aria-pressed="${who==='me'}" data-act="wf-who" data-v="me">Mine</button><button type="button" class="${who==='all'?'on':''}" aria-pressed="${who==='all'}" data-act="wf-who" data-v="all">Everyone</button></div></div>`:''}</div>
-    ${recs.length?tables:`<div class="panel empty"><h2>Nothing waiting${who==='all'?'':' on you'}</h2><p>When a record reaches a stage that’s yours, it shows up here.</p></div>`}`;
+    ${myWorkTabs(tab,hasWf)}<div id="mw-p" role="tabpanel" aria-labelledby="mw-t-waiting">
+    ${recs.length?tables:`<div class="panel empty"><h2>Nothing waiting${who==='all'?'':' on you'}</h2><p>When a record reaches a stage that’s yours, it shows up here.</p></div>`}</div>`;
 }
-const myWorkCount=()=>{const me=store.user?.uid,groups=store.me?.groups||[];return store.records.filter(r=>r.stage&&(r.assignee===me||(r.assigneeGroup&&groups.includes(r.assigneeGroup)))&&wfOn(formById(r.formId))).length;};
+const myWorkCount=()=>{const me=store.user?.uid,groups=store.me?.groups||[],roles=myRoles();return store.records.filter(r=>r.stage&&(r.assignee===me||(r.assigneeGroup&&groups.includes(r.assigneeGroup))||(r.assigneeRole&&roles.includes(r.assigneeRole)))&&wfOn(formById(r.formId))).length;};
 
 /* ---------- Email PDF (administrators) ----------
    Email PDF opens a short form: who to send to (addresses found on this record and the
@@ -771,7 +903,7 @@ function syncEmailWatch(){
     // the email open in the pop-up was deleted (here or by another admin): close it
     if(ui.mailView&&!list.some(m=>m.id===ui.mailView.id)&&!ui.mailView.busy){closeMailView();renderMain();return;}
     if(ui.mailDelAll&&!list.length)ui.mailDelAll=null;
-    const el=$('#rec-emails');if(el)el.innerHTML=sentEmailsHTML();
+    const el=$('#rec-emails');if(el)el.innerHTML=sentEmailsHTML();else if(ew.list.length&&view.name==='record')renderMain(); // the Activity tab appears
   });
 }
 /** "Sent emails" under a record: folds like the other sections; Show 5–20 or all; click one to open it. */
@@ -792,7 +924,8 @@ function sentEmailsHTML(){
   return `<section class="section" id="sent-emails">${head}<div class="panel subsec">${toolBar({tools:showMenu(k,p.show,list.length),buttons:delAll})}
     <div class="mail-list">${lim.rows.map(row).join('')}</div>${moreLine(k,lim.rows.length,list.length,list.length===1?'email':'emails')}</div></section>`;
 }
-function repaintEmails(){const el=$('#rec-emails');if(el)el.innerHTML=sentEmailsHTML();}
+// Activity shows only when there's something in it: the first sent email (or the last one deleted) redraws the page
+function repaintEmails(){const el=$('#rec-emails'),h=sentEmailsHTML();const f=rdraft&&formById(rdraft.formId);if(!wfOn(f)&&!!el!==!!h){renderMain();return;}if(el)el.innerHTML=h;paintAsideCount();}
 
 /* One sent email in a pop-up: who, when, to, subject, message and the PDF as it was sent. */
 function closeMailView(){const v=ui.mailView;if(v?.url)try{URL.revokeObjectURL(v.url)}catch(e){/* already gone */}ui.mailView=null;}
@@ -927,7 +1060,7 @@ async function sendMail(){
   try{
     let pdf={missing:0};
     if(m.attach){
-      const {makeRecordPdf,toBase64}=await import('./pdfexport.js');
+      const {makeRecordPdf,toBase64}=await lazy(()=>import('./pdfexport.js'));
       pdf=await makeRecordPdf(pdfModel(form,rec));
       if(pdf.bytes.length>8*1024*1024)throw Object.assign(new Error('The PDF is over 8 MB, too big to email.'),{code:'local'});
       pdf.b64=toBase64(pdf.bytes);
@@ -983,13 +1116,18 @@ function pdfModel(form,rec){
   return {accent:colorOf(form),formName:form.name,title:recTitle(rec,form),meta,parent:parent&&pform?`${pform.name}: ${recTitle(parent,pform)}`:null,items,sections,
     stamp:`Exported ${now.toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})} by ${realName(store.user?.uid)}`};
 }
+/** The record bar's Export ▾ button while a PDF or Word document is being made. */
+function exportBusy(on){ui.pdfBusy=!!on;const b=$('#pdf-btn');if(b){b.disabled=!!on;b.innerHTML=on?'Working…':'Export <span aria-hidden="true">▾</span>';}}
+/** {= …} in a Word template: a calculation on this record, or (with no record) whether it's valid. */
+function docCalc(form,rec,expr){try{const v=evalFormula(form,{id:'__doc',type:'formula',expr},rec);return (typeof v==='number'&&!isFinite(v))?{e:'The result is too large or undefined.'}:{v};}catch(e){return {e:e.fx?e.message:'This calculation could not be worked out.'};}}
+function docCheck(form,expr){if(!String(expr||'').trim())return 'Write a calculation after the =.';try{evalFormula(form,{id:'__doc',type:'formula',expr},{id:null,formId:form.id,values:{},parentId:null},0,true);return null;}catch(e){return e.fx?e.message:'This calculation could not be worked out.';}}
 async function exportPdf(){
   const rec=view.recordId?recById(view.recordId):null,form=rec?formById(rec.formId):null;
   if(!rec||!form||ui.pdfBusy)return;
   if(rdraft?.dirty){toast('Save your changes first, so the PDF matches what’s saved.');return;}
-  ui.pdfBusy=true;const paint=()=>{const b=$('#pdf-btn');if(b){b.disabled=!!ui.pdfBusy;b.textContent=ui.pdfBusy?'Making PDF…':'Export PDF';}};paint();
+  ui.pdfBusy=true;const paint=()=>exportBusy(ui.pdfBusy);paint();
   try{
-    const {exportRecordPdf}=await import('./pdfexport.js');
+    const {exportRecordPdf}=await lazy(()=>import('./pdfexport.js'));
     const r=await exportRecordPdf(pdfModel(form,rec));
     toast(r.missing?`Downloaded ${r.name}. ${r.missing} picture${r.missing>1?'s':''} couldn’t be included.`:`Downloaded ${r.name}`);
   }catch(e){console.error('[formwright] PDF',e);toast(/Failed to fetch|dynamically imported|Importing a module/i.test(String(e?.message))?'Couldn’t load the PDF maker. Check your connection and try again.':'Couldn’t make the PDF. Try again.');}
@@ -1054,16 +1192,16 @@ function childSection(form,cf,rec,ro){
   const lim=limitRows(rows,p.show);
   const titleLabel=ctx.tf?.label||itemName(cf);
   const detachable=r=>!ro&&canEditRecord(store.me,r);
-  const buttons=`${canCreate(store.me,cf.id)?`<button class="btn sm" data-act="add-child" data-id="${cf.id}">+ Add ${esc(itemName(cf).toLowerCase())}</button>`:''}${ro?'':`<button class="btn sm" data-act="child-attach" data-id="${cf.id}">Attach existing</button>`}`;
+  const buttons=`${canCreate(store.me,cf.id)?`<button class="btn sm soft" data-act="add-child" data-id="${cf.id}">+ Add ${esc(itemName(cf).toLowerCase())}</button>`:''}${ro?'':`<button class="btn sm soft" data-act="child-attach" data-id="${cf.id}">Attach existing</button>`}`;
   const tools=total?colsTool(k,ui.subPop===k,cols.map(c=>({key:c.key,label:c.label,src:c.src})),ctx.catalog,{fixed:titleLabel})+showMenu(k,p.show,total)+sortMenu(k,[{key:'title',label:titleLabel},...cols],sort,''):'';
   const bar=toolBar({search:total>5||kq?subSearch(k,cf.name,kq,rows.length,total):'',tools,buttons});
   const det=r=>detachable(r.rec)?`<button type="button" class="ibtn at-det" data-act="child-detach" data-id="${r.rec.id}" aria-label="Detach ${esc(r.title)} (keeps it)" title="Detach: take it off this ${esc(itemName(form).toLowerCase())} but keep it">${DETACH_ICON}</button>`:'';
-  const cell=c=>`<td${c.num?' class="num"':c.long?` class="lv-long" title="${esc(c.text)}"`:c.text&&c.text.length>30?` title="${esc(c.text)}"`:''}>${esc(c.text)}</td>`;
+  const cell=c=>c.rich?`<td class="lv-rich">${c.rich}</td>`:`<td${c.num?' class="num"':c.long?` class="lv-long" title="${esc(c.text)}"`:c.text&&c.text.length>30?` title="${esc(c.text)}"`:''}>${esc(c.text)}</td>`;
   const body=!total?`<p class="note">No ${esc(cf.name.toLowerCase())} for this ${esc(itemName(form).toLowerCase())} yet.</p>`
     :!rows.length?`<p class="note">No ${esc(cf.name.toLowerCase())} match “${esc(kq)}”.</p>`
     :`<div class="sub-box"><div class="tblwrap"><table class="tbl lv-tbl sub-tbl"><thead><tr>${subHead(k,{key:'title',label:titleLabel},sort)}${cols.map(c=>subHead(k,c,sort)).join('')}<th class="sub-act"><span class="sr">Actions</span></th></tr></thead>
       <tbody>${lim.rows.map(r=>`<tr data-act="open-record" data-id="${r.rec.id}"><td class="title" title="${esc(r.title)}">${esc(r.title)}</td>${r.cells.map(cell).join('')}<td class="sub-act">${det(r)}</td></tr>`).join('')}</tbody></table></div></div>
-      <div class="sub-cards">${lim.rows.map(r=>{const meta=cols.map((c,i)=>r.cells[i].text?`<span>${esc(c.label)}: ${esc(r.cells[i].text)}</span>`:'').filter(Boolean).slice(0,4).join('');const card=`<button class="card" data-act="open-record" data-id="${r.rec.id}"><b>${esc(r.title)}</b>${meta?`<div class="meta">${meta}</div>`:''}</button>`;return det(r)?`<div class="at-card">${card}${det(r)}</div>`:card;}).join('')}</div>
+      <div class="sub-cards">${lim.rows.map(r=>{const meta=cols.map((c,i)=>r.cells[i].rich?`<span class="lv-richm">${esc(c.label)}:${r.cells[i].rich}</span>`:r.cells[i].text?`<span>${esc(c.label)}: ${esc(r.cells[i].text)}</span>`:'').filter(Boolean).slice(0,4).join('');const card=`<button class="card" data-act="open-record" data-id="${r.rec.id}"><b>${esc(r.title)}</b>${meta?`<div class="meta">${meta}</div>`:''}</button>`;return det(r)?`<div class="at-card">${card}${det(r)}</div>`:card;}).join('')}</div>
       ${moreLine(k,lim.rows.length,rows.length,subNoun(cf,rows.length))}`;
   return `<section class="section" id="kids-${cf.id}">${cHead}<div class="panel subsec">${bar}${body}</div></section>`;
 }
@@ -1203,7 +1341,7 @@ function gridSection(form,rel,cf,d,parentRo){
   const gHead=`<div class="section-h"><h2>${foldBtn(k,gOpen,`${badge(cf)}<span>${esc(cf.name)}</span> <span class="count">${allRows.filter(r=>!r.isNew).length}</span>`,gSum)}</h2><span class="chip acc">Grid</span></div>`;
   if(!gOpen)return `<section class="section gsec" id="grid-${cf.id}">${gHead}</section>`;
   const usable=(cf.fields||[]).filter(f=>f.type!=='heading');
-  const buttons=`${mayAdd?`<button type="button" class="btn sm" data-act="grid-add" data-grid="${cf.id}">+ Add ${esc(itemName(cf).toLowerCase())}</button>`:''}${parentRo?'':`<button type="button" class="btn sm" data-act="grid-attach" data-grid="${cf.id}">Attach existing</button>`}`;
+  const buttons=`${mayAdd?`<button type="button" class="btn sm soft" data-act="grid-add" data-grid="${cf.id}">+ Add ${esc(itemName(cf).toLowerCase())}</button>`:''}${parentRo?'':`<button type="button" class="btn sm soft" data-act="grid-attach" data-grid="${cf.id}">Attach existing</button>`}`;
   const tools=colsTool(k,ui.subPop===k,cols.map(f=>({key:f.id,label:f.label})),usable.map(f=>({key:f.id,label:f.label,group:''})),{min:1})+(allRows.length?showMenu(k,p.show,allRows.filter(r=>!r.isNew).length):'');
   const hint=(sort?'Click a heading again to reverse. ':'Click a heading to sort. ')+(mayAdd?'New rows stay at the top until you save.':'');
   const bar=toolBar({search:allRows.length>5||q?subSearch(k,cf.name,q,found.filter(r=>!r.isNew).length,allRows.filter(r=>!r.isNew).length,allRows.some(r=>r.isNew)):'',tools,buttons,hint});
@@ -1269,9 +1407,30 @@ function formFieldsHTML(form,d,scope){
 function fieldBlock(f,v,err,scope,locked){
   if(f.type==='heading')return `<div class="fsec" id="fb-${scope}-${f.id}"><h3>${esc(f.label)}</h3>${f.help?`<p class="help">${esc(f.help)}</p>`:''}</div>`;
   const id=`in-${scope}-${f.id}`;
+  if(scope==='record'&&rdraft?.reading&&locked!==true)return `<div class="fld rd w-${f.width==='half'?'half':'full'}" id="fb-${scope}-${f.id}"><span class="flabel">${esc(f.label)}</span><div class="rdv">${readValue(f,v,id,scope)}</div></div>`;
   const lab=['radio','multiselect','rating','checkbox','formula','autonumber'].includes(f.type)?`<span class="flabel" id="lb-${id}">${esc(f.label)}${f.required?'<span class="req">*</span>':''}</span>`:`<label class="flabel" for="${id}">${esc(f.label)}${f.required?'<span class="req">*</span>':''}</label>`;
   if(locked)return `<div class="fld w-${f.width==='half'?'half':'full'} locked${locked==='view'?' viewonly':''}" id="fb-${scope}-${f.id}">${lab}<div class="lockw" inert>${control(f,locked==='view'?v:null,id,scope)}</div><p class="help rule-note">${locked==='view'?'View only at this stage':'Cleared by a rule'}</p></div>`;
   return `<div class="fld w-${f.width==='half'?'half':'full'}${err?' bad':''}" id="fb-${scope}-${f.id}">${lab}${control(f,v,id,scope)}${f.help?`<p class="help">${esc(f.help)}</p>`:''}${err?`<p class="err">${esc(err)}</p>`:''}</div>`;
+}
+/** A field's value in Read view: formatted like the PDF, with links, pictures and linked records you can open. */
+function readValue(f,v,id,scope){
+  if(f.type==='formula'||f.type==='autonumber')return control(f,v,id,scope);
+  if(f.type==='checkbox')return v?'Yes':'No';
+  if(isEmpty(v))return '<span class="rd-empty" aria-label="Empty">–</span>';
+  switch(f.type){
+    case 'textarea':return f.plain?`<div class="rd-text">${esc(v)}</div>`:richViewHTML(rdraft?.values||{[f.id]:v},f.id,id);
+    case 'url':return /^https?:\/\//i.test(String(v))?`<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>`:esc(v);
+    case 'email':return `<a href="mailto:${esc(v)}">${esc(v)}</a>`;
+    case 'phone':return `<a href="tel:${esc(String(v).replace(/[^\d+]/g,''))}">${esc(v)}</a>`;
+    case 'file':case 'image':{const src=v.url||v.data||'';const nm=esc(v.name||'File');
+      if(f.type==='image'&&src)return `<a class="rd-pic" href="${esc(src)}" target="_blank" rel="noopener"><img src="${esc(src)}" alt="${nm}"></a>`;
+      return src?`<a href="${esc(src)}" target="_blank" rel="noopener">${nm}</a>${v.size?` <span class="help">${fsize(v.size)}</span>`:''}`:nm;}
+    case 'signature':return typeof v==='string'&&v.startsWith('data:image')?`<img class="rd-sig" src="${esc(v)}" alt="Signature">`:'Signed';
+    case 'location':{const u=mapUrl(v);const t=esc(fmt(f,v));return u?`${t} <a href="${esc(u)}" target="_blank" rel="noopener">Map ↗</a>`:t;}
+    case 'relation':{const r=recById(v),tf=r&&formById(r.formId);return r&&tf?`<button type="button" class="rd-link" data-act="open-record" data-id="${esc(r.id)}">${esc(recTitle(r,tf))}</button>`:'(removed)';}
+    case 'color':return `<span class="rd-swatch" style="background:${esc(v)}"></span> <code>${esc(v)}</code>`;
+    default:return esc(fmt(f,v));
+  }
 }
 function control(f,v,id,scope){
   const a=`id="${id}" data-fid="${f.id}"`,ph=f.placeholder?` placeholder="${esc(f.placeholder)}"`:'';
@@ -1503,7 +1662,7 @@ async function saveRecord(){
   try{if(rowsOut.length||removed.length)await saveRecordBundle(rec,rowsOut,removed);else await store.put('records',rec);}
   catch(e){console.error(e);if(!old)d.recordId=null;toast(e?.code==='permission-denied'?'You don’t have permission to save this record or one of its rows.':'Saving failed. Check your connection and try again.');return;}
   if(rowsOut.length||removed.length){const n=rowsOut.length+removed.length;setTimeout(()=>toast(`Saved with ${n} row change${n>1?'s':''}`),0);}
-  d.dirty=false;d.errors={};d.recordId=id;d.copied=0;view.recordId=id;toast('Saved');render();
+  d.dirty=false;d.errors={};d.recordId=id;d.copied=0;d.mode='read';view.recordId=id;toast('Saved');render();
   askChildRules(form,{...(old||{}),...rec,nums:old?.nums});
 }
 /* ---------- A parent changed: children whose rules look at it ----------
@@ -1744,6 +1903,7 @@ function viewFormEdit(){
       <div class="prop"><span>Color</span><div class="swatches">${COLORS.map((c,i)=>`<button class="sw${(f.color??0)===i?' on':''}" style="background:${c}" data-act="set-color" data-i="${i}" aria-label="Color ${i+1}"></button>`).join('')}</div></div>
       <label class="prop full"><span>Email PDF: subject</span><input class="in" data-fprop="emailSubject" value="${esc(f.emailSubject||'')}" maxlength="200" placeholder="${esc(DEFAULT_SUBJECT)}"></label>
       <label class="prop full"><span>Email PDF: message</span><textarea class="in" data-fprop="emailMessage" rows="6" maxlength="10000" placeholder="${esc(DEFAULT_MESSAGE)}">${esc(f.emailMessage||'')}</textarea><small class="help">What <b>Email PDF</b> fills in; it can be changed before sending. Use {Field name} for any field on this form (for example {${esc((f.fields||[]).find(x=>x.type!=='heading')?.label||'Invoice #')}}), plus {Title}, {Item}, {Company}, {Sender} and {Date}. Leave empty for the standard wording shown.</small></label>
+      <div class="prop full"><span>Word templates</span><div class="xw-links"><button type="button" class="btn sm" data-act="wd-placeholders">Placeholders for this form (.docx)</button><a class="btn sm ghost" href="/word-template-sample.docx" download="Formwright quote template.docx">Sample template</a></div><small class="help">Every placeholder a Word template for this form can use, to copy into your own document${f.dirty?' (made from the form as it is on screen, so save it before using new fields)':''}. People add templates from <b>Export ▾ → Word templates…</b> on a record.</small></div>
       <div class="prop"><span>Visibility</span><label class="switch"><input type="checkbox" data-fprop="showInSidebar" data-kind="bool"${f.showInSidebar?' checked':''}><span class="tr"></span><span>Show in sidebar</span></label><small class="help">Hidden forms stay in the designer and under their parent records.</small></div>
     </div></div>
     ${f.isNew?'':`<section class="section"><div class="section-h"><h2>Delete form</h2></div><div class="panel"><div class="parentcard"><p class="grow help">Deletes the form and its ${recordsOf(f.id).length} records. Child records in other forms are kept.</p><button class="btn danger${ui.confirm==='form'?' armed':''}" data-act="del-form">${ui.confirm==='form'?'Tap again to delete':'Delete form'}</button></div></div></section>`}`;
@@ -1859,7 +2019,7 @@ async function saveForm(meta){
   if(meta)ui.saveMeta=meta;
   if(fv.textPending()){ui.saveMeta=null;toast('Apply your text changes first (or press Reset).');return;}
   if(!f.name.trim()){toast('Give the form a name first.');$('.title-in')?.focus();return;}
-  {const wp=checkWorkflow(f,{people:new Set(store.users.map(u=>u.id)),groups:new Set(store.groups.map(g=>g.id))});if(wp.length){ui.tab='workflow';renderMain();toast('Workflow: '+wp[0]);return;}}
+  {const wp=checkWorkflow(f,{people:new Set(store.users.map(u=>u.id)),groups:new Set(store.groups.map(g=>g.id)),roles:new Set((store.roles||[]).map(r=>r.id))});if(wp.length){ui.tab='workflow';renderMain();toast('Workflow: '+wp[0]);return;}}
   if(f.workflow?.stages){f.workflow.stages.forEach(x=>{x.name=String(x.name||'').trim();x.moves=(x.moves||[]).filter(m=>m.label&&m.label.trim()&&f.workflow.stages.some(y=>y.id===m.to));});}
   f.fields.forEach(x=>{if(!x.label.trim())x.label='Untitled field';if(CHOICE.has(x.type))x.options=(x.options||[]).filter(Boolean);});
   // system names: unique on the form; one the same as the caption isn't stored
@@ -2005,6 +2165,11 @@ document.addEventListener('change',e=>{
 });
 function closeFormSearch(){ui.fq='';ui.fi=0;ui.fsOpen=false;const q=$('#fs-q');if(q)q.value='';paintFormResults();}
 document.addEventListener('pointerdown',e=>{if(fsShown()&&!e.target.closest?.('.fsearch'))closeFormSearch();},true);
+document.addEventListener('pointerdown',e=>{if(ui.recMore&&!e.target.closest?.('.rb-more')){ui.recMore=false;if(ui.confirm?.startsWith?.('rec-'))ui.confirm=null;renderMain();}},true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.recMore){e.preventDefault();ui.recMore=false;renderMain();$('[data-act="rec-more"]')?.focus();}});
+document.addEventListener('pointerdown',e=>{if(ui.appear&&!e.target.closest?.('.appear,[data-act="appear"]')){ui.appear=false;renderSide();}},true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.appear){e.preventDefault();ui.appear=false;renderSide();$('[data-act="appear"]')?.focus();}});
+window.addEventListener('resize',()=>{if(fsShown())paintFormResults();});
 // clicking or tapping into Search forms lists every form you can open; leaving it closes the list
 document.addEventListener('focusin',e=>{
   if(e.target?.id==='fs-q'){if(!ui.fsOpen){ui.fsOpen=true;ui.fi=0;paintFormResults();}return;}
@@ -2016,6 +2181,7 @@ document.addEventListener('click',async e=>{
   const el=e.target.closest('[data-act]');if(!el)return;
   const a=el.dataset.act,id=el.dataset.id;
   if(a!=='del-record'&&a!=='del-form'&&a!=='field-del'&&ui.confirm&&!a.startsWith('nav')){ui.confirm=null;}
+  if(ui.recMore&&a!=='rec-more'&&a!=='del-record')ui.recMore=false;
   switch(a){
     case 'menu':$('#side').classList.add('open');$('#scrim').classList.add('open');break;
     case 'close-menu':closeMenu();break;
@@ -2027,6 +2193,7 @@ document.addEventListener('click',async e=>{
     case 'nav-dashboards':go({name:'dashboards'});break;
     case 'nav-home':goHome();break;
     case 'nav-groups':go({name:'groups'});break;
+    case 'nav-roles':go({name:'roles'});break;
     case 'nav-users':go({name:'users'});break;
     case 'nav-imports':go({name:'imports'});break;
     case 'nav-audit':go({name:'audit'});break;
@@ -2052,6 +2219,15 @@ document.addEventListener('click',async e=>{
       break;}
     case 'rec-history':if(view.recordId)go({name:'audit',recordId:view.recordId});break;
     case 'nav-exports':if(view.name!=='exports')exportLeave();go({name:'exports'});break;
+    case 'appear':if(railOn()&&!ui.appear)setRail(false,true);ui.appear=!ui.appear;renderSide();if(ui.appear)setTimeout(()=>$('.appear button.on')?.focus(),0);else $('[data-act="appear"]')?.focus();break;
+    case 'ap-mode':applyTheme(document,el.dataset.v,localStorage);renderSide();$('[data-act="ap-mode"].on')?.focus();break;
+    case 'ap-scheme':applyScheme(document,el.dataset.v,localStorage);renderSide();$('[data-act="ap-scheme"].on')?.focus();break;
+    case 'ap-density':applyDensity(document,el.dataset.v,localStorage);renderSide();$('[data-act="ap-density"].on')?.focus();break;
+    case 'side-rail':setRail(!railOn());break;
+    case 'aside-fold':setAsideFold(!asideFolded());break;
+    case 'adm-fold':{const open=!admOpen();try{localStorage.setItem('fw.adminOpen',open?'1':'0');}catch(e){}renderSide();$('[data-act="adm-fold"]')?.focus();break;}
+    case 'fs-all':{const q=$('#fs-q');if(q){q.focus();ui.fsOpen=true;paintFormResults();}break;}
+    case 'palette':palette.open();break;
     case 'theme':{const t=applyTheme(document,nextTheme(readTheme(localStorage)),localStorage);renderSide();toast(themeLabel(t)==='Auto'?'Theme: Auto (follows this device)':'Theme: '+themeLabel(t)+' on this device');$('[data-act="theme"]')?.focus({preventScroll:true});break;}
     case 'sign-out':if(!guard())return;await signOutUser();break;
     case 'back':back();break;
@@ -2059,6 +2235,12 @@ document.addEventListener('click',async e=>{
     case 'open-record':{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});break;}
     case 'add-child':{const parent=recById(view.recordId);const cf=formById(id);if(!parent||!cf)return;if(rdraft?.dirty){toast('Save this record first.');return;}goRec(newRecordDraft(cf,parent),{name:'record',formId:cf.id,recordId:null});break;}
     case 'save-record':saveRecord();break;
+    case 'rec-mode':toggleRecMode();break;
+    case 'rs-tab':ui.rsTab=el.dataset.v;renderMain();$(`#rs-t-${CSS.escape(el.dataset.v)}`)?.focus();break;
+    case 'rec-more':ui.recMore=!ui.recMore;renderMain();if(ui.recMore)setTimeout(()=>$('.rb-menu .rb-item')?.focus(),0);else $('[data-act="rec-more"]')?.focus();break;
+    case 'mode-keep':if(el.dataset.act==='mode-keep'&&(e.target===el||el.tagName==='BUTTON')){ui.modeAsk=false;renderMain();}break;
+    case 'mode-discard':ui.modeAsk=false;rdraft=null;renderMain();break;
+    case 'mode-save':ui.modeAsk=false;saveRecord();break;
     case 'grid-add':{const cf=formById(el.dataset.grid);const g=rdraft?.grids?.[el.dataset.grid];if(!cf||!g)return;const row={id:uid('r'),values:newRowValues(cf,rdraft,formById(rdraft.formId)),ownerId:store.user.uid,isNew:true,dirty:true,errors:{}};g.rows.push(row);markDirty(rdraft);renderMain();document.querySelector(`tr[data-growid="${row.id}"] .gin, tr[data-growid="${row.id}"] .gck, tr[data-growid="${row.id}"] .gpopbtn`)?.focus({preventScroll:true});document.querySelector(`tr[data-growid="${row.id}"]`)?.scrollIntoView({block:'nearest'});break;}
     case 'grid-del':{const g=rdraft?.grids?.[el.dataset.grid];if(!g)return;const row=g.rows.find(r=>r.id===el.dataset.row);if(!row)return;g.rows=g.rows.filter(r=>r!==row);if(!row.isNew)g.removed.push(row.id);markDirty(rdraft);renderMain();toast('Row removed. It’s deleted when you save; Discard brings it back.');break;}
     case 'fold':{const fid=rdraft?.formId;if(!fid)return;const k=el.dataset.k;saveFolds(setFold(folds(),fid,k,!folded(fid,k)));renderMain();document.querySelector(`[data-act="fold"][data-k="${CSS.escape(k)}"]`)?.focus({preventScroll:true});break;}
@@ -2105,8 +2287,8 @@ document.addEventListener('click',async e=>{
     case 'grid-cell':{const g=rdraft?.grids?.[el.dataset.grid];const cf=formById(el.dataset.grid);const row=g?.rows.find(r=>r.id===el.dataset.row);if(!row||!cf)return;cdraft={formId:cf.id,values:row.values,errors:{},_row:row,_fid:el.dataset.fid,readOnly:rdraft.readOnly||!rowEditable(row,cf)};renderMain();document.querySelector('.gpop [data-scope="cell"] input, .gpop [data-scope="cell"] textarea, .gpop [data-scope="cell"] canvas')?.focus();break;}
     case 'cell-close':{const back=cdraft&&`[data-act="grid-cell"][data-row="${cdraft._row.id}"][data-fid="${cdraft._fid}"]`;cdraft=null;renderMain();if(back)document.querySelector(back)?.focus();break;}
     case 'task-done':toggleTask(id);break;
-    case 'task-open':if(cadenceUrl)window.open(cadenceLink(cadenceUrl,{task:id}),'cadence');break;
-    case 'add-task':if(cadenceUrl&&view.recordId)window.open(cadenceLink(cadenceUrl,{addTaskFor:view.recordId}),'cadence');break;
+    case 'task-open':if(view.recordId)tm.open(view.recordId,id);break;
+    case 'add-task':if(view.recordId){if(!rdraft?.recordId){toast('Save this record first, then add tasks to it.');break;}tm.open(view.recordId);}break;
     case 'export-pdf':exportPdf();break;
     case 'email-pdf':openMail();break;
     case 'mail-cancel':if(ui.mail&&!ui.mail.busy){ui.mail=null;renderMain();document.querySelector('[data-act="email-pdf"]')?.focus();}break;
@@ -2143,7 +2325,7 @@ document.addEventListener('click',async e=>{
     case 'sub-cols-reset':{const fid=rdraft?.formId;if(!fid)return;saveSub(fid,el.dataset.k,{cols:undefined});renderMain();break;}
     case 'sub-sort':{const fid=rdraft?.formId;if(!fid)return;const k=el.dataset.k,c=subCols(fid,k);if(!c)return;const cur=subPrefs(fid,k).sort;saveSub(fid,k,{sort:subNext(cur,el.dataset.v,c.firstDir(el.dataset.v))});renderMain();document.querySelector(`[data-act="sub-sort"][data-k="${CSS.escape(k)}"][data-v="${CSS.escape(el.dataset.v)}"]`)?.focus();break;}
     case 'sub-showall':{const fid=rdraft?.formId;if(!fid)return;saveSub(fid,el.dataset.k,{show:'all'});renderMain();break;}
-    case 'del-record':{const k='rec-'+view.recordId;if(ui.confirm!==k){ui.confirm=k;renderMain();return;}ui.confirm=null;const rid=view.recordId;rdraft.dirty=false;try{await store.del('records',rid);toast('Deleted');}catch(err){toast('Delete failed. Try again.');}break;}
+    case 'del-record':{const k='rec-'+view.recordId;if(ui.confirm!==k){ui.confirm=k;renderMain();$('.rb-item.danger')?.focus();return;}ui.recMore=false;ui.confirm=null;const rid=view.recordId;rdraft.dirty=false;try{await store.del('records',rid);toast('Deleted');}catch(err){toast('Delete failed. Try again.');}break;}
     case 'rate':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);const n=+el.dataset.n;d.values[f.id]=d.values[f.id]===n?0:n;markDirty(d);repaint(d,f);break;}
     case 'file-clear':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);d.values[f.id]=null;markDirty(d);repaint(d,f);break;}
     case 'sig-clear':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);d.values[f.id]=null;markDirty(d);repaint(d,f);break;}
@@ -2192,7 +2374,9 @@ document.addEventListener('click',async e=>{
     case 'wf-go':{const a=ui.wfAsk;if(!a||a.busy)return;if(a.need&&!String(a.comment||'').trim()){toast('Say why, so they know what to change.');document.querySelector('[data-wf-comment]')?.focus();return;}
       const rec=recById(a.recId),form=rec&&formById(rec.formId),t=form&&stageById(form,a.to);if(!t)return;a.busy=true;renderMain();await doWfMove(rec,form,t,a.label,a.comment);ui.wfAsk=null;renderMain();break;}
     case 'wf-who':ui.wfWho=el.dataset.v;renderMain();break;
-    case 'nav-mywork':go({name:'mywork'});break;
+    case 'wd-placeholders':if(fdraft)wordui.downloadPlaceholders(fdraft);break;
+    case 'nav-mywork':ui.mwTab=cmt.unreadCount()||!store.forms.some(f=>wfOn(f))?'mentions':'waiting';go({name:'mywork'});break;
+    case 'mw-tab':ui.mwTab=el.dataset.v;renderMain();document.querySelector(`[data-act="mw-tab"][data-v="${CSS.escape(el.dataset.v)}"]`)?.focus();break;
     case 'cs-no':if(ui.cascade&&!ui.cascade.busy){ui.cascade=null;renderMain();}break;
     case 'cs-scrim':if(e.target===el&&ui.cascade&&!ui.cascade.busy){ui.cascade=null;renderMain();}break;
     case 'cs-go':runCascade();break;
@@ -2283,7 +2467,29 @@ document.addEventListener('keydown',e=>{
   }
   if(e.target?.id==='dq'&&e.key==='Escape'&&e.target.value){e.preventDefault();e.target.value='';ui.dq='';applyDq();}
 });
+// Alt+B (Option+B on a Mac): fold the sidebar to icons, or open it again (wide screens)
+document.addEventListener('keydown',e=>{
+  if(!(e.altKey&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&e.code==='KeyB'))return;
+  if(!booted||window.matchMedia('(max-width:820px)').matches)return;
+  e.preventDefault();setRail(!railOn());
+},true);
+// Alt+. (Option+. on a Mac): fold the record's Activity panel to a strip on the right, or open it again (wide screens)
+document.addEventListener('keydown',e=>{
+  if(!(e.altKey&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&e.code==='Period'))return;
+  if(!booted||view.name!=='record'||!$('.rec-aside')||!window.matchMedia('(min-width:1280px)').matches)return;
+  e.preventDefault();setAsideFold(!asideFolded());
+},true);
+// Alt+E (Option+E on a Mac), or Ctrl+Shift+C when the browser's developer tools are closed:
+// Read view ⇄ Edit view on a saved record. e.code, because Option+E on a Mac types an accent.
+document.addEventListener('keydown',e=>{
+  const altE=e.altKey&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&e.code==='KeyE';
+  const ctrlC=(e.ctrlKey||e.metaKey)&&e.shiftKey&&!e.altKey&&(e.code==='KeyC'||String(e.key).toLowerCase()==='c');
+  if(!altE&&!ctrlC)return;
+  if(view.name!=='record'||ui.modeAsk||document.querySelector('#tk-root .tk-dlg, #aw-root .aw-dlg, .lv-scrim'))return;
+  if(toggleRecMode()){e.preventDefault();e.stopPropagation();}
+},true);
 document.addEventListener('pointerdown',e=>{if(ui.subPop&&!e.target.closest?.('.lv-anchor')){ui.subPop=null;renderMain();}},true);
+document.addEventListener('keydown',e=>{if(e.target?.classList?.contains('mw-tab')&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){const ts=[...document.querySelectorAll('.mw-tab')],i=ts.indexOf(e.target);const n=ts[(i+(e.key==='ArrowRight'?1:-1)+ts.length)%ts.length];if(n&&n!==e.target){e.preventDefault();n.click();}}});
 document.addEventListener('keydown',e=>{if(e.target?.dataset?.anval&&(e.key==='Enter'||e.key==='Escape')){e.preventDefault();document.querySelector(e.key==='Enter'?'[data-act="an-save"]':'[data-act="an-cancel"]')?.click();}});
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&ui.mailView&&!ui.mailView.busy){e.preventDefault();const id=ui.mailView.id;closeMailView();renderMain();document.querySelector(`[data-act="mail-view"][data-id="${CSS.escape(id)}"]`)?.focus();return;}
@@ -2291,6 +2497,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target?.dataset?.delall){e.preventDefault();deleteAllMail();return;}
   if(e.key==='Escape'&&ui.mail&&!ui.mail.busy){e.preventDefault();ui.mail=null;renderMain();document.querySelector('[data-act="email-pdf"]')?.focus();}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.subPop){e.preventDefault();const k=ui.subPop;ui.subPop=null;renderMain();document.querySelector(`[data-act="sub-pop"][data-k="${CSS.escape(k)}"]`)?.focus();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.modeAsk){e.preventDefault();ui.modeAsk=false;renderMain();}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&cdraft){e.preventDefault();document.querySelector('[data-act="cell-close"]')?.click();}});
 function closeMenu(){$('#side').classList.remove('open');$('#scrim').classList.remove('open');}
 
@@ -2483,8 +2690,20 @@ export function startApp(){
   initAudit({fmt,formById,recById,recTitle:(r,f)=>recTitle(r,f),go,renderMain});
   initAttach({fmt,valOf,recTitle,titleFieldOf,formById,recById});
   initRichUI();
+  palette.initPalette({store,formById,recTitle,isAdmin:()=>isAdmin(store.me),canView:f=>canViewForm(store.me,f.id),canCreate:id=>canCreate(store.me,id),searchable:()=>allSearchable(store.forms,f=>canViewForm(store.me,f.id)).map(x=>x.form),
+    go:v=>go(v),home:()=>home(),newRecord:id=>{const f=formById(id);if(f)goRec(newRecordDraft(f,null),{name:'record',formId:id,recordId:null});},openRecord:id=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
+  tm.initTaskModal({store,recById,formById,recTitle,toast,cadenceUrl,tasks:()=>tw.tasks||[]});
+  cmt.initComments({store,view:()=>view,recById,formById,recTitle,itemName,toast,isAdmin:()=>isAdmin(store.me),canUseTasks,foldBtn,folded,
+    unfold:(fid,k)=>saveFolds(setFold(folds(),fid,k,false)),openRecord:id=>{const r=recById(id);if(!r)return;if(view.name==='record'&&view.recordId===id){renderMain();return;}goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
+  initDashMail();
+  allwork.initAllWork({store,recById,formById,recTitle,view:()=>view,tab:()=>ui.mwTab,showComment:(r,c)=>cmt.showComment(r,c),openRecord:id=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});else toast('That record was deleted, or you can no longer see it.');},toast,renderMain,isAdmin:()=>isAdmin(store.me)});
+  wordui.initWordUI({store,view:()=>view,recById,formById,recTitle,itemName,valOf,fmt,realName,stageName,wfOn,parentsOf,calcExpr:docCalc,checkExpr:docCheck,
+    isAdmin:()=>isAdmin(store.me),toast,dirty:()=>!!rdraft?.dirty,busy:exportBusy,gridCols});
+  notices.initNotices({store,recById,formById,recTitle,stageName,groupName,wfOn,openMention:id=>cmt.openMention(id),
+    openRecord:id=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});},
+    openMyWork:tab=>{ui.mwTab=tab;if(view.name==='mywork')renderMain();else go({name:'mywork'});}});
   fv.initFormVer({fdraft:()=>fdraft,setFdraft:f=>{fdraft=f;pdraft=null;},setFdirty,renderMain,saveForm,formById,recordsOf,isEmpty,toast,when,forms:()=>store.forms,newId:()=>uid('x'),me:()=>store.user?.uid,personName:id=>realName(id),closeField:()=>{ui.openField=null;}});
-  initWfDesign({setFdirty,renderMain,ui:()=>ui,people:()=>store.users.map(u=>({id:u.id,name:store.profiles[u.id]?.displayName||u.displayName||(u.email||'').split('@')[0]||'Unnamed'})).sort((a,b)=>a.name.localeCompare(b.name)),groups:()=>[...store.groups].sort((a,b)=>(a.name||'').localeCompare(b.name||'')),sections:f=>rulesCtx(f).targets.filter(t=>['grid','child','tasks'].includes(t.kind))});
+  initWfDesign({setFdirty,renderMain,ui:()=>ui,people:()=>store.users.map(u=>({id:u.id,name:store.profiles[u.id]?.displayName||u.displayName||(u.email||'').split('@')[0]||'Unnamed'})).sort((a,b)=>a.name.localeCompare(b.name)),groups:()=>[...store.groups].sort((a,b)=>(a.name||'').localeCompare(b.name||'')),roles:()=>[...(store.roles||[])].sort((a,b)=>(a.name||'').localeCompare(b.name||'')),sections:f=>rulesCtx(f).targets.filter(t=>['grid','child','tasks'].includes(t.kind))});
   initAutos({formById,recById,parentsOf,recordsOf,recTitle,go,renderMain,forms:()=>[...store.forms].sort(byOrder)});
   initRules({fdraft:()=>fdraft,formById,recById,parentsOf,recordsOf,recTitle,setFdirty,renderMain,ui:()=>ui});
   initImports({ruleClears:(form,r)=>toClear(form,r.values,rulesOf(form,r,r.parentId?recById(r.parentId):null)),fmt,recTitle,formById,go,renderMain,computeFormulas:(form,rec)=>{const out={};(form.fields||[]).filter(f=>f.type==='formula').forEach(f=>{const r=calc(form,f,rec);out[f.id]=r.e?null:r.v;});return out;}});
@@ -2495,5 +2714,6 @@ export function startApp(){
 export function stopApp(){
   booted=false;store.onChange=()=>{};$('#app').hidden=true;document.getElementById('noaccess')?.remove();closeMenu();resetLists();resetImports();forgetDrafts();
   if(tw.unsub){tw.unsub();tw.unsub=null;}tw.recordId=null;
+  cmt.stop();wordui.stop();allwork.stop();
 }
 export { view as currentView, ui, byOrder, formById, recordsOf, renderMain };
