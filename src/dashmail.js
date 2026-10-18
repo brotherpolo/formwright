@@ -37,6 +37,17 @@ export function dueSlot(s, parts) {
   return ok && s.lastSlot !== slot ? slot : '';
 }
 
+/** The next hour it goes out, from now: { ms, key: 'YYYY-MM-DD', hour } or null when it's off. */
+export function nextSend(s, now, timeZone) {
+  if (!s || !s.on) return null;
+  const start = Math.floor(now / 3600e3) * 3600e3 + 3600e3; // the next whole hour
+  for (let i = 0; i < 24 * 40; i++) {
+    const ms = start + i * 3600e3, p = partsIn(ms, timeZone);
+    if (dueSlot({ ...s, lastSlot: '' }, p)) return { ms, key: p.key, hour: p.hour };
+  }
+  return null;
+}
+
 /** Everyone a schedule goes to: people, everyone in the roles, and other addresses (lowercase, once each, at most 50). */
 export function recipients(s, people, roleHolders = () => []) {
   const to = s && s.to ? s.to : {};

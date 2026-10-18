@@ -353,3 +353,14 @@ body.pd-on .pgrip{cursor:grabbing}
 .am-confirm span{font-size:14px;color:var(--muted)}
 .am-confirm .err{color:var(--danger,#b42318)}
 .am-sched input[type="date"]{width:auto;flex:0 1 200px}
+
+/* Administration → Schedules */
+.sc-sec{margin-top:18px}
+.sc-sec > .dz-h{display:flex;align-items:center;gap:8px;margin:0 0 8px}
+.sc-ic{background:var(--accent-soft);color:var(--accent)}
+.sc-card.off .info{opacity:.7}
+.sc-card .info strong{font-weight:600;color:var(--fg)}
+.sc-ctl{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.sc-ok{color:var(--ok,#0f7a5c)}
+.sc-bad{color:var(--danger,#b42318);font-weight:500}
+@media (max-width:640px){.sc-card{grid-template-columns:auto minmax(0,1fr)}.sc-ctl{grid-column:1 / -1;justify-content:flex-start}}

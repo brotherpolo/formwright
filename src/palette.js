@@ -18,6 +18,7 @@ const ADMIN_PAGES = [
   { id: 'groups', label: 'Security groups', glyph: '◫' },
   { id: 'roles', label: 'Roles', glyph: '◉' },
   { id: 'automations', label: 'Automations', glyph: '↯' },
+  { id: 'schedules', label: 'Schedules', glyph: '◷' },
   { id: 'audit', label: 'Audit trail', glyph: '⌕' },
   { id: 'imports', label: 'Import history', glyph: '⇪' },
   { id: 'exports', label: 'PDF exports', glyph: '⇩' },

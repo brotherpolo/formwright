@@ -38,6 +38,7 @@ import { shrinkPhoto } from './photo.js';
 import { evaluate as evalRules, toClear, withoutCleared, NO_RULES, holdsValue, pruneRules, impactOf, sameRules, changedRuleLabels } from './rules.js';
 import { initAutos, pendingBanner } from './autos.js';
 import { personAv } from './avatar.js';
+import { initSchedules, scheduleCount } from './schedules.js';
 import { initDashMail } from './dashmailui.js';
 import { initWfDesign, viewWorkflow, wfClick, wfChange, wfInput } from './wfdesign.js';
 import { checkWorkflow } from './workflow.js';
@@ -58,7 +59,7 @@ import { signOutUser } from './auth.js';
 import { $, esc, uid, clone, isEmpty, toast, COLORS, colorOf, itemName, badge, lazy } from './ui.js';
 import examples from './examples.json';
 
-const ADMIN_VIEWS = new Set(['designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation']);
+const ADMIN_VIEWS = new Set(['designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 
 // other words people search field types by
 const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold'};
@@ -490,6 +491,7 @@ function renderSide(){
     ${navBtn('nav-imports',view.name==='imports','Import history','⇪',`<span class="n">${store.imports.length}</span>`)}
     ${navBtn('nav-exports',view.name==='exports','PDF exports','⇩')}
     ${navBtn('nav-automations',view.name==='automations'||view.name==='automation','Automations','↯',`<span class="n">${store.automations.filter(a=>a.on).length||''}</span>`)}
+    ${navBtn('nav-schedules',view.name==='schedules','Schedules','◷',`<span class="n">${scheduleCount()||''}</span>`)}
     ${navBtn('nav-audit',view.name==='audit','Audit trail','⌕')}</div>`:''}`:''}
     <div class="side-foot">${ui.appear?appearanceHTML():''}${store.user?personAv(store.user.uid,name,{small:true}):''}<div class="who" title="${esc(name)}"><b>${esc(name)}</b><span>${adm?'Administrator':'Member'}</span></div><div class="foot-acts"><button type="button" class="ibtn theme-btn" data-act="appear" aria-expanded="${!!ui.appear}" aria-label="Appearance: mode, colour and density" title="Appearance">${THEME_ICON[readTheme(localStorage)]}<span class="foot-l">Appearance</span></button><button class="btn sm ghost" data-act="sign-out">Sign out</button></div></div>`;
   if(fsFocus!=null){const q=$('#fs-q');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(fsFocus,fsFocus)}catch(e){}paintFormResults();}}
@@ -2198,6 +2200,7 @@ document.addEventListener('click',async e=>{
     case 'nav-imports':go({name:'imports'});break;
     case 'nav-audit':go({name:'audit'});break;
     case 'nav-automations':go({name:'automations'});break;
+    case 'nav-schedules':go({name:'schedules'});break;
     case 'rec-duplicate':{
       const rec=view.recordId?recById(view.recordId):null,form=rec?formById(rec.formId):null;
       if(!rec||!form||!canCreate(store.me,form.id))return;
@@ -2705,6 +2708,7 @@ export function startApp(){
   fv.initFormVer({fdraft:()=>fdraft,setFdraft:f=>{fdraft=f;pdraft=null;},setFdirty,renderMain,saveForm,formById,recordsOf,isEmpty,toast,when,forms:()=>store.forms,newId:()=>uid('x'),me:()=>store.user?.uid,personName:id=>realName(id),closeField:()=>{ui.openField=null;}});
   initWfDesign({setFdirty,renderMain,ui:()=>ui,people:()=>store.users.map(u=>({id:u.id,name:store.profiles[u.id]?.displayName||u.displayName||(u.email||'').split('@')[0]||'Unnamed'})).sort((a,b)=>a.name.localeCompare(b.name)),groups:()=>[...store.groups].sort((a,b)=>(a.name||'').localeCompare(b.name||'')),roles:()=>[...(store.roles||[])].sort((a,b)=>(a.name||'').localeCompare(b.name||'')),sections:f=>rulesCtx(f).targets.filter(t=>['grid','child','tasks'].includes(t.kind))});
   initAutos({formById,recById,parentsOf,recordsOf,recTitle,go,renderMain,forms:()=>[...store.forms].sort(byOrder)});
+  initSchedules({go,renderMain,formById});
   initRules({fdraft:()=>fdraft,formById,recById,parentsOf,recordsOf,recTitle,setFdirty,renderMain,ui:()=>ui});
   initImports({ruleClears:(form,r)=>toClear(form,r.values,rulesOf(form,r,r.parentId?recById(r.parentId):null)),fmt,recTitle,formById,go,renderMain,computeFormulas:(form,rec)=>{const out={};(form.fields||[]).filter(f=>f.type==='formula').forEach(f=>{const r=calc(form,f,rec);out[f.id]=r.e?null:r.v;});return out;}});
   Object.assign(ui,{search:'',openField:null,tab:'fields',palette:false,confirm:null,leaveOk:false,dzq:''});

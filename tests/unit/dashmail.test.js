@@ -51,3 +51,18 @@ test('when a schedule is due, and who it goes to', () => {
   const people = new Map([['a', { email: 'A@x.example' }], ['b', { email: 'b@x.example' }], ['c', { email: '' }]]);
   assert.deepEqual(recipients({ to: { people: ['a', 'c'], roles: ['r'], addresses: 'b@x.example, bad, z@y.example' } }, people, () => ['b']), ['a@x.example', 'b@x.example', 'z@y.example']);
 });
+
+test('nextSend: the next hour a schedule goes out (in the company time zone)', async () => {
+  const { nextSend } = await import('../../src/dashmail.js');
+  const TZ = 'America/Toronto';
+  const at = (iso) => Date.parse(iso);
+  // Sunday Oct 18 2026, 10:30 a.m. Toronto (14:30Z)
+  const now = at('2026-10-18T14:30:00Z');
+  assert.deepEqual(nextSend({ on: true, freq: 'weekly', day: 1, hour: 8 }, now, TZ), { ms: at('2026-10-19T12:00:00Z'), key: '2026-10-19', hour: 8 });
+  assert.equal(nextSend({ on: true, freq: 'weekdays', hour: 8 }, now, TZ).key, '2026-10-19');
+  assert.equal(nextSend({ on: true, freq: 'daily', hour: 11 }, now, TZ).key, '2026-10-18', 'later today');
+  assert.equal(nextSend({ on: true, freq: 'daily', hour: 10 }, now, TZ).key, '2026-10-19', 'this hour has started: tomorrow');
+  assert.equal(nextSend({ on: true, freq: 'monthly', day: 1, hour: 8 }, now, TZ).key, '2026-11-01');
+  assert.equal(nextSend({ on: false, freq: 'daily', hour: 8 }, now, TZ), null);
+  assert.equal(nextSend({ on: true, freq: 'weekly', day: 1, hour: 8, lastSlot: '2026-10-19T08' }, now, TZ).key, '2026-10-19', 'what was sent before doesn’t matter');
+});

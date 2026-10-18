@@ -17,6 +17,7 @@ export const PAGES = [
   { key: 'imports', title: 'Import history', glyph: '⇪', desc: 'Imports and rule changes, with Undo.', admin: true },
   { key: 'exports', title: 'PDF exports', glyph: '⇩', desc: 'Company name and logo on PDFs.', admin: true },
   { key: 'automations', title: 'Automations', glyph: '↯', desc: 'When this happens, do that.', admin: true },
+  { key: 'schedules', title: 'Schedules', glyph: '◷', desc: 'Dashboard emails and scheduled automations.', admin: true },
   { key: 'audit', title: 'Audit trail', glyph: '⌕', desc: 'Every change, by whom and when.', admin: true },
 ];
 export const pageOf = (key) => PAGES.find((p) => p.key === key) || null;

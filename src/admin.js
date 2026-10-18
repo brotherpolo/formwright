@@ -8,10 +8,11 @@ import { esc, uid, clone, toast, badge } from './ui.js';
 import * as exportset from './exportset.js';
 import * as audit from './audit.js';
 import * as autos from './autos.js';
+import * as schedules from './schedules.js';
 import { personAv } from './avatar.js';
 import { LEVELS, NONE, PRESETS, normalize, describeLevel, levelFor, isAdmin, accessParents } from './access.js';
 
-const VIEWS = new Set(['users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'exports', 'audit', 'automations', 'automation']);
+const VIEWS = new Set(['users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 let gdraft = null;
 let rdraft = null;        // the role being edited: { id, name, description, members, isNew, dirty }
 let confirmDel = false;
@@ -43,6 +44,7 @@ export function renderView(view) {
   if (view.name === 'audit') return { title: 'Audit trail', html: audit.viewAudit(view) };
   if (view.name === 'automations') return { title: 'Automations', html: autos.viewAutomations() };
   if (view.name === 'automation') return { title: 'Automation', html: autos.viewAutomation() };
+  if (view.name === 'schedules') return { title: 'Schedules', html: schedules.viewSchedules() };
   return { title: '', html: '' };
 }
 
@@ -261,6 +263,7 @@ export async function onClick(el, a, id) {
   if (a.startsWith('ex-') && (await exportset.onClick(a))) return;
   if (a.startsWith('au-') && (await audit.onClick(a, el))) return;
   if (a.startsWith('am-') && (await autos.onClick(a, el))) return;
+  if (a.startsWith('sc-') && (await schedules.onClick(a, el))) return;
   switch (a) {
     case 'u-rm': rm = { id, giveTo: '', busy: false }; renderMain(); document.querySelector('[data-urmgive]')?.focus(); return;
     case 'u-rm-cancel': rm = null; renderMain(); return;
