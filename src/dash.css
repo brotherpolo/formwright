@@ -401,19 +401,20 @@ button.db-li:hover{background:var(--accent-soft)}
 .dm-warn{background:var(--warn-soft);padding:8px 10px;border-radius:8px;color:var(--fg)}
 .dm-bad{color:var(--danger)}
 
-/* Dashboard chart entrances . Only when the viewer hasn't asked for less motion. */
+/* Dashboard chart entrances (dashanim.js). Only when the viewer hasn't asked for less motion.
+   --ad is a negative delay: a tile redrawn halfway through its entrance carries on where it was. */
 @property --sw { syntax: '<angle>'; inherits: false; initial-value: 360deg; }
 @media (prefers-reduced-motion: no-preference) {
-  .db-anim .rp-bf { transform-origin: left center; animation: dbGrow .7s cubic-bezier(.2,.75,.25,1) both; animation-delay: calc(var(--i, 0) * 55ms); }
-  .db-anim .rp-bv { animation: dbFade .35s ease-out both; animation-delay: calc(var(--i, 0) * 55ms + .35s); }
-  .db-anim .db-ring::before { content: ''; position: absolute; inset: -1px; border-radius: 50%; background: conic-gradient(transparent var(--sw), var(--surface) 0); animation: dbSweep .95s cubic-bezier(.35,.1,.25,1) both; pointer-events: none; }
-  .db-anim .db-li { animation: dbRise .4s ease-out both; animation-delay: calc(var(--i, 0) * 60ms + .2s); }
-  .db-anim .rp-svg { animation: dbWipe 1.1s cubic-bezier(.4,.1,.2,1) .1s both; }
-  .db-anim .rp-area { animation: dbFade .8s ease-out .3s both; }
-  .db-anim .rp-pt i { animation: dbPop .35s cubic-bezier(.3,1.6,.5,1) both; animation-delay: calc(.1s + var(--x, 0) * 1.1s); }
-  .db-anim .rp-gl span, .db-anim .rp-xax { animation: dbFade .5s ease-out both; }
-  .db-anim .rp-kpisub, .db-anim .db-kd { animation: dbFade .5s ease-out .55s both; }
-  .db-anim table tbody tr { animation: dbFade .4s ease-out both; animation-delay: calc(var(--i, 0) * 30ms); }
+  .db-anim .rp-bf { transform-origin: left center; animation: dbGrow .7s cubic-bezier(.2,.75,.25,1) both; animation-delay: calc(var(--i, 0) * 55ms + var(--ad, 0ms)); }
+  .db-anim .rp-bv { animation: dbFade .35s ease-out both; animation-delay: calc(var(--i, 0) * 55ms + .35s + var(--ad, 0ms)); }
+  .db-anim .db-ring::before { content: ''; position: absolute; inset: -1px; border-radius: 50%; background: conic-gradient(transparent var(--sw), var(--surface) 0); animation: dbSweep .95s cubic-bezier(.35,.1,.25,1) both; animation-delay: var(--ad, 0ms); pointer-events: none; }
+  .db-anim .db-li { animation: dbRise .4s ease-out both; animation-delay: calc(var(--i, 0) * 60ms + .2s + var(--ad, 0ms)); }
+  .db-anim .rp-svg { animation: dbWipe 1.1s cubic-bezier(.4,.1,.2,1) both; animation-delay: calc(.1s + var(--ad, 0ms)); }
+  .db-anim .rp-area { animation: dbFade .8s ease-out both; animation-delay: calc(.3s + var(--ad, 0ms)); }
+  .db-anim .rp-pt i { animation: dbPop .35s cubic-bezier(.3,1.6,.5,1) both; animation-delay: calc(.1s + var(--x, 0) * 1.1s + var(--ad, 0ms)); }
+  .db-anim .rp-gl span, .db-anim .rp-xax { animation: dbFade .5s ease-out both; animation-delay: var(--ad, 0ms); }
+  .db-anim .rp-kpisub, .db-anim .db-kd { animation: dbFade .5s ease-out both; animation-delay: calc(.55s + var(--ad, 0ms)); }
+  .db-anim table tbody tr { animation: dbFade .4s ease-out both; animation-delay: calc(var(--i, 0) * 30ms + var(--ad, 0ms)); }
 }
 @keyframes dbGrow { from { transform: scaleX(0); } }
 @keyframes dbFade { from { opacity: 0; } }
@@ -422,62 +423,34 @@ button.db-li:hover{background:var(--accent-soft)}
 @keyframes dbWipe { from { clip-path: inset(-5% 100% -5% 0); } to { clip-path: inset(-5% -1% -5% 0); } }
 @keyframes dbPop { from { transform: scale(0); opacity: 0; } }
 
-/* ---------- hover ---------- */
-.db-tile { transition: transform .2s ease, box-shadow .2s ease; }
-.db-tile:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(15, 20, 40, .10); }
-.rp-kpi { transition: transform .25s cubic-bezier(.3,1.4,.5,1); }
-.rp-kpi:hover { transform: scale(1.04); }
-/* bars: the one under the pointer stands out, the rest step back */
-.rp-bf { transition: opacity .2s ease, filter .2s ease; }
-.rp-bt { transition: transform .2s cubic-bezier(.3,1.4,.5,1); transform-origin: left center; }
-.rp-bars:hover .rp-bf { opacity: .38; }
-.rp-bars .rp-bar:hover .rp-bf { opacity: 1; filter: brightness(1.08) saturate(1.1); }
-.rp-bars .rp-bar:hover .rp-bt { transform: scaleY(1.45); }
-.rp-bars .rp-bar:hover .rp-bv, .rp-bars .rp-bar:hover .rp-bl { font-weight: 700; color: var(--fg); }
-/* donut: the slice under the pointer stays bright, the others fade, the middle shows that slice */
-.db-ring { transition: transform .25s cubic-bezier(.3,1.4,.5,1); }
-.db-ring.hot { transform: scale(1.03); }
-.db-hl { position: absolute; inset: -1px; border-radius: 50%; pointer-events: none; opacity: 0; transition: opacity .2s ease; }
-.db-ring.hot .db-hl { opacity: 1; }
-.db-leg.hot .db-li { opacity: .45; transition: opacity .2s ease; }
-.db-leg.hot .db-li.on { opacity: 1; background: var(--accent-soft); }
-.db-ringc .hv { display: none; }
-.db-ring.hot .db-ringc .hv { display: block; }
-.db-ring.hot .db-ringc .nv { display: none; }
-/* line: a guide follows the pointer to the nearest point, which grows and shows its value */
-.rp-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--muted); opacity: 0; pointer-events: none; transition: left .12s ease-out, opacity .15s; }
-.rp-plot.hot .rp-guide { opacity: .45; }
-.rp-pt i { transition: transform .2s cubic-bezier(.3,1.6,.5,1), opacity .1s; }
-.rp-pt.hot i { opacity: 1; transform: scale(1.7); }
-.rp-pt.hot .rp-tip { display: block; }
-@media (prefers-reduced-motion: reduce) {
-  .db-tile, .rp-kpi, .rp-bf, .rp-bt, .db-ring, .db-hl, .rp-guide, .rp-pt i { transition: none; }
-  .db-tile:hover, .rp-kpi:hover, .db-ring.hot, .rp-bars .rp-bar:hover .rp-bt { transform: none; }
-}
-
-/* Dashboard hover : only where there's a real mouse. */
+/* Dashboard hover (dashanim.js): only where there's a real mouse, and not while arranging tiles. */
+.db-ringc .hv { display: block; font-size: .55em; font-family: var(--body); color: var(--muted); font-weight: 500; }
+.rp-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--fg) 25%, transparent); pointer-events: none; opacity: 0; }
 @media (hover: hover) and (pointer: fine) {
   .db-cv:not(.edit) .db-tile { transition: left .16s ease, top .16s ease, width .16s ease, height .16s ease, box-shadow .2s ease, border-color .2s ease; }
   .db-cv:not(.edit) .db-tile:hover { box-shadow: 0 10px 28px rgba(15, 20, 40, .12); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
   /* numbers: a gentle lift */
-  .rp-kpi { transition: transform .25s cubic-bezier(.3,1.4,.5,1); }
-  .rp-kpi:hover { transform: scale(1.05); }
+  .db-cv:not(.edit) .rp-kpi { transition: transform .25s cubic-bezier(.3,1.4,.5,1); }
+  .db-cv:not(.edit) .rp-kpi:hover { transform: scale(1.05); }
   /* bars: the one you point at stands out, the rest step back */
   .rp-bf { transition: opacity .18s ease, transform .18s ease, filter .18s ease; transform-origin: left center; }
-  .rp-bars:hover .rp-bar .rp-bf { opacity: .35; }
-  .rp-bars .rp-bar:hover .rp-bf { opacity: 1; transform: scaleY(1.35); filter: saturate(1.2); }
-  .rp-bars .rp-bar:hover .rp-bl, .rp-bars .rp-bar:hover .rp-bv { font-weight: 700; color: var(--fg); }
+  .db-cv:not(.edit) .rp-bars:hover .rp-bar .rp-bf { opacity: .35; }
+  .db-cv:not(.edit) .rp-bars .rp-bar:hover .rp-bf { opacity: 1; transform: scaleY(1.35); filter: saturate(1.2); }
+  .db-cv:not(.edit) .rp-bars .rp-bar:hover .rp-bl, .db-cv:not(.edit) .rp-bars .rp-bar:hover .rp-bv { font-weight: 700; color: var(--fg); }
   /* donut: the slice you point at stays bright, the centre names it */
   .db-ring { transition: transform .25s cubic-bezier(.3,1.4,.5,1); }
   .db-ring.hot { transform: scale(1.04); }
-  .db-ringc .hv { display: block; font-size: .55em; font-family: var(--body); color: var(--muted); font-weight: 500; }
   .db-li { transition: opacity .18s ease, background .18s ease; }
   .db-leg.hot .db-li:not(.on) { opacity: .4; }
   .db-li.on { background: var(--accent-soft); }
   /* line: a guide follows the mouse and the nearest point shows its value */
-  .rp-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--fg) 25%, transparent); pointer-events: none; opacity: 0; transition: opacity .15s, left .08s linear; }
+  .rp-guide { transition: opacity .15s, left .08s linear; }
   .rp-plot.hot .rp-guide { opacity: 1; }
   .rp-pt.on i { opacity: 1; transform: scale(1.5); transition: transform .15s; }
   .rp-pt.on .rp-tip { display: block; }
   .rp-plot.hot .rp-path { stroke-width: 2.6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .db-tile, .rp-kpi, .rp-bf, .db-ring, .rp-guide, .rp-pt i, .db-li { transition: none !important; }
+  .rp-kpi:hover, .db-ring.hot, .rp-bars .rp-bar:hover .rp-bf, .rp-pt.on i { transform: none !important; }
 }

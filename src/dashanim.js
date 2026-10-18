@@ -4,11 +4,13 @@
 // their device for less motion get the charts as they are; phones and tablets get no hover.
 // The styles are in dash.css (.db-anim and the hover rules).
 
+import { store } from './store.js';
+
 const still = () => typeof window === 'undefined' || !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const NUM = /-?[\d,]*\.?\d+/;
 
 // count each number in el up from 0 (text only, so the markup around it stays as it is)
-function countUp(el) {
+function countUp(el, elapsed = 0) {
   const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   const nodes = [];
   while (w.nextNode()) if (NUM.test(w.currentNode.nodeValue)) nodes.push(w.currentNode);
@@ -17,7 +19,8 @@ function countUp(el) {
     const target = Number(raw.replace(/,/g, '')), dec = (raw.split('.')[1] || '').length, comma = raw.includes(',');
     if (!isFinite(target) || target === 0) return;
     const fmt = (v) => (comma ? v.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec }) : v.toFixed(dec));
-    const pre = txt.slice(0, m.index), post = txt.slice(m.index + raw.length), t0 = performance.now(), dur = 900;
+    const pre = txt.slice(0, m.index), post = txt.slice(m.index + raw.length), t0 = performance.now() - elapsed, dur = 900;
+    if (elapsed >= dur) return;
     const ease = (t) => 1 - Math.pow(1 - t, 3);
     (function step(now) {
       const t = Math.min(1, (now - t0) / dur);
@@ -27,38 +30,61 @@ function countUp(el) {
   });
 }
 
-/** Play one tile's entrance. */
-export function animateTile(tile) {
+/** Play one tile's entrance; elapsed (ms) carries on one that a redraw interrupted. */
+export function animateTile(tile, elapsed = 0) {
   if (still()) return;
   tile.classList.remove('db-anim'); void tile.offsetWidth;
+  tile.style.setProperty('--ad', `${-Math.round(elapsed)}ms`);
   tile.querySelectorAll('.rp-bar').forEach((b, i) => b.style.setProperty('--i', Math.min(i, 20)));
   tile.querySelectorAll('.db-li').forEach((b, i) => b.style.setProperty('--i', Math.min(i, 20)));
   tile.querySelectorAll('table tbody tr').forEach((r, i) => r.style.setProperty('--i', Math.min(i, 15)));
-  tile.querySelectorAll('.rp-path').forEach((p) => p.setAttribute('pathLength', '1'));
   tile.querySelectorAll('.rp-pt').forEach((p) => p.querySelector('i')?.style.setProperty('--x', (parseFloat(p.style.left) || 0) / 100));
   tile.classList.add('db-anim');
-  tile.querySelectorAll('.rp-kpi, .db-ringc').forEach(countUp);
-  setTimeout(() => tile.classList.remove('db-anim'), 2600); // done: back to normal (so a redraw can't replay it)
+  tile.querySelectorAll('.rp-kpi, .db-ringc').forEach((el) => countUp(el, elapsed));
+  setTimeout(() => tile.classList.remove('db-anim'), Math.max(0, ENTRANCE - elapsed)); // done: back to normal
 }
 
+const ENTRANCE = 2600; // ms, the longest entrance with its staggering
 let lastView = null, io = null;
-/** After each redraw: a dashboard that's new on screen (opened, or other filters) plays its entrance, tile by tile as they come into view. */
+const started = new Map(); // tile id → when its entrance began (this view)
+function begin(tile) { started.set(tile.dataset.tile, performance.now()); animateTile(tile, 0); }
+/** Watch the tiles that haven't played yet, and play each as it comes into view. */
+function watch(cv) {
+  if (io) { io.disconnect(); io = null; }
+  const fresh = [...cv.querySelectorAll('.db-tile')].filter((t) => !started.has(t.dataset.tile));
+  if (!fresh.length) return;
+  if (typeof IntersectionObserver === 'undefined') { fresh.forEach(begin); return; }
+  io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { begin(e.target); io && io.unobserve(e.target); } }), { threshold: 0.2 });
+  fresh.forEach((t) => io.observe(t));
+}
+/**
+ * After each redraw. A dashboard that's new on screen (opened, or other filters or period) plays
+ * its entrance, tile by tile as they come into view. Redraws while it plays (records still
+ * arriving, someone saving) carry each tile on from where it was rather than cutting it off;
+ * after that, redraws just show the new numbers.
+ */
 export function afterDashRender() {
   const cv = typeof document !== 'undefined' && document.getElementById('db-cv');
   const key = cv && !cv.classList.contains('edit') ? cv.dataset.view || '' : '';
-  if (!key) { lastView = null; return; }
-  if (key === lastView) return;
-  lastView = key;
-  if (still()) return;
-  if (io) io.disconnect();
-  const tiles = [...cv.querySelectorAll('.db-tile')];
-  if (typeof IntersectionObserver === 'undefined') { tiles.forEach(animateTile); return; }
-  io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { animateTile(e.target); io.unobserve(e.target); } }), { threshold: 0.2 });
-  tiles.forEach((t) => io.observe(t));
+  if (!key) { lastView = null; started.clear(); if (io) { io.disconnect(); io = null; } return; }
+  if (still()) { lastView = key; return; }
+  if (key !== lastView) {
+    // still loading records (opening the app straight onto a dashboard): wait, so the entrance plays with the real numbers
+    if (store.recordsLoading && store.recordsLoading.size) return;
+    lastView = key; started.clear();
+    watch(cv);
+    return;
+  }
+  const now = performance.now();
+  cv.querySelectorAll('.db-tile').forEach((t) => {
+    const s = started.get(t.dataset.tile);
+    if (s != null && now - s < ENTRANCE && !t.classList.contains('db-anim')) animateTile(t, now - s);
+  });
+  watch(cv);
 }
 
 /* ---------- pointing at charts ---------- */
-  // ---- donut: which slice is under the mouse (from the ring's centre and angle)
+// donut: which slice is under the mouse (from the ring's centre and angle)
 function sliceAt(ring, e) {
   const r = ring.getBoundingClientRect(), x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
   const d = Math.hypot(x, y) / (r.width / 2);
