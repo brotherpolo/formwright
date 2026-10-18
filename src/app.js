@@ -36,6 +36,7 @@ import { copyValues, relinkRow } from './duplogic.js';
 import { shrinkPhoto } from './photo.js';
 import { evaluate as evalRules, toClear, withoutCleared, NO_RULES, holdsValue, pruneRules, impactOf, sameRules, changedRuleLabels } from './rules.js';
 import { initAutos, pendingBanner } from './autos.js';
+import { personAv } from './avatar.js';
 import { initDashMail } from './dashmailui.js';
 import { initWfDesign, viewWorkflow, wfClick, wfChange, wfInput } from './wfdesign.js';
 import { checkWorkflow } from './workflow.js';
@@ -489,7 +490,7 @@ function renderSide(){
     ${navBtn('nav-exports',view.name==='exports','PDF exports','⇩')}
     ${navBtn('nav-automations',view.name==='automations'||view.name==='automation','Automations','↯',`<span class="n">${store.automations.filter(a=>a.on).length||''}</span>`)}
     ${navBtn('nav-audit',view.name==='audit','Audit trail','⌕')}</div>`:''}`:''}
-    <div class="side-foot">${ui.appear?appearanceHTML():''}<div class="who"><b>${esc(name)}</b><span>${adm?'Administrator':'Member'}</span></div><button type="button" class="ibtn theme-btn" data-act="appear" aria-expanded="${!!ui.appear}" aria-label="Appearance: mode, colour and density" title="Appearance">${THEME_ICON[readTheme(localStorage)]}</button><button class="btn sm ghost" data-act="sign-out">Sign out</button></div>`;
+    <div class="side-foot">${ui.appear?appearanceHTML():''}${store.user?personAv(store.user.uid,name,{small:true}):''}<div class="who"><b>${esc(name)}</b><span>${adm?'Administrator':'Member'}</span></div><button type="button" class="ibtn theme-btn" data-act="appear" aria-expanded="${!!ui.appear}" aria-label="Appearance: mode, colour and density" title="Appearance">${THEME_ICON[readTheme(localStorage)]}</button><button class="btn sm ghost" data-act="sign-out">Sign out</button></div>`;
   if(fsFocus!=null){const q=$('#fs-q');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(fsFocus,fsFocus)}catch(e){}paintFormResults();}}
 }
 /** Appearance (the sidebar's footer button): Light / Dark / Auto, a colour scheme and density, kept on this device. */

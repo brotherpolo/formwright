@@ -103,3 +103,17 @@ test('avatars, times and unread', () => {
   assert.equal(ago(new Date(2026, 9, 1).getTime(), now, () => 'Oct 1'), 'Oct 1');
   assert.equal(unreadOf([{ read: false }, { read: true }, {}]).length, 2);
 });
+
+test('avatars: the Google photo over the initials; only https photos', async () => {
+  const { avatarHTML, photoSrc } = await import('../../src/commentlogic.js');
+  assert.equal(photoSrc('https://lh3.googleusercontent.com/a/ABC=s96-c'), 'https://lh3.googleusercontent.com/a/ABC=s128-c', 'a sharper Google photo');
+  assert.equal(photoSrc('https://example.com/me.png'), 'https://example.com/me.png');
+  assert.equal(photoSrc('http://example.com/me.png'), '');
+  assert.equal(photoSrc('javascript:alert(1)'), '');
+  assert.equal(photoSrc('https://x.example/a"onerror="x'), '');
+  assert.equal(photoSrc(''), '');
+  const h = avatarHTML('u1', 'Adam Pollack', { photo: 'https://lh3.googleusercontent.com/a/ABC=s96-c', small: true });
+  assert.match(h, /^<span class="cm-av sm" style="background:#[0-9a-f]{6}" aria-hidden="true">AP<img class="av-pic" src="https:\/\/lh3\.googleusercontent\.com\/a\/ABC=s128-c" alt="" loading="lazy" referrerpolicy="no-referrer" draggable="false"><\/span>$/);
+  assert.equal(avatarHTML('u1', 'Adam Pollack'), avatarHTML('u1', 'Adam Pollack', { photo: 'http://insecure.example/x.png' }), 'no photo: just initials');
+  assert.doesNotMatch(avatarHTML('u1', '<b>x</b>'), /<b>/, 'names are escaped');
+});

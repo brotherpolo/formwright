@@ -4,6 +4,7 @@
 import { esc, colorOf } from './ui.js';
 import { pickerHTML, pickerFilter, pickerKey, pickerFocus } from './peoplepick.js';
 import { avatarColor, initials } from './commentlogic.js';
+import { personAv } from './avatar.js';
 import { normEmail, reassignPatch, roleChoice, doneCredit, holderName, passChoices, cadenceLists, mapNodes, newTaskDoc, editPatch, nextOccurrence, assignChoices, donePatch, cadenceLink, dateKey, REPEAT_CHOICES, taskRefusal } from './tasks.js';
 import { loadCadenceItems, assignableUids, writeTasks, updateTask, deleteTask, taskCheckReads, probeTask } from './store.js';
 
@@ -91,7 +92,7 @@ const chosen = () => M.people.find((x) => x.uid === M.draft.who) || (M.roles || 
 function whoField() {
   const p = chosen();
   const label = !p ? 'Choose…' : p.role ? (M.viaRole && p.role === M.task?.assigneeRole ? `${p.name} (keep it with the role)` : `${p.name} (role)`) : p.me ? (M.passOn ? (M.viaRole ? 'Me (take it myself)' : 'Me (keep it)') : `Me (${p.name || 'you'})`) : p.owner ? `${p.name} (owner)` : p.name || p.email;
-  return `<div class="tk-l"><span id="tk-who-l">Assigned to</span><button type="button" class="in tk-who" data-tk="who" aria-haspopup="listbox" aria-expanded="${M.whoOpen}" aria-labelledby="tk-who-l tk-who-v">${p ? (p.role ? `<span class="cm-av sm pk-ic" aria-hidden="true">◉</span>` : `<span class="cm-av sm" style="background:${avatarColor(p.uid)}" aria-hidden="true">${esc(initials(p.name || p.email || '?'))}</span>`) : ''}<span id="tk-who-v" class="tk-who-v">${esc(label)}</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></div>`;
+  return `<div class="tk-l"><span id="tk-who-l">Assigned to</span><button type="button" class="in tk-who" data-tk="who" aria-haspopup="listbox" aria-expanded="${M.whoOpen}" aria-labelledby="tk-who-l tk-who-v">${p ? (p.role ? `<span class="cm-av sm pk-ic" aria-hidden="true">◉</span>` : personAv(p.uid, p.name || p.email || '?', { small: true })) : ''}<span id="tk-who-v" class="tk-who-v">${esc(label)}</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></div>`;
 }
 /** The person picker under "Assigned to": me (or me and the owner, when passing it on) first. */
 function whoPanel() {

@@ -8,6 +8,7 @@ import { esc, uid, clone, toast, badge } from './ui.js';
 import * as exportset from './exportset.js';
 import * as audit from './audit.js';
 import * as autos from './autos.js';
+import { personAv } from './avatar.js';
 import { LEVELS, NONE, PRESETS, normalize, describeLevel, levelFor, isAdmin, accessParents } from './access.js';
 
 const VIEWS = new Set(['users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'exports', 'audit', 'automations', 'automation']);
@@ -212,7 +213,7 @@ function viewUsers() {
     const self = u.id === store.user?.uid;
     const lastAdmin = isAdmin(u) && admins <= 1;
     return `<div class="ucard">
-      <div class="uhead"><div class="grow"><b>${esc(userName(u))}${self ? ' <span class="chip">You</span>' : ''}</b><small>${esc(u.email || 'No email')}</small></div>
+      <div class="uhead">${personAv(u.id, userName(u), { cls: 'lg' })}<div class="grow"><b>${esc(userName(u))}${self ? ' <span class="chip">You</span>' : ''}</b><small>${esc(u.email || 'No email')}</small></div>
         <label class="prop urole"><span class="sr">Access level</span><select class="in" data-urole="${u.id}"${self || lastAdmin ? ' disabled title="You can’t remove the last administrator or change your own role."' : ''}><option value="member"${!isAdmin(u) ? ' selected' : ''}>Member</option><option value="admin"${isAdmin(u) ? ' selected' : ''}>Administrator</option></select></label></div>
       ${isAdmin(u) ? `<p class="help">Administrators see and edit every form and manage forms, groups and users.</p>` : gs.length ? `<div class="opts">${gs.map((g) => `<label class="opt"><input type="checkbox" data-ugroup="${u.id}" value="${g.id}"${(u.groups || []).includes(g.id) ? ' checked' : ''}>${esc(g.name || 'Untitled group')}</label>`).join('')}</div>
         <p class="help">${(u.groups || []).length ? `Can open ${formsVisible(u)} of ${store.forms.length} forms.` : 'Not in any group, so no forms are visible yet.'}</p>` : `<p class="help">Create a security group first, then add this person to it.</p>`}

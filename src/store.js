@@ -90,7 +90,9 @@ export async function ensureAccount(user) {
   }
   const name = user.displayName || (user.email || '').split('@')[0] || 'User';
   try {
-    await setDoc(doc(db, 'profiles', user.uid), { displayName: name }, { merge: true });
+    // the Google account photo, when signed in with Google (refreshed each sign-in)
+    const photo = /^https:\/\//.test(String(user.photoURL || '')) && String(user.photoURL).length <= 1000 ? { photoURL: user.photoURL } : {};
+    await setDoc(doc(db, 'profiles', user.uid), { displayName: name, ...photo }, { merge: true });
   } catch (e) {
     console.warn('[formwright] profile not saved', e);
   }

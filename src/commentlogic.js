@@ -174,6 +174,22 @@ export function avatarColor(uid) {
   return AV[h % AV.length];
 }
 
+/** A profile photo address that's safe to show (https only), or ''. Google's come as …=s96-c; ask for a sharper one. */
+export function photoSrc(url) {
+  const u = String(url || '').trim();
+  if (!/^https:\/\/[^\s"'<>]+$/i.test(u) || u.length > 1000) return '';
+  return /googleusercontent\.com\//.test(u) ? u.replace(/=s\d+(-c)?$/, '=s128-c') : u;
+}
+/**
+ * A person's round avatar: their photo when they have one, over their initials in their colour
+ * (so if the photo can't load, the initials are simply there underneath).
+ */
+export function avatarHTML(uid, name, { photo = '', small = false, cls = '' } = {}) {
+  const e = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const src = photoSrc(photo);
+  return `<span class="cm-av${small ? ' sm' : ''}${cls ? ' ' + cls : ''}" style="background:${avatarColor(uid)}" aria-hidden="true">${e(initials(name))}${src ? `<img class="av-pic" src="${e(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" draggable="false">` : ''}</span>`;
+}
+
 /** "just now", "5 min ago", "3 h ago", "Yesterday", then the date. */
 export function ago(t, now = Date.now(), dateOf = (x) => new Date(x).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })) {
   const s = Math.max(0, (now - t) / 1000);

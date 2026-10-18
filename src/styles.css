@@ -694,6 +694,10 @@ tr.wf-over td.title{color:var(--danger)}
 .cm-c.cm-flash{background:var(--accent-soft)}
 .cm-av{width:32px;height:32px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:12.5px;letter-spacing:.02em}
 .cm-av.sm{width:26px;height:26px;font-size:11px}
+.cm-av{position:relative;overflow:hidden}
+.cm-av .av-pic{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;background:var(--surface)}
+.cm-av.lg{width:40px;height:40px;font-size:14px}
+.side-foot .cm-av{flex:none}
 .cm-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .cm-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13.5px}
 .cm-h time,.cm-ed{color:var(--muted);font-size:12.5px}

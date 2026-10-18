@@ -4,6 +4,7 @@
 // and, when ticked, gives them a Cadence task, but only if they can open the record. You can
 // edit and delete your own comments; administrators can delete any. Replies are one level deep.
 // Comments aren't part of the record's PDF.
+import { personAv } from './avatar.js';
 import { esc } from './ui.js';
 import { isRoleId, threads, shownCount, mentionQuery, matchPeople, insertMention, mentionsIn, parts, notifyLine, notifiedNotes, canSeeRecord, initials, avatarColor, ago, unreadOf, MAX_TEXT } from './commentlogic.js';
 import { watchComments, addComment, updateComment, deleteComment, markMentionsRead } from './store.js';
@@ -123,10 +124,7 @@ function textHTML(c) {
   const mine = (uid) => uid === me() || (isRoleId(uid) && (H.store.me?.roles || []).includes(uid.slice(5)));
   return parts(c.text, c.mentions).map((p) => (p.uid ? `<span class="cm-pill${mine(p.uid) ? ' me' : ''}${isRoleId(p.uid) ? ' role' : ''}">${esc(p.t)}</span>` : esc(p.t))).join('');
 }
-function avatar(uid, name, small) {
-  if (isRoleId(uid)) return `<span class="cm-av${small ? ' sm' : ''} pk-ic" aria-hidden="true">◉</span>`;
-  return `<span class="cm-av${small ? ' sm' : ''}" style="background:${avatarColor(uid)}" aria-hidden="true">${esc(initials(name))}</span>`;
-}
+function avatar(uid, name, small) { return personAv(uid, name, { small }); }
 
 function commentHTML(c, reply, rec) {
   const mine = c.by === me(), admin = H.isAdmin();

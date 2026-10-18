@@ -2,12 +2,12 @@
 // they have, and why someone can't be picked yet. Used by Reassign (My work) and the task pop-up.
 // The host keeps the chosen uid and the search text; rows are buttons with data-pk="pick" data-v.
 import { esc } from './ui.js';
-import { avatarColor, initials } from './commentlogic.js';
+import { personAv } from './avatar.js';
 import { pickRows, pickMatch, pickText } from './pickerlogic.js';
 
 const av = (p) => p.icon
   ? `<span class="cm-av sm pk-ic" aria-hidden="true">${esc(p.icon)}</span>`
-  : `<span class="cm-av sm" style="background:${avatarColor(p.uid)}" aria-hidden="true">${esc(initials(p.av || p.name || p.email || '?'))}</span>`;
+  : personAv(p.uid, p.av || p.name || p.email || '?', { small: true });
 
 function opt(p, sel, q, counts, pin) {
   const on = p.uid === sel, dis = !p.ok && !on;

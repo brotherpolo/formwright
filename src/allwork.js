@@ -8,6 +8,7 @@ import { watchAllMentions, watchRecordTasks, reassignTasks } from './store.js';
 import { reassignPatch, alreadyWith, dueInfo, dateKey } from './tasks.js';
 import { assignablePeople, roleChoices, open as openTask } from './taskmodal.js';
 import { ago, avatarColor, initials } from './commentlogic.js';
+import { personAv } from './avatar.js';
 import { filterMentions, filterTasks, sortTasks, holder } from './allworklogic.js';
 import { pickerHTML, pickerFilter, pickerKey, pickerFocus } from './peoplepick.js';
 import { openCounts } from './pickerlogic.js';
@@ -50,7 +51,7 @@ export function stop() { A.m?.(); A.t?.(); Object.assign(A, { m: null, mList: []
 
 const nameOf = (uid, fb) => H.store.profiles?.[uid]?.displayName || fb || 'Someone';
 const people = () => Object.entries(H.store.profiles || {}).filter(([, p]) => p && !p.removed).map(([uid, p]) => ({ uid, name: p.displayName || p.email || 'Someone' })).sort((a, b) => a.name.localeCompare(b.name));
-const av = (uid, name) => String(uid).startsWith('role:') ? '<span class="cm-av sm pk-ic" aria-hidden="true">◉</span>' : `<span class="cm-av sm" style="background:${avatarColor(uid)}" aria-hidden="true">${esc(initials(name))}</span>`;
+const av = (uid, name) => personAv(uid, name, { small: true });
 const denied = (msg) => `<div class="panel empty"><h2>Couldn’t load this</h2><p>${msg} The latest Cadence security rules may not be deployed yet.</p></div>`;
 const recLabel = (recordId, fallback) => { const r = H.recById(recordId), f = r && H.formById(r.formId); return { rec: r, form: f, title: r && f ? H.recTitle(r, f) : fallback || 'a record' }; };
 
