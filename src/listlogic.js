@@ -13,6 +13,7 @@
 //   density  'cozy' | 'compact'
 
 import { shownName } from './fieldnames.js';
+import { richBlocks, cellRichHTML } from './richtext.js';
 import { titleFieldOf } from './reportlogic.js';
 
 export const NOCOL = new Set(['heading', 'signature']);
@@ -150,6 +151,9 @@ export function titleSortOf(rec, form, h, depth = 0) {
 /** Long text shows on one line in a list (the full text is on the record). */
 const oneLine = (f, t) => (f.type === 'textarea' ? String(t ?? '').replace(/\s*\n\s*/g, ' ').trim() : t);
 
+/** Formatted long text (bullets, numbers…) as it shows in a row or card, or '' for plain text. */
+const richOf = (f, rec) => (f.type === 'textarea' ? cellRichHTML(richBlocks(rec?.values, f.id)) : '');
+
 export function cellOf(key, rec, h) {
   if (key === 'title') {
     const t = h.recTitle(rec, h.form);
@@ -165,7 +169,7 @@ export function cellOf(key, rec, h) {
     if (!f) return { text: '', sort: null, num: false };
     const v = h.valOf(f, rec, h.form);
     const text = oneLine(f, h.fmt(f, v));
-    return { text, sort: relSort(f, v, h) ?? sortValueOf(f, v, text), num: isNumField(f), field: f, value: v, long: f.type === 'textarea' };
+    return { text, sort: relSort(f, v, h) ?? sortValueOf(f, v, text), num: isNumField(f), field: f, value: v, long: f.type === 'textarea', rich: richOf(f, rec) };
   }
   if (key.startsWith('p:')) {
     const [, pfId, fid] = key.split(':');
@@ -176,7 +180,7 @@ export function cellOf(key, rec, h) {
     if (!f) return { text: '', sort: null, num: false };
     const v = h.valOf(f, p, pf);
     const text = oneLine(f, h.fmt(f, v));
-    return { text, sort: relSort(f, v, h) ?? sortValueOf(f, v, text), num: isNumField(f), field: f, value: v, long: f.type === 'textarea' };
+    return { text, sort: relSort(f, v, h) ?? sortValueOf(f, v, text), num: isNumField(f), field: f, value: v, long: f.type === 'textarea', rich: richOf(f, p) };
   }
   if (key.startsWith('kids:')) {
     const n = h.kids(rec.id, key.slice(5));

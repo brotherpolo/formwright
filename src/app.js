@@ -490,7 +490,7 @@ function renderSide(){
     ${navBtn('nav-exports',view.name==='exports','PDF exports','⇩')}
     ${navBtn('nav-automations',view.name==='automations'||view.name==='automation','Automations','↯',`<span class="n">${store.automations.filter(a=>a.on).length||''}</span>`)}
     ${navBtn('nav-audit',view.name==='audit','Audit trail','⌕')}</div>`:''}`:''}
-    <div class="side-foot">${ui.appear?appearanceHTML():''}${store.user?personAv(store.user.uid,name,{small:true}):''}<div class="who"><b>${esc(name)}</b><span>${adm?'Administrator':'Member'}</span></div><button type="button" class="ibtn theme-btn" data-act="appear" aria-expanded="${!!ui.appear}" aria-label="Appearance: mode, colour and density" title="Appearance">${THEME_ICON[readTheme(localStorage)]}</button><button class="btn sm ghost" data-act="sign-out">Sign out</button></div>`;
+    <div class="side-foot">${ui.appear?appearanceHTML():''}${store.user?personAv(store.user.uid,name,{small:true}):''}<div class="who" title="${esc(name)}"><b>${esc(name)}</b><span>${adm?'Administrator':'Member'}</span></div><div class="foot-acts"><button type="button" class="ibtn theme-btn" data-act="appear" aria-expanded="${!!ui.appear}" aria-label="Appearance: mode, colour and density" title="Appearance">${THEME_ICON[readTheme(localStorage)]}<span class="foot-l">Appearance</span></button><button class="btn sm ghost" data-act="sign-out">Sign out</button></div></div>`;
   if(fsFocus!=null){const q=$('#fs-q');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(fsFocus,fsFocus)}catch(e){}paintFormResults();}}
 }
 /** Appearance (the sidebar's footer button): Light / Dark / Auto, a colour scheme and density, kept on this device. */
@@ -1194,12 +1194,12 @@ function childSection(form,cf,rec,ro){
   const tools=total?colsTool(k,ui.subPop===k,cols.map(c=>({key:c.key,label:c.label,src:c.src})),ctx.catalog,{fixed:titleLabel})+showMenu(k,p.show,total)+sortMenu(k,[{key:'title',label:titleLabel},...cols],sort,''):'';
   const bar=toolBar({search:total>5||kq?subSearch(k,cf.name,kq,rows.length,total):'',tools,buttons});
   const det=r=>detachable(r.rec)?`<button type="button" class="ibtn at-det" data-act="child-detach" data-id="${r.rec.id}" aria-label="Detach ${esc(r.title)} (keeps it)" title="Detach: take it off this ${esc(itemName(form).toLowerCase())} but keep it">${DETACH_ICON}</button>`:'';
-  const cell=c=>`<td${c.num?' class="num"':c.long?` class="lv-long" title="${esc(c.text)}"`:c.text&&c.text.length>30?` title="${esc(c.text)}"`:''}>${esc(c.text)}</td>`;
+  const cell=c=>c.rich?`<td class="lv-rich">${c.rich}</td>`:`<td${c.num?' class="num"':c.long?` class="lv-long" title="${esc(c.text)}"`:c.text&&c.text.length>30?` title="${esc(c.text)}"`:''}>${esc(c.text)}</td>`;
   const body=!total?`<p class="note">No ${esc(cf.name.toLowerCase())} for this ${esc(itemName(form).toLowerCase())} yet.</p>`
     :!rows.length?`<p class="note">No ${esc(cf.name.toLowerCase())} match “${esc(kq)}”.</p>`
     :`<div class="sub-box"><div class="tblwrap"><table class="tbl lv-tbl sub-tbl"><thead><tr>${subHead(k,{key:'title',label:titleLabel},sort)}${cols.map(c=>subHead(k,c,sort)).join('')}<th class="sub-act"><span class="sr">Actions</span></th></tr></thead>
       <tbody>${lim.rows.map(r=>`<tr data-act="open-record" data-id="${r.rec.id}"><td class="title" title="${esc(r.title)}">${esc(r.title)}</td>${r.cells.map(cell).join('')}<td class="sub-act">${det(r)}</td></tr>`).join('')}</tbody></table></div></div>
-      <div class="sub-cards">${lim.rows.map(r=>{const meta=cols.map((c,i)=>r.cells[i].text?`<span>${esc(c.label)}: ${esc(r.cells[i].text)}</span>`:'').filter(Boolean).slice(0,4).join('');const card=`<button class="card" data-act="open-record" data-id="${r.rec.id}"><b>${esc(r.title)}</b>${meta?`<div class="meta">${meta}</div>`:''}</button>`;return det(r)?`<div class="at-card">${card}${det(r)}</div>`:card;}).join('')}</div>
+      <div class="sub-cards">${lim.rows.map(r=>{const meta=cols.map((c,i)=>r.cells[i].rich?`<span class="lv-richm">${esc(c.label)}:${r.cells[i].rich}</span>`:r.cells[i].text?`<span>${esc(c.label)}: ${esc(r.cells[i].text)}</span>`:'').filter(Boolean).slice(0,4).join('');const card=`<button class="card" data-act="open-record" data-id="${r.rec.id}"><b>${esc(r.title)}</b>${meta?`<div class="meta">${meta}</div>`:''}</button>`;return det(r)?`<div class="at-card">${card}${det(r)}</div>`:card;}).join('')}</div>
       ${moreLine(k,lim.rows.length,rows.length,subNoun(cf,rows.length))}`;
   return `<section class="section" id="kids-${cf.id}">${cHead}<div class="panel subsec">${bar}${body}</div></section>`;
 }

@@ -269,3 +269,42 @@ export function withRich(values, fid, html) {
   if (Object.keys(r).length) out[RICH_KEY] = r; else delete out[RICH_KEY];
   return out;
 }
+
+/**
+ * Formatted long text in a list row or card: its bullets, numbers and line breaks (bold, italic,
+ * underline, strikethrough kept; colours, highlights and links left out, since the whole row is a
+ * link), up to max lines, then "+ n more…". '' when there's no formatting worth showing (the row
+ * shows the plain text as before).
+ */
+export function cellRichHTML(blocks, max = 6) {
+  if (!blocks || !blocks.length || isPlain(blocks)) return '';
+  const run = (r) => {
+    let h = escText(r.s).replace(/\n/g, '<br>');
+    if (r.x) h = `<s>${h}</s>`;
+    if (r.u) h = `<u>${h}</u>`;
+    if (r.i) h = `<i>${h}</i>`;
+    if (r.b) h = `<b>${h}</b>`;
+    return h;
+  };
+  const lines = (b) => 1 + b.runs.reduce((n, r) => n + (String(r.s).match(/\n/g) || []).length, 0);
+  const kept = [];
+  let used = 0;
+  for (const b of blocks) {
+    if (!b.runs.length && !kept.length) continue; // leading blank lines
+    const n = lines(b);
+    if (used + n > max && kept.length) break;
+    kept.push(b); used += n;
+  }
+  while (kept.length && !kept[kept.length - 1].runs.length) kept.pop(); // trailing blank lines
+  const left = blocks.filter((b) => b.runs.length && !kept.includes(b)).length;
+  let out = '', list = '';
+  kept.forEach((b) => {
+    if (list && !(b.t === 'li' && b.list === list)) { out += `</${list}>`; list = ''; }
+    const inner = b.runs.map(run).join('');
+    if (b.t === 'li') { if (!list) { list = b.list || 'ul'; out += list === 'ol' && b.n > 1 ? `<ol class="rc-l" start="${Number(b.n) || 1}">` : `<${list} class="rc-l">`; } out += `<li>${inner}</li>`; return; }
+    out += `<span class="rc-p${b.t === 'h3' || b.t === 'h4' ? ' rc-h' : ''}">${inner || '&nbsp;'}</span>`;
+  });
+  if (list) out += `</${list}>`;
+  if (left > 0) out += `<span class="rc-more">+ ${left} more…</span>`;
+  return `<span class="rc">${out}</span>`;
+}

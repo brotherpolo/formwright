@@ -173,3 +173,16 @@
 .lv-cv{flex:none;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:500}
 .lv-cv small{font-size:12px;font-weight:400;color:var(--muted)}
 .lv-c2{display:block;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%}
+
+/* Formatted long text in rows and cards: its bullets and line breaks, up to 6 lines */
+.lv-tbl td.lv-rich{min-width:280px;max-width:420px;white-space:normal;vertical-align:top}
+.lv-tbl tr:has(td.lv-rich) > td{vertical-align:top}
+.rc{display:block;line-height:1.4;text-align:left}
+.rc-p{display:block}
+.rc-h{font-weight:600}
+.rc-l{margin:0;padding-left:18px}
+.rc-l li{margin:1px 0}
+.rc-l li::marker{color:var(--muted)}
+.rc-more{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.lv-richm{flex-basis:100%;display:block}
+.lv-richm .rc{margin-top:2px;color:var(--fg)}

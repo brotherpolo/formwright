@@ -407,6 +407,13 @@ details.fxref summary{cursor:pointer;font-weight:600;font-size:13px;padding:4px 
 .side-foot .who{flex:1}
 .theme-btn{width:36px;height:36px;display:grid;place-items:center;border-radius:9px;color:var(--muted);flex:none}
 .theme-btn:hover,.theme-btn:focus-visible{color:var(--fg);background:var(--sunk)}
+/* footer: you (photo, name, role) on the first line; Appearance and Sign out under it, so the name has the width */
+.side-foot{flex-wrap:wrap;row-gap:6px}
+.side-foot .who{flex:1 1 0;min-width:0}
+.foot-acts{flex:1 1 100%;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.foot-acts .theme-btn{width:auto;padding:0 10px 0 8px;gap:6px;display:inline-flex;align-items:center;font-size:13px;font-weight:500}
+.side .foot-acts .theme-btn{color:var(--side-muted)}
+.side .foot-acts .theme-btn:hover,.side .foot-acts .theme-btn:focus-visible{color:var(--side-fg);background:var(--side-hover)}
 
 /* Form designer: search forms by name */
 .dsearch{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0 0 12px}
@@ -1032,6 +1039,9 @@ tr.wf-over td.title{color:var(--danger)}
   :root[data-rail] .rail-sep{display:block;width:32px;height:1px;background:var(--side-line);margin:10px 0 6px;flex:none}
   :root[data-rail] .nav-adm{display:flex;flex-direction:column;align-items:center;gap:4px}
   :root[data-rail] .side-foot{flex-direction:column;padding:10px 0 0;justify-content:center}
+  :root[data-rail] .foot-acts{flex-direction:column;flex-basis:auto}
+  :root[data-rail] .foot-l{display:none}
+  :root[data-rail] .foot-acts .theme-btn{width:36px;padding:0;justify-content:center}
   :root[data-rail] .nav-find{margin-bottom:6px}
 }
 

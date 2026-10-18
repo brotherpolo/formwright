@@ -322,6 +322,7 @@ function headCell(col, label, cfg) {
 }
 
 function cellHtml(cell) {
+  if (cell.rich) return cell.rich;
   const t = cell.text;
   if (cell.field?.type === 'url' && t) return `<a href="${esc(/^https?:/i.test(t) ? t : 'https://' + t)}" target="_blank" rel="noopener" data-stop>${esc(t)}</a>`;
   return esc(t);
@@ -336,7 +337,7 @@ function table(form, c, shown, rows, allOn, someOn, cfg) {
     <thead><tr><th class="lv-ck"><label class="lv-cklab"><input type="checkbox" data-lvc="all" aria-label="Select all shown"${allOn ? ' checked' : ''}${someOn ? ' data-mixed="1"' : ''}></label></th>${headCell({ key: 'title' }, titleLabel, cfg)}${shown.map((col) => headCell(col, col.label, cfg)).join('')}</tr></thead>
     <tbody>${rows.map((r) => {
       const sel = LV.sel.has(r.rec.id);
-      return `<tr data-act="open-record" data-id="${r.rec.id}"${sel ? ' class="sel"' : ''}><td class="lv-ck" data-stop><label class="lv-cklab"><input type="checkbox" data-lvc="sel" data-v="${r.rec.id}" aria-label="Select ${esc(r.title)}"${sel ? ' checked' : ''}></label></td><td class="title" title="${esc(r.title)}">${esc(r.title)}</td>${r.cells.map((cell) => `<td${cell.num ? ' class="num"' : cell.long ? ` class="lv-long" title="${esc(cell.text)}"` : cell.text && cell.text.length > 30 ? ` title="${esc(cell.text)}"` : ''}>${cellHtml(cell)}</td>`).join('')}</tr>`;
+      return `<tr data-act="open-record" data-id="${r.rec.id}"${sel ? ' class="sel"' : ''}><td class="lv-ck" data-stop><label class="lv-cklab"><input type="checkbox" data-lvc="sel" data-v="${r.rec.id}" aria-label="Select ${esc(r.title)}"${sel ? ' checked' : ''}></label></td><td class="title" title="${esc(r.title)}">${esc(r.title)}</td>${r.cells.map((cell) => `<td${cell.num ? ' class="num"' : cell.rich ? ' class="lv-rich"' : cell.long ? ` class="lv-long" title="${esc(cell.text)}"` : cell.text && cell.text.length > 30 ? ` title="${esc(cell.text)}"` : ''}>${cellHtml(cell)}</td>`).join('')}</tr>`;
     }).join('')}</tbody>
     ${showTotals ? `<tfoot><tr><td></td><td>Total</td>${shown.map((col, i) => `<td class="num">${esc(fmtTotal(col, totals[i]))}</td>`).join('')}</tr></tfoot>` : ''}
   </table></div></div>`;
@@ -362,7 +363,7 @@ function cards(form, shown, rows, allOn, count = '', density = 'cozy') {
     <div class="lv-allrow"><label class="lv-sw lv-allcard"><input type="checkbox" data-lvc="all"${allOn ? ' checked' : ''}>Select all</label>${count ? `<span class="lv-ccount">${esc(count)}</span>` : ''}</div>
     ${rows.map((r) => {
       const sel = LV.sel.has(r.rec.id);
-      const meta = shown.map((col, i) => (r.cells[i].text ? `<span${r.cells[i].long ? ' class="lv-long"' : ''}>${esc(col.label)}: ${esc(r.cells[i].text)}</span>` : '')).filter(Boolean).slice(0, 4).join('');
+      const meta = shown.map((col, i) => (r.cells[i].rich ? `<span class="lv-richm">${esc(col.label)}:${r.cells[i].rich}</span>` : r.cells[i].text ? `<span${r.cells[i].long ? ' class="lv-long"' : ''}>${esc(col.label)}: ${esc(r.cells[i].text)}</span>` : '')).filter(Boolean).slice(0, 4).join('');
       return `<div class="lv-card${sel ? ' sel' : ''}"><label class="lv-cklab"><input type="checkbox" data-lvc="sel" data-v="${r.rec.id}" aria-label="Select ${esc(r.title)}"${sel ? ' checked' : ''}></label><button class="card" data-act="open-record" data-id="${r.rec.id}">${compact ? tight(r) : `<b>${esc(r.title)}</b>${meta ? `<div class="meta">${meta}</div>` : ''}`}</button></div>`;
     }).join('')}
   </div>`;

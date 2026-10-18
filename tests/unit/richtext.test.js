@@ -70,3 +70,20 @@ test('PDF layout of formatted text: wraps across styles, headings bigger, bullet
   assert.equal(L.at(-1).bar, true);
   assert.equal(toText(b).split('\n').length, 5);
 });
+
+test('rows and cards: bullets and line breaks, up to 6 lines, no colours or links', async () => {
+  const { cellRichHTML, parseRich } = await import('../../src/richtext.js');
+  const ul = parseRich('<ul><li>update production site with e-transfer functionality</li><li>tested <b>update</b></li><li>re-engaged all logic and rules</li></ul>');
+  assert.equal(cellRichHTML(ul), '<span class="rc"><ul class="rc-l"><li>update production site with e-transfer functionality</li><li>tested <b>update</b></li><li>re-engaged all logic and rules</li></ul></span>');
+  assert.equal(cellRichHTML(parseRich('<p>just words</p>')), '', 'plain text: shown as before');
+  assert.equal(cellRichHTML(null), '');
+  const long = parseRich('<ol>' + Array.from({ length: 9 }, (_, i) => `<li>step ${i + 1}</li>`).join('') + '</ol>');
+  const h = cellRichHTML(long);
+  assert.equal((h.match(/<li>/g) || []).length, 6);
+  assert.match(h, /<ol class="rc-l"><li>step 1<\/li>[^]*<li>step 6<\/li><\/ol><span class="rc-more">\+ 3 more…<\/span><\/span>$/);
+  const mixed = parseRich('<p><span style="color:#ff0000">Red</span> and <a href="https://x.example">a link</a></p><ul><li>one</li></ul>');
+  const m = cellRichHTML(mixed);
+  assert.doesNotMatch(m, /color|href|<a /, 'colours and links left out');
+  assert.match(m, /<span class="rc-p">Red and a link<\/span><ul class="rc-l"><li>one<\/li><\/ul>/);
+  assert.doesNotMatch(cellRichHTML(parseRich('<ul><li>&lt;script&gt;</li></ul>')), /<script>/, 'escaped');
+});
