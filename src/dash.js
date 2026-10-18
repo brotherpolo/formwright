@@ -842,7 +842,7 @@ export function viewDashboard(id) {
   </div>
   ${edit ? `<div class="db-cvbar"><label class="switch db-float"><input type="checkbox" data-dv="float"${floatUp ? ' checked' : ''}><span class="tr"></span><span>Float items up</span></label><p class="help db-cvhelp">Drag an item by its handle to move it, or drag its bottom-right corner to resize it. Each dot is one step; 24 across. Items in the way move down. With a handle focused, arrow keys move the item and Shift + arrow keys resize it.</p></div>` : ''}
   ${!edit && placed.length ? holdHint(x.id) : ''}
-  ${placed.length ? `<div class="db-cv${edit ? ' edit' : ''}${edit ? '' : ' can-drill'}" id="db-cv" style="--rows:${cvRows}"><div class="db-ghost" id="db-ghost" hidden></div>${tiles}</div>` : `<div class="panel empty"><h2>Nothing here yet</h2><p>${may ? 'Add saved reports, shortcuts or a text block.' : 'The owner hasn’t added anything yet.'}</p>${may && !edit ? '<button class="btn primary" data-d="editdash">Add reports</button>' : ''}</div>`}
+  ${placed.length ? `<div class="db-cv${edit ? ' edit' : ''}${edit ? '' : ' can-drill'}" id="db-cv" data-view="${edit ? '' : esc(x.id + '|' + JSON.stringify(fv))}" style="--rows:${cvRows}"><div class="db-ghost" id="db-ghost" hidden></div>${tiles}</div>` : `<div class="panel empty"><h2>Nothing here yet</h2><p>${may ? 'Add saved reports, shortcuts or a text block.' : 'The owner hasn’t added anything yet.'}</p>${may && !edit ? '<button class="btn primary" data-d="editdash">Add reports</button>' : ''}</div>`}
   </div>${edit ? '' : drillHTML('d:' + x.id)}`;
 }
 

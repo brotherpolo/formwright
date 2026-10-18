@@ -12,6 +12,7 @@ import { store, uploadFile, deleteFormCascade, loadExamples as writeExamples, wa
 import { cadenceUrl } from './firebase.js';
 import { parseRoute, routeFor } from './route.js';
 import { effectiveHome, viewStarterHome } from './dash.js';
+import { afterDashRender } from './dashanim.js';
 import { nounOf as nounOfForm } from './dashlogic.js';
 import { initReports, closeCatalogPop, viewReportsList, viewReport, reportName, leaveReport, reportBusy, viewDashboards, viewDashboard, dashName, maybeMigrate, reportDirty, dashDirty, forgetDrafts, counts, drillNav, fitTiles } from './dash.js';
 import { initLists, viewRecords, afterRecords, resetLists, useView } from './lists.js';
@@ -535,6 +536,7 @@ function renderMain(){
   if(view.name==='record'&&rdraft){rdraft._rs=null;applyRules(rdraft);}
   if(view.name==='formEdit'&&pdraft&&(ui.tab==='rules'||ui.tab==='preview'))applyRules(pdraft);
   if(view.name==='dashboard')fitTiles();
+  afterDashRender(); // a dashboard that's new on screen plays its entrance
   syncTaskWatch();syncEmailWatch();syncStageWatch();cmt.sync();cmt.afterRender();wordui.sync();
 }
 
