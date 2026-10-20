@@ -438,7 +438,7 @@ details.fxref summary{cursor:pointer;font-weight:600;font-size:13px;padding:4px 
 .urm-reasn .prop{flex:1 1 220px;margin:0}
 .urm-gone .uhead b{color:var(--muted)}
 
-/* Administration → PDF exports */
+/* Settings → PDF exports */
 .exset{max-width:720px;padding:20px 22px}
 .exset .actions{display:flex;align-items:center;gap:10px}
 .exset .actions .grow{flex:1}
@@ -513,7 +513,7 @@ details.fxref summary{cursor:pointer;font-weight:600;font-size:13px;padding:4px 
 }
 @media (max-width:640px){.mail-scrim{place-items:end center;padding:0}.mail-dlg{border-radius:14px 14px 0 0;max-height:92dvh}}
 
-/* Administration → Audit trail */
+/* Settings → Audit trail */
 .au-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}
 .au-f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
 .au-f .in{min-height:38px;font-weight:400;width:auto;min-width:130px}
@@ -928,13 +928,11 @@ tr.wf-over td.title{color:var(--danger)}
 :root[data-density="compact"] .wrap{gap:14px}
 :root[data-density="compact"] .fgrid{gap:10px 18px}
 
-/* Sidebar: Workspace, Forms (recent first), Administration folded; Appearance panel */
+/* Sidebar: Workspace, Forms (recent first), Settings at the bottom for administrators; Appearance panel */
 .nav .badge{width:22px;height:22px;border-radius:6px;font-size:11px}
 .nav-form .t{font-weight:500}
 .nav-all{color:var(--accent);font-weight:500;min-height:36px}
 .side .nav-all{color:var(--side-fg);opacity:.85}
-.nav-fold{margin-top:10px;color:var(--side-muted);font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;min-height:36px}
-.nav-fold .t{font-weight:600}
 .fold-ic{font-size:12px}
 .fsearch .fs-k{position:absolute;right:6px;top:8px;height:28px;padding:0 7px;border:1px solid var(--side-line);border-radius:6px;background:var(--side-bg);color:var(--side-muted);font-size:11px;font-family:var(--mono);cursor:pointer}
 .fsearch .fs-k:hover{color:var(--side-fg)}
@@ -1024,7 +1022,7 @@ tr.wf-over td.title{color:var(--danger)}
 
 /* ---------- Sidebar folded to a strip of icons (Alt+B, or « at its top; wide screens) ---------- */
 .side-tog{margin-left:auto;font-size:18px;line-height:1;width:30px;height:30px}
-.rail-only,.rail-sep{display:none}
+.rail-only{display:none}
 @media (max-width:820px){.side-tog{display:none}}
 @media (min-width:821px){
   .app{transition:grid-template-columns .18s ease}
@@ -1032,12 +1030,10 @@ tr.wf-over td.title{color:var(--danger)}
   :root[data-rail] .side{padding-inline:10px;align-items:center;overflow-x:hidden}
   :root[data-rail] .brand{flex-direction:column;gap:10px;padding:4px 0 12px}
   :root[data-rail] .brand b,:root[data-rail] .fsearch,:root[data-rail] .navlabel,:root[data-rail] .nav span.t,:root[data-rail] .nav .n,
-  :root[data-rail] .nav-fold,:root[data-rail] .nav-empty,:root[data-rail] .side-foot .who,:root[data-rail] .side-foot [data-act="sign-out"]{display:none}
+  :root[data-rail] .nav-empty,:root[data-rail] .side-foot .who,:root[data-rail] .side-foot [data-act="sign-out"]{display:none}
   :root[data-rail] .nav{justify-content:center;width:46px;padding:7px;position:relative;flex:none}
   :root[data-rail] .nav .nb{position:absolute;top:1px;right:0;min-width:16px;height:16px;padding:0 4px;font-size:10px}
   :root[data-rail] .rail-only{display:grid}
-  :root[data-rail] .rail-sep{display:block;width:32px;height:1px;background:var(--side-line);margin:10px 0 6px;flex:none}
-  :root[data-rail] .nav-adm{display:flex;flex-direction:column;align-items:center;gap:4px}
   :root[data-rail] .side-foot{flex-direction:column;padding:10px 0 0;justify-content:center}
   :root[data-rail] .foot-acts{flex-direction:column;flex-basis:auto}
   :root[data-rail] .foot-l{display:none}
@@ -1049,3 +1045,57 @@ tr.wf-over td.title{color:var(--danger)}
 .btn.soft{background:var(--accent-soft);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);font-weight:600}
 .btn.soft:hover{background:color-mix(in srgb,var(--accent) 18%,var(--surface));border-color:var(--accent)}
 .btn.soft:disabled{opacity:.55}
+
+/* Sidebar on computers: a little tighter so it fits without scrolling, and its scrollbar only
+   shows while the pointer is over it (and there's something to scroll). Phones keep the roomier
+   rows for thumbs. */
+@media (min-width:821px){
+  .side{padding-block:14px;gap:2px}
+  .side .brand{padding-bottom:10px}
+  .side .fsearch{padding-bottom:2px}
+  .side .navlabel{padding:8px 10px 3px}
+  .side .nav{min-height:36px;padding:4px 10px}
+  .side .nav .glyph,.side .nav .navg{width:26px;height:26px}
+  .side .side-foot{padding-top:10px}
+}
+.side{scrollbar-width:thin;scrollbar-color:transparent transparent}
+.side:hover,.side:focus-within{scrollbar-color:var(--side-line) transparent}
+.side::-webkit-scrollbar{width:6px}
+.side::-webkit-scrollbar-thumb{background:transparent;border-radius:6px}
+.side:hover::-webkit-scrollbar-thumb{background:var(--side-line)}
+
+/* Settings (administrators): the sidebar item at the bottom, the card page, and the list beside each settings screen */
+.nav-bottom{margin-top:auto;padding-top:8px}
+.nav-bottom + .side-foot{margin-top:8px}
+.nav-bottom .navg svg{display:block}
+.st-sec{margin-top:22px}
+.st-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:12px}
+.st-card{display:flex;align-items:center;gap:14px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;font:inherit;color:inherit;transition:border-color .15s,box-shadow .15s,transform .15s}
+.st-card:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:0 4px 14px rgba(10,12,20,.08);transform:translateY(-1px)}
+.st-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.st-card .st-g{width:40px;height:40px;flex:none;font-size:18px}
+.st-tx{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+.st-tx b{font-size:15px}
+.st-go{font-size:22px;color:var(--muted)}
+.st-wrap{display:grid;grid-template-columns:220px minmax(0,1fr);gap:28px;align-items:start}
+.st-main{min-width:0}
+.st-nav{position:sticky;top:16px;display:flex;flex-direction:column;gap:1px}
+.st-back{background:none;border:0;font:inherit;font-weight:700;font-size:15px;color:var(--ink);text-align:left;padding:4px 10px 8px;cursor:pointer;border-radius:8px}
+.st-nh{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:12px 10px 4px}
+.st-ni{display:flex;align-items:center;gap:10px;background:none;border:0;border-radius:8px;padding:7px 10px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;text-align:left}
+.st-ni:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.st-ni.on{background:color-mix(in srgb,var(--accent) 14%,transparent);font-weight:600;box-shadow:inset 3px 0 0 var(--accent)}
+.st-ni .t{flex:1}.st-ni .n{font-size:12px;color:var(--muted)}
+.st-ng{width:18px;text-align:center;color:var(--muted)}
+.st-ni.on .st-ng{color:inherit}
+@media (prefers-reduced-motion:reduce){.st-card,.st-card:hover{transition:none;transform:none}}
+@media (max-width:980px){
+  .st-wrap{grid-template-columns:minmax(0,1fr);gap:12px}
+  .st-nav{position:static;flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:6px;scrollbar-width:none}
+  .st-nav::-webkit-scrollbar{display:none}
+  .st-nh{display:none}
+  .st-ni{flex:none;border:1px solid var(--line);border-radius:999px;padding:6px 12px;white-space:nowrap}
+  .st-ni.on{box-shadow:none;border-color:var(--accent)}
+  .st-ni .n,.st-ng{display:none}
+  .st-back{flex:none;padding:6px 8px;white-space:nowrap}
+}

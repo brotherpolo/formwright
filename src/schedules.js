@@ -1,4 +1,4 @@
-// Administration → Schedules: everything that goes out on its own, in one place. Dashboards emailed
+// Settings → Schedules: everything that goes out on its own, in one place. Dashboards emailed
 // on a schedule (dashMails/{dashboardId}, sent by Cadence's dashMailer) and automations on a
 // schedule (automations with trigger.type 'schedule', run by automationMonthly). Each row says
 // when it next goes, who to, and how the last one went, with Pause / Resume, Edit, a test, Delete.

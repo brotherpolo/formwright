@@ -8,6 +8,8 @@ A form builder for phone and desktop, running on Firebase.
 - **Related forms**: parent/child forms ("Add project" from a client), with optional copying of matching fields, plus "Link to record" lookups.
 - **Calculations**: formulas such as `ROUND({Budget} * 1.13, 2)`, `IF(...)`, `DAYS({Due}, TODAY())`, and `CHILDSUM("Projects", "Budget")`.
 - **Security groups**: per-form *view* and *edit* levels of **none**, **own** (records the person created) or **all**. Firestore and Storage security rules enforce them.
+- **Roles**: jobs people do (Accounts, Site lead). Workflow stages, tasks, @mentions and scheduled emails can go to a role, meaning everyone who holds it.
+- **Automations and schedules**: "when this happens, do that", including on a schedule (every month on the last business day, every 2 weeks on Wednesday…), with an approve-first option; dashboards can be emailed on a schedule. **Settings → Schedules** lists everything that goes out on its own.
 
 Plain JavaScript modules, built with Vite. The only runtime dependency is the Firebase JS SDK.
 
@@ -19,7 +21,7 @@ Formwright runs on **Cadence's Firebase project (`tasks-2ae9d`)**, with the same
 
 ## How permissions work
 
-| Role | What they can do |
+| Access level | What they can do |
 |---|---|
 | **Administrator** | Everything: design forms, manage groups and users, see and edit every record. |
 | **Member** | Only what their security groups allow. A member with no groups sees nothing. |
@@ -34,6 +36,8 @@ Each **security group** has a default level for every form, plus optional per-fo
 The designer offers presets: *View and edit all*, *View and edit mine only*, *View all, edit mine*, *View all, read only*, and *No access*.
 
 When a person belongs to several groups, the most generous level wins, form by form. Editing implies seeing.
+
+**Access level** (Administrator or Member, on the Users screen) is different from **roles** (Settings → Roles), which describe the work someone does and never grant access by themselves. See Roles below.
 
 ### How it is enforced
 
@@ -102,12 +106,20 @@ src/
   pdfdoc.js                Export PDF: field layout, text wrapping, table columns, file names (pure, unit-tested)
   pdfdraw.js               Export PDF: draws the document with pdf-lib (unit-tested)
   pdfexport.js             Export PDF: fetches photos, loads pdf-lib on first use, downloads the file
-  exportset.js             Administration → PDF exports: company name and logo
+  exportset.js             Settings → PDF exports: company name and logo
   duplogic.js              Duplicate: which values a copy keeps (pure, unit-tested)
   rules.js                 Show/hide rules: conditions, what's hidden, required or cleared, clashes, effect on saved records (pure, unit-tested)
   rulesui.js               Form designer → Rules tab: building rules with clicks (its condition builder is reused by automations)
   autologic.js             Automations: wording and checks (pure, unit-tested)
-  autos.js                 Administration → Automations: list, editor, Test run, run history
+  autos.js                 Settings → Automations: list, editor, Test run, Preview, run history, Waiting for your OK
+  autosched.js             Schedules for automations: the frequency builder's sums, next runs, wording (pure, unit-tested; also in the server kit)
+  schedules.js             Settings → Schedules: dashboard emails and scheduled automations in one list
+  dashmail.js              Dashboard emails: when one is due, who it goes to, the email itself (pure, unit-tested; also in the server kit)
+  dashmailui.js            A dashboard's Email schedule window
+  dashfmt.js               How report numbers and labels are written (shared by dashboards and their emails)
+  dashanim.js              Dashboard chart entrances and hover (donut slices, line guide)
+  avatar.js                People's avatars: Google photo over initials
+  peoplepick.js, pickerlogic.js  The searchable person picker (people and roles) for tasks and Reassign
   server/recordkit.js      What the server needs to read records like the app: field text, calculations, rules, the PDF model (pure, unit-tested)
   server/entry.js          Bundled with pdfdraw.js, rules.js and emaillogic.js into the Cadence functions as fwkit.cjs
   photo.js                 Smaller photos: turns photos upright and scales them down before upload
@@ -142,7 +154,12 @@ Security rules, Storage rules, indexes and their tests live in the Cadence folde
 | `settings/home` | `dashboardId, updatedAt, updatedBy`: the dashboard Home shows for anyone without their own | admins (everyone let in reads it) |
 | `groups/{id}` | `name, description, access{formId or "*": {view, edit}}` | admins |
 | `users/{uid}` | `email, displayName, role, groups[], access{…}, createdAt` | self on first sign-in; admins after |
-| `profiles/{uid}` | `displayName` (readable by everyone signed in, for "Created by") | self |
+| `profiles/{uid}` | `displayName`, `email`, `photoURL` (their Google account photo, https only), `homeDashboard` (readable by everyone let in, for names, pickers and avatars) | self |
+| `roles/{id}` | `name, description`; people hold roles in `users/{uid}.roles[]` | admins |
+| `dashMails/{dashboardId}` | `on, freq, day, hour, to{people, roles, addresses}`, and from the server `lastSlot, lastAt, lastStatus, lastTo`: a dashboard's email schedule | admins (the server sends) |
+| `automations/{id}` | `name, formId, on, trigger, join, conds, acts, createdBy…` (see Automations); `…/runs/` run history, `…/sched/` the server's once-per-run marks | admins (runs and marks: server only) |
+| `pendingSends/{automationId_recordId}` | `automationId, automationName, recordId, title, steps[], taskId, at`: a scheduled automation waiting for an administrator's OK | server only (admins read) |
+| `stageOverdue/{recordId}` | which overdue reminder and escalation were sent for a record's current stage | server only |
 | `listViews/{id}` | `formId, name, ownerId, shared, cols[], sort{key, dir}, filters{fieldId: [options]}, density, createdAt, updatedAt` | owner (private); admins (shared, and `dflt-<formId>`) |
 | `imports/{id}` | `formId, formName, fileName, ownerId, createdAt, stamp, status, added[], updated[], counts{}, finishedAt, undoneAt, undoneBy, undo{}` | admins |
 | `settings/exports` | `companyName, logo` (PNG or JPEG data URL, under 600 KB)`, updatedAt, updatedBy`: the top of exported PDFs | admins (everyone let in reads it) |
@@ -156,7 +173,7 @@ Files go to Cloud Storage. The record stores `{name, size, type, path, url}`. Si
 
 ## Reports and dashboards
 
-**Reports** and **Dashboards** are under *Insights* in the sidebar.
+**Dashboards** and **Reports** are under *Workspace* in the sidebar.
 
 **A report** is one chart, table or number, saved by itself so it can go on any number of dashboards. Change it once and every dashboard that shows it updates.
 
@@ -185,6 +202,9 @@ Files go to Cloud Storage. The record stores `{name, size, type, path, url}`. Si
   - Dashboards saved before the canvas keep their arrangement as the starting layout.
 - **Filters:** a period (All time, This month, Last 30 days, This quarter, This year) and any number of field filters you add while editing (*Clients › Company name*). Everyone can change them while viewing; the period picked while editing is saved as the starting one. A field filter applies to each report whose form is that form or sits below it; the others say it doesn't reach them.
 - **Home:** **Set as home** on any dashboard makes it open when you start Formwright. Everyone picks their own.
+- **Movement:** charts make an entrance when you open a dashboard, come back to it, or change its period or filters. Numbers count up, bars grow from the left, a donut sweeps round, lines draw themselves; tiles further down play as you scroll to them. Live changes while you're looking (someone saving a record) just update the numbers. If the app is opened straight onto a dashboard, the entrance waits for the records to load, and a redraw mid-way carries each chart on from where it was (`src/dashanim.js`, styles in `dash.css`).
+- **Pointing at charts (computers):** tiles lift slightly; the bar you point at stands out while the others fade; the donut slice or legend entry under the mouse lights up and the centre shows it ("4 · Scoping · 21%"); on line and area charts a guide line snaps to the nearest point and shows its value. Clicking still opens the records behind it. Phones and tablets keep tap-to-open, nothing moves while you arrange a dashboard (Edit dashboard), and anyone whose device asks for **reduced motion** gets the charts without animation.
+- **Email schedule (administrators):** **✉ Email schedule** in a dashboard's header emails it every weekday, every week (pick the day), every month (pick the date) or every day, at a chosen hour (Eastern time), to chosen people, everyone in chosen roles, and other addresses. The email has each report as of that moment with the dashboard's saved period; charts arrive as small tables any email program can show. **Send a test to me** sends one now. Everyone it goes to sees the numbers, even for forms they can't open. Sent by the Cadence function `dashMailer` (hourly) from `dashMails/{dashboardId}`; the email is built by `src/dashmail.js` (pure, unit-tested).
 
 **Sharing:** your reports and dashboards are private. Admins can share them with everyone or with chosen security groups. Sharing only decides who sees them in their lists; everyone sees numbers worked out from the records *they* are allowed to see, so sharing never reveals records.
 
@@ -196,7 +216,7 @@ Stored in `reportDefs/{id}` (`name, ownerId, shared, groups, def`) and `dashboar
 ### Home and shortcuts
 
 - **Home** (top of the sidebar) shows your home dashboard: the one you chose with **Set as my home**, or else the one an admin made **Everyone’s default home** (`settings/home`, admins only; the dashboard must be shared). With neither, Home says how to choose one. Formwright opens on Home.
-- **Shortcut tiles** (Edit dashboard → **+ Shortcut**) open part of Formwright: a form's list (optionally with a saved view, chosen on the tile while editing; a deleted view falls back to the plain list), a new record, Home, My work, Dashboards, Reports, or an administration screen. Each shows the form's badge or the sidebar's symbol, its name and a live count. They start a quarter wide and two cells tall, and resize by the corner like any tile; four cells or taller adds a line saying where it goes. Stored on the tile as `link: { to: 'list'|'new'|'page', form, view, page }` (`src/homelogic.js`, unit-tested).
+- **Shortcut tiles** (Edit dashboard → **+ Shortcut**) open part of Formwright: a form's list (optionally with a saved view, chosen on the tile while editing; a deleted view falls back to the plain list), a new record, Home, My work, Dashboards, Reports, Settings or one of its screens. Each shows the form's badge or the sidebar's symbol, its name and a live count. They start a quarter wide and two cells tall, and resize by the corner like any tile; four cells or taller adds a line saying where it goes. Stored on the tile as `link: { to: 'list'|'new'|'page', form, view, page }` (`src/homelogic.js`, unit-tested).
 - **Starter Home:** anyone with no home dashboard of their own and no default sees a starter Home built from what they can open: their sidebar forms, My work (with a workflow), Dashboards and Reports, and for admins Form designer and Users. **Make this my dashboard** saves it as their own dashboard, set as their home, to rearrange and add to.
 - **Who sees them:** shortcuts to administration are left out for non-admins, and shortcuts to forms someone can't see (or can't add to) are left out for them; the remaining tiles close up. Admin shortcuts are marked "Admins only" while editing.
 - **KPI tiles** keep the title and count at the top; the number and what it measures sit centred in the space below and grow with the tile. "Number of …" uses the plural ("Number of invoices").
@@ -233,7 +253,10 @@ Records made on their own (imported line items, say) can be put under a parent l
 
 ## Records lists
 
-The sidebar doesn't list forms. Click or tap **Search forms** under Forms and a pop-up lists every form you can open there, in sidebar order; typing narrows it (any part of the name, any case; ↑ ↓ to choose, Esc or clicking elsewhere closes). Clicking a form's **name** (or Enter) starts a new record on it ("+ New" shows on hover); forms you can only view open their list instead. The **count** beside it, a small rounded box, opens the records list (or Shift+Enter). Child and sub-forms are left out unless they're switched on for the sidebar in the form designer, so that switch now decides what a search can find. For the full list, use the form designer.
+**The sidebar** has Workspace (Home, My work, Dashboards, Reports), **Forms** (the forms switched on for the sidebar, with their record counts) and, for administrators, **Settings** (the ⚙ at the bottom, just above your name; members don't see it). **Search forms** at the top, or **Ctrl K** (⌘K on a Mac) anywhere, opens one box to jump to a form, a record, a new record or a page. On a computer the rows are compact so the sidebar fits without scrolling; if it ever needs to scroll, a thin scrollbar shows only while the pointer is over it.
+
+- **Fold the sidebar:** **«** at its top (or **Alt+B**) folds it to a strip of icons, giving the page the width; **»** opens it again. Remembered on each device.
+- **At the bottom:** your Google photo (or initials), your name and access level, then **Appearance** and **Sign out**.
 
 Under a record's fields come its sub-form grids, Tasks and child forms. Their order is set per form in the designer: **Fields** tab › **Under the fields**, by dragging a card by its handle or with ↑ ↓ (saved as `sectionOrder` on the form; fields always come first for now). New sub-forms and child forms join next to their kind.
 
@@ -243,7 +266,7 @@ In the Form designer, **Search forms by name** above the list narrows it as you 
 
 In the form editor, **Search field types** at the top of the field types filters as you type (other words work too: "money" finds Currency, "lookup" finds Link to record); **Enter** adds the first match.
 
-On a record, **Delete**, **History**, **Duplicate**, **Email PDF**, **Export PDF**, **Back** and **Save** (those you can use) sit in a bar at the top that stays in view as you scroll; who created and last edited the record is under its title.
+On a record, a bar at the top stays in view as you scroll: **Back**, **Export ▾**, **More** (History, Duplicate, Email PDF, Delete: those you can use) and **Edit**. Saved records open in **Read view**; **Edit** (or **Alt+E**) switches to Edit view with **Save** and **Done**. Who created and last edited the record is under its title.
 
 On a record, **Section Heading** fields, sub-form grids, child sections and **Tasks** fold and open from their headings (a folded one shows a short summary, such as a grid's totals); **Collapse all / Expand all** is at the top. Everything starts open. What you fold is remembered for each form (folding Notes on one invoice folds it on every invoice), for your account on that device. A section with a problem to fix opens by itself when you save.
 
@@ -251,7 +274,9 @@ A sub-form grid, child section or Tasks section with more than 5 entries gets a 
 
 **Back button:** every screen you open is a step in the browser's history, so the phone's back button or gesture and the browser's Back go one screen back, the same as the in-app Back button (Forward works too). Back closes an open pop-up or the phone menu first, and with unsaved changes it asks first ("Tap again to leave without saving"). On the first screen, Back shows **Press back again to exit**; a second Back within a few seconds leaves.
 
-**Theme:** the button beside your name at the bottom of the sidebar steps through **Auto** (follows the device's light or dark setting), **Light** and **Dark**. The choice is kept on each device, so a computer and a phone can differ. It's applied before the page draws, so there's no flash of the wrong colours, and the phone's browser bar follows it.
+**Appearance** (under your name at the bottom of the sidebar): **Mode** (Auto follows the device's light or dark setting, Light, Dark), **Colour** (Indigo, Spruce, Sand) and **Density** (Comfortable, Compact). Kept on each device, so a computer and a phone can differ. It's applied before the page draws, so there's no flash of the wrong colours, and the phone's browser bar follows it.
+
+**Profile photos:** when someone signs in with Google, their Google account photo is saved to their profile (refreshed at each sign-in) and shown instead of their initials everywhere people appear: the sidebar, Users, comments, My work, people pickers and task "Assigned to", and in Cadence. Their initials sit underneath, so anyone without a photo (email and password sign-in) or whose photo can't load shows initials (`src/avatar.js`).
 
 **Currency:** a Currency field, or a calculation shown as Currency, with no currency code set counts as **CAD**, matching what the form designer shows.
 
@@ -264,7 +289,8 @@ Each form's list can be set up from the list itself.
 - **Columns:** **Columns** opens a picker. Tick fields to show them and use the arrows to reorder. Besides the form's own fields, you can add the parent record (**Belongs to**), fields of the parent (Clients › Status), counts of child records (how many Site visits), and **Last updated**, **Created**, **Created by** and **Owner**. The record's title is always the first column.
 - **Sort:** click a column heading; click again to reverse. Empty values always go last.
 - **Filter:** **Filter** lists the form's choice fields (dropdown, single choice, multiple choice, yes/no). Tick options to show records with any of them; every field you filter must match.
-- **Row height:** Comfortable or Compact.
+- **Row height:** Comfortable or Compact. On phones, Compact turns each record into a tight two-line card: the title with the first number column on the right (its name beside plain numbers, e.g. "8 Hours"), and two more values underneath, so about twice as many fit on screen. Long values end in "…".
+- **Formatted long text** (bullets, numbers, line breaks) shows with its bullets in the computer table and in Comfortable cards, up to 6 lines then "+ 2 more…"; that column gets a readable width and the row grows to fit. Plain text stays on one line.
 - **Saved views:** tabs above the list. When you change anything, **Reset**, **Save view** and **Save as new view** appear.
   - The first tab, **All …**, is the form's default list. Until an admin saves it, it shows the fields with **Column in the starting list** turned on in the form designer. An admin's **Save view for everyone** changes it for everyone; **View options › Go back to the form's list columns** undoes that.
   - Your own views are private (**Just me**). Admins can also save a view for everyone, or share or unshare one under **View options**.
@@ -275,20 +301,32 @@ Each form's list can be set up from the list itself.
   - **Export CSV:** the selected records with the columns you're showing.
   - **Delete:** asks first, then gives you about 6 seconds to **Undo** before anything is deleted. Child records stay (without a parent), and linked Cadence tasks show the record as removed. Closing the app during those seconds cancels the delete.
   - Records you aren't allowed to edit are skipped, and the bar and dialog say how many.
-- **Phones:** the list shows cards with tick boxes, and menus open as a sheet at the bottom.
+- **Phones:** the list shows cards with tick boxes. The toolbar is compact: **+ New**, a view picker, **⋯**, then search and a **sort chip** (↓ Date ▾: tap the arrow to reverse, ▾ to sort by another field, including Last updated and Created). **⋯** opens a sheet with Filter, Columns, Sort, Row height, the view's actions (rename, share, delete, save changes) and, for administrators, Edit form and Import and templates. When a view has unsaved changes, one line says "Changed from …" with **Reset** and **Save…** (Save… opens the sheet's save choices).
 
 A view only decides how the list looks. It never shows anyone records they couldn't already see.
 
 ## Automations (administrators)
 
-**Administration → Automations**: "when this happens, do that", for one form each. They run on the server (Cadence `functions/automate.js`), so they work whatever changed a record (the app on any device, an import, Set field, another automation) and on dates when nobody is signed in. Stored in `automations/{id}`; admins only (security rules).
+**Settings → Automations**: "when this happens, do that", for one form each. They run on the server (Cadence `functions/automate.js`), so they work whatever changed a record (the app on any device, an import, Set field, another automation) and on dates when nobody is signed in. Stored in `automations/{id}`; admins only (security rules).
 
-- **When:** a record is **created**; **changes** (any field, a chosen field, or a field *becoming* a value: "Status becomes Approved", which fires only when it wasn't before); **reaches a date** (on a date field, or N days before or after it, checked at 7:00 a.m. Toronto time, once per record per day); or is **emailed** with Email PDF.
+- **When:** a record is **created**; **changes** (any field, a chosen field, or a field *becoming* a value: "Status becomes Approved", which fires only when it wasn't before); **reaches a date** (on a date field, or N days before or after it, checked at 7:00 a.m. Toronto time, once per record per day); is **emailed** with Email PDF; **moves to a workflow stage**; or **is due on a schedule** (below).
+- **On a schedule:** a frequency builder: **Every** [n] [days / weeks / months / quarters / years], then:
+  - days: optionally **weekdays only**;
+  - weeks: tap the days (Mon … Sun, one or several);
+  - months, quarters, years: **on day** 1st–31st or last day, or **on the** first / second / third / fourth / last Monday … Sunday or business day (Mon–Fri); quarters pick the quarter's first or last month (calendar quarters), years pick the month;
+  - **Starting** (a date, shown when every is more than 1, so "every 2 weeks" knows which weeks), and **At** an hour (Toronto time).
+  It's said back in English with the next three dates ("Every 2 weeks on Wednesday at 9:00 a.m., starting October 21, 2026 · Next: Wed Oct 21 · Wed Nov 4 · Wed Nov 18"). A day a month doesn't have (the 31st) means its last day. Holidays aren't skipped. Each time, it runs once for **each record where the "Only if" holds** (an "Only if" is required, so it never runs on every record by accident).
+  - **Email me the day before** (not for daily): the automation's owner gets a list of what's going out tomorrow, and anything that can't be sent (no email address).
+  - **Approve first:** instead of doing it, each record gets a **Review and send** Cadence task for the owner, a banner on the record and a line at the top of Automations ("Waiting for your OK") with **Send now** and **Don't send**. Send now checks the "Only if" still holds first. Start with this on for anything that emails customers.
+  - **When an email can't go** (no address, or Gmail refuses it) on a scheduled run, the steps after it are skipped, so nothing is marked as sent when it wasn't, and the owner gets a task saying why.
+  - **Preview** (in the editor's side panel) shows which records it would run on now and what it would do, using what's on screen even before saving. Nothing is changed or sent.
+  - Older month-end automations open as "Every month on the last (business) day". The schedule logic is `src/autosched.js` (pure, unit-tested, also used by the server); the server runs it hourly (Cadence `automationMonthly`), once per run day.
+- **Example: invoices at month end.** Customer has **Billing email** and **Auto-send** (No / End of month), copied to new invoices (same field on Invoice, Copy matching fields on). Automation on Invoice: every month on the last business day at 5:00 p.m., approve first; only if Auto-send is End of month, Status is Draft and Invoice Total is more than 0; then send an email to Customer › Billing email with the PDF, then set Status to Sent and Sent date to today.
 - **Only if:** conditions built with the same click builder as show/hide rules, including the parent record's fields. None means always.
 - **Then** (up to 10 actions, in order):
   - **Set fields** on the record or its parent: a value, today, a copy of another field, or empty. Fields already as wanted aren't written (so nothing loops).
   - **Create a Cadence task** linked to the record: title and notes with `{Field}` placeholders, for the record's owner, whoever made the change, or a chosen person, due in N days. The admin who made the automation owns it; the assignee needs Cadence switched on to see it.
-  - **Send an email** from the company Gmail (the Email PDF setup): to email fields on the record or its parent, the owner, chosen people and typed addresses; subject and message with placeholders; optionally **with the record's PDF**, made on the server with each section's standard columns. Listed under the record's Sent emails and in the audit trail.
+  - **Send an email** from the company Gmail (the Email PDF setup): to email fields on the record or its parent, the owner, chosen people, everyone in chosen roles and typed addresses; subject and message with placeholders; optionally **with the record's PDF**, made on the server with each section's standard columns. Listed under the record's Sent emails and in the audit trail.
   - **Create a child record** under the record, copying matching fields if wanted, plus chosen values.
 - **Placeholders:** `{Field name}`, a parent's field as `{Client › Name}`, and `{Title}`, `{Item}`, `{Company}`, `{Date}`.
 - **Safety:** an automation never reacts to its own change; changes made by automations can set off others up to 3 in a row, then it stops and the run log says so. Each automation has an On/Off switch, a **Test run** on a chosen record (what it would do, nothing changed or sent), and a **Run history** (each run, what it did, errors). Everything it changes is in the audit trail as "Automation: name"; records show "edited by an automation".
@@ -297,6 +335,35 @@ A view only decides how the list looks. It never shows anyone records they could
 - **Server code from Formwright:** the functions use `fwkit.cjs`, a bundle of `src/server/`, `formulas.js`, `rules.js`, `pdfdoc.js`/`pdfdraw.js` and `emaillogic.js`, plus `functions/vendor/pdf-lib.min.js`. After changing those, run `node scripts/build-fwkit.mjs ../cadence/functions/fwkit.cjs` and deploy the functions.
 
 **Email PDF** also has an **Attach the PDF** switch (on by default); off sends just the message.
+
+## Settings (administrators)
+
+**Settings**, at the bottom of the sidebar, is where administrators set Formwright up. It opens a page of cards in four groups, each with a line saying what it's for and a count:
+
+- **Forms and data:** Form designer, Import history, PDF exports
+- **People and access:** Users, Security groups, Roles
+- **Automation:** Automations, Schedules
+- **Records:** Audit trail
+
+On each of those screens the same list runs down the left (on a phone, a row of buttons you swipe along), so you can move between them; **‹ Settings** goes back to the cards. The form editor and the import wizard keep the full width. Settings stays lit in the sidebar on all of them, and each page can also be found with **Ctrl K** or added to a dashboard as a shortcut. Members don't see Settings, and the pages turn them away if they follow a link.
+
+## Schedules (administrators)
+
+**Settings → Schedules** lists everything that goes out on its own, soonest first (`src/schedules.js`). Its card and the Settings list show how many are switched on.
+
+- **Dashboard emails:** each scheduled dashboard (its name opens it): when it goes and the next send, who it goes to (people, roles, addresses), and how the last one went ("✓ Last sent Mon, Oct 12, 8:02 a.m. to 2 people", or "⚠ … not sent" with the reason, such as Gmail refusing the app password). **Pause / Resume** (keeps the setup), **Edit** (the same Email schedule window as on the dashboard), **Send me a test** and **Delete** (asks twice; the dashboard is kept).
+- **Scheduled automations:** each automation on a schedule: its schedule in words and the next run, whether **Approve first** and the day-before heads-up are on, and how many records are waiting for your OK. **Pause / Resume** and **Edit**.
+- Times are Eastern. On phones the buttons sit under each row.
+
+## Roles (administrators)
+
+**Settings → Roles** lists the jobs people do (Accounts, Site lead). A role has a name and description; tick people in it on the role's page, or tick roles on each person's card under **Users**. Roles grant no access by themselves (that's security groups); they say who does what:
+
+- **Workflow stages** can go to a role: anyone holding it is the person responsible and can work on the record.
+- **Tasks** can be given to a role (task pop-up → Assigned to → Roles): every holder sees it in Cadence and on the record's Tasks, any of them can do it, and it records who did ("Done by Accounts (Farren)").
+- **@mentions** can name a role (`@Accounts`): everyone in it is told, and gets a task if "Also give a task" is ticked.
+- **Automation emails, dashboard emails and overdue escalations** can go to everyone in a role at the time.
+- Renaming a role updates tasks given to it (Cadence `roleRenamed`).
 
 ## Formatted long text
 
@@ -344,12 +411,13 @@ Name: text, system name "Contact name"
 
 **Form designer → Workflow** turns on stages for a form, like Draft → Review → Approved (a starter set is filled in). Logic in `src/workflow.js` (pure, unit-tested); the tab is `src/wfdesign.js`.
 
-- **Each stage** has a name, who it **goes to** when a record arrives (the record's owner, a specific person, a security group, whoever moved it, or the same person as before), whether they get a **Cadence task** and/or an **email**, and its **buttons** (label → stage; "Ask why" makes the person write a comment, as on Send back). A stage with no buttons is the end.
+- **Each stage** has a name, who it **goes to** when a record arrives (the record's owner, a specific person, a security group, a role, whoever moved it, or the same person as before), whether they get a **Cadence task** and/or an **email**, and its **buttons** (label → stage; "Ask why" makes the person write a comment, as on Send back). A stage with no buttons is the end.
 - **Fields at each stage:** Edit, **Required** (must be filled before moving on to a later stage; saving is still allowed), **View only**, or **Hidden** (its value is kept). Hiding a section heading hides everything under it; child sections, grids and Tasks can be hidden per stage too. Show/hide rules still apply on top.
 - **On the record:** a bar shows the stages, where it is, its **Person responsible**, how long it's been there, its due date (Overdue, Due today) and that stage's buttons. While a record is at a stage, **only its assignee (or a member of its group) and administrators can change it**, enforced by the security rules; others see it read-only. Administrators can **Move to** any stage. **New records start at the first stage on their own**, however they're made (the app, an import, an automation, Duplicate): the server does it (`autoStart` in Cadence `automationOnWrite`), so the bar shows "Starting at …" for a moment. Records saved before the workflow was turned on show **Start**.
 - **Stage history** (a collapsible section on the record): every move, who made it, which button, the comment, and who it went to. Stored in `records/{id}/stages/`.
 - **My work → Waiting on me** (the tab shows once any form has a workflow): records you or your groups are the person responsible for, overdue first, then by due date, then longest waiting, with a **Due** column. Administrators can switch to **Everyone**.
 - **Due dates:** a stage can be **due within N working days** (Monday to Friday) of arriving (`stage.dueDays`). The Cadence task for that stage gets the same due date (Toronto time).
+- **When it's overdue** (per stage, with a due date): **email whoever has it** the morning after the due date, and optionally, **if it's still overdue** N working days later, **also tell** the administrators, a role or a person. Checked on weekday mornings at 7:30 (Cadence `stageOverdue`), each sent once per stage visit; both are noted in the record's audit trail.
 - **Stage in rules and automations:** "Stage" can be picked in show/hide rule conditions and automation conditions, and automations have a **moves to a workflow stage** trigger.
 - **Notices** (server, `automationOnWrite` in Cadence): when a record arrives at a stage, the previous stage's workflow tasks for it are ticked done, and the new assignee gets a task and/or email (a group: up to 10 members, each their own).
 - **Record fields:** `stage`, `assignee`, `assigneeGroup`, `stageAt`.
@@ -401,7 +469,7 @@ A **Photo** field turns the picture upright and scales it to at most 2,000 pixel
 
 ## Audit trail (administrators)
 
-**Administration → Audit trail** is one page with every change, newest first, kept for good:
+**Settings → Audit trail** is one page with every change, newest first, kept for good:
 
 - **Records:** created (with what was filled in), changed (each field: old → new), moved to another parent, given to another owner, deleted (with a copy), restored, and PDFs emailed. Values show the way the app shows them.
 - **Admin changes:** form designs (fields added, removed, renamed or retyped, settings), security groups (access per form), accounts (first sign-in, role, groups, Cadence approval, removals), auto numbering and number changes, and PDF export settings.
@@ -426,6 +494,10 @@ The Cadence functions write every entry (`audit/{id}`, `functions/audit.js`) as 
 - `emaillogic.js` (pure, unit-tested): templates, typed addresses, suggestions.
 
 ## Sections under a record (grids, child records, Tasks)
+
+**The record page:** the form's fields, then its sub-form grids, child sections and **Tasks** (full width, in the form's section order), with **Comments** right under Tasks. The **+ Add …**, **Attach existing** and **+ Add task** buttons are shaded in your colour so they're easy to spot.
+
+**Activity** (stage history and sent emails) is a panel beside the form on wide screens (1,280 pixels and up) and below it otherwise. It only appears when a record has some: a workflow, or emails sent. **»** at its top (or **Alt+.**) folds it to a slim strip on the right, giving the form the width; the strip shows « Activity with a count, and clicking it (or Alt+. again) opens it. Remembered on each device.
 
 Each section under a record's fields has a bar at the top: a search box (once there are more than 5), **Columns**, **Show** (5, 10, 15, 20 or all; 10 to start) and its buttons (**+ Add …**, **Attach existing**, **+ Add task**). Long lists end with "Showing 10 of 34 · Show all".
 
@@ -454,7 +526,7 @@ A saved record's **Export ▾** button offers **PDF** (the standard layout) and 
 
 **Export ▾ → PDF** in a saved record's top bar downloads it as a tidy document, for example `Site visits - Smith house.pdf`. Anyone who can see the record can export it.
 
-- **Top:** the company name and logo from **Administration → PDF exports** (if set), then the form's name, the record's title, who created it and when, the last update, the owner, and its parent.
+- **Top:** the company name and logo from **Settings → PDF exports** (if set), then the form's name, the record's title, who created it and when, the last update, the owner, and its parent.
 - **Fields** in the form's order and layout: half-width fields side by side, section headings as headings (with their help text). Values print as the app shows them: CAD currency, written-out dates, Yes/No, ratings as stars, colours as a swatch, linked records by name, calculation results. Empty fields print empty. Long text prints in full and runs onto the next page if it needs to.
 - **Photos and signatures** print as pictures (photos are turned upright and scaled down). Other files are listed by name and size. A photo that can't be read prints as its name, and the message after the download says so.
 - **Grids, child records and Tasks** follow as tables, in the form's section order, with the columns and sort you chose for each section on screen (every row, whatever Show is set to): grids with their totals, child records, and the Cadence tasks you can see. Long tables continue on the next page with their headings repeated. Words are never split: every column is at least as wide as its longest word, and short values (dates, amounts, codes) stay on one line; long text such as a description wraps between words. When a table is too wide, it first uses slightly smaller text, then gets landscape pages of its own (the rest stays portrait); only a single enormous word, like a long web address, can break.
@@ -462,7 +534,7 @@ A saved record's **Export ▾** button offers **PDF** (the standard layout) and 
 - Unsaved changes: it asks you to save first, so the PDF matches what's saved.
 - The standard PDF fonts are used, which cover English and French. Other characters (emoji, symbols, other scripts) print as `?`.
 
-**Administration → PDF exports** (admins) sets the company name and logo. The logo is trimmed of empty space, resized and saved in `settings/exports` (PNG keeps a transparent background). The rule for it is in the Cadence folder.
+**Settings → PDF exports** (admins) sets the company name and logo. The logo is trimmed of empty space, resized and saved in `settings/exports` (PNG keeps a transparent background). The rule for it is in the Cadence folder.
 
 **Photos need one Storage setting (CORS)** so the browser can read them into a PDF. Without it, PDFs list photos by name. See "Let PDFs include photos" under Setup.
 
@@ -484,7 +556,7 @@ Admins see **Import and templates** at the top of each form's list.
   - Dates can be Excel dates, `2026-10-13`, `10/13/2026` or `Oct 13, 2026`. Yes / No accepts Yes, No, Y, N, True, False, 1, 0 and X. Several choices are separated with `;`. Numbers may have `$` and commas.
   - Links and parents are matched by the record's name, or by its Record ID when two records share a name.
   - Calculations are worked out as each record is saved. A new row under a parent gets the parent's values the same way **+ Add** does.
-- **Import history** (also under Administration in the sidebar) lists every import. **Undo** is offered for 7 days. It removes what the import added, including rows added under those records since, and puts updated records back the way they were. Records someone has edited since the import are left alone, and the confirmation names them.
+- **Import history** (also in Settings) lists every import. **Undo** is offered for 7 days. It removes what the import added, including rows added under those records since, and puts updated records back the way they were. Records someone has edited since the import are left alone, and the confirmation names them.
 
 The import is admins-only in the app and in the rules (`imports/…`). The records themselves are saved through the normal record rules.
 
@@ -499,7 +571,7 @@ Messages at the bottom of the screen look and work like Cadence's (`toast()` in 
 
 ## Comments and @mentions
 
-Every saved record has a **Comments** section at the bottom (it folds like the others). Comments aren't part of the record's PDF.
+Every saved record has a **Comments** section right under **Tasks** (it folds like the others). Comments aren't part of the record's PDF.
 
 - **Who can comment:** anyone who can see the record, view-only included. You can **Edit** and **Delete** your own (an edited comment says "edited"); administrators can delete anyone's. **Reply** answers a comment (one level deep; replying to a reply goes under the same comment) and starts with an @mention of the person you're answering. Deleting a comment deletes its replies.
 - **@mentions:** type **@** and a few letters of a name (or email) to pick someone: arrows and Enter or Tab, or click. Typing a full "@Name" also counts. Administrators see people who can't open the record greyed out ("can't see this record"); for everyone else the server checks. **Ctrl+Enter** (⌘+Enter) posts.
@@ -516,6 +588,7 @@ Each record and form list has its own address, so links and refreshes open the r
 - `#/record/<recordId>`: one record. Back goes to its form's list.
 - `#/form/<formId>`: a form's records.
 - `#/reports` and `#/report/<reportId>`: the Reports list and one report.
+- `#/dashboards` and `#/dashboard/<id>`: the Dashboards list and one dashboard.
 
 Cadence links to records this way, from the record chip on a task.
 
@@ -692,3 +765,5 @@ Manual deploy: `FIREBASE_HOSTING_SITE=cadence-forms npm run deploy` (with your s
 - **Brave and ad blockers.** Brave's Shields (and some blockers) block part of Firestore's connection (`ERR_BLOCKED_BY_CLIENT` in the console). Saves can then fail with "Missing or insufficient permissions" and live updates arrive late. Turn Shields down for the Formwright and Cadence sites.
 - **Emails for Cadence tasks are lowercase.** Formwright puts addresses in Cadence's people directory and on tasks in lowercase, as Cadence and its rules do (`normEmail` in `src/tasks.js`); the profile keeps the address exactly as signed in.
 - **Renaming a field** updates calculations that reference it, including `CHILDSUM`/`PARENT` references in related forms.
+- **After an update** is deployed, a page left open from before may not find a part it loads later (Export, Word templates). It then says the app has been updated and offers **Reload**, rather than failing with an unclear error. Reloading with Ctrl+Shift+R also makes sure you have the newest version.
+- **Reduced motion:** if a device has animations switched off (Windows: Settings → Accessibility → Visual effects → Animation effects; Mac: Reduce motion), dashboards skip their entrance and hover movement on purpose.

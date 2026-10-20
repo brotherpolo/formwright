@@ -2,7 +2,7 @@
 // exports) and a model built by pdfexport.js, and returns the PDF's bytes.
 //
 // model = {
-//   brand: { name, logoKey }            company name and logo (Administration → PDF exports)
+//   brand: { name, logoKey }            company name and logo (Settings → PDF exports)
 //   accent: '#3346c8'                   the form's colour
 //   formName, title, meta: [string], parent: string|null
 //   items: [fieldItem…]                 from pdfdoc.fieldItem; image/signature items carry imgKey

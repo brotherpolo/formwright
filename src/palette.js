@@ -13,6 +13,7 @@ const PAGES = [
   { id: 'reports', label: 'Reports', glyph: '▤' },
 ];
 const ADMIN_PAGES = [
+  { id: 'settings', label: 'Settings', glyph: '⚙' },
   { id: 'designer', label: 'Form designer', glyph: '⚙' },
   { id: 'users', label: 'Users', glyph: '☺' },
   { id: 'groups', label: 'Security groups', glyph: '◫' },

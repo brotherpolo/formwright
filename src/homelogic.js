@@ -10,6 +10,7 @@ export const PAGES = [
   { key: 'mywork', title: 'My work', glyph: '☰', desc: 'Records waiting on you in a workflow.', needs: 'workflow' },
   { key: 'dashboards', title: 'Dashboards', glyph: '▦', desc: 'Every dashboard you can see.' },
   { key: 'reports', title: 'Reports', glyph: '▤', desc: 'Saved charts and tables.' },
+  { key: 'settings', title: 'Settings', glyph: '⚙', desc: 'Forms, people, automations and schedules.', admin: true },
   { key: 'designer', title: 'Form designer', glyph: '⚙', desc: 'Build and change forms.', admin: true },
   { key: 'groups', title: 'Security groups', glyph: '◫', desc: 'Who can see and edit what.', admin: true },
   { key: 'roles', title: 'Roles', glyph: '◉', desc: 'Jobs people do; workflow stages can go to one.', admin: true },
@@ -47,7 +48,7 @@ export function linkInfo(link, env) {
   if (link.to === 'page') {
     const p = pageOf(link.page); if (!p) return null;
     const c = env.counts || {};
-    const sub = p.admin ? 'Administration'
+    const sub = p.admin ? 'Settings'
       : p.key === 'dashboards' ? plural(c.dashboards || 0, 'dashboard', 'dashboards')
       : p.key === 'reports' ? plural(c.reports || 0, 'report', 'reports')
       : p.key === 'mywork' ? `${(c.mywork || 0).toLocaleString()} waiting on you`
@@ -78,7 +79,7 @@ export function linkChoices(env, forms) {
     { title: 'Forms', items: forms.flatMap((f) => [item({ to: 'list', form: f.id }), item({ to: 'new', form: f.id })]).filter(Boolean) },
     { title: 'Insights', items: PAGES.filter((p) => !p.admin).map((p) => item({ to: 'page', page: p.key })).filter(Boolean) },
   ];
-  if (env.isAdmin) groups.push({ title: 'Administration', admin: true, items: PAGES.filter((p) => p.admin).map((p) => item({ to: 'page', page: p.key })).filter(Boolean) });
+  if (env.isAdmin) groups.push({ title: 'Settings', admin: true, items: PAGES.filter((p) => p.admin).map((p) => item({ to: 'page', page: p.key })).filter(Boolean) });
   return groups.filter((g) => g.items.length);
 }
 

@@ -1,4 +1,4 @@
-// Administration → Automations: the list and the editor. Automations run on the server
+// Settings → Automations: the list and the editor. Automations run on the server
 // (Cadence functions/automate.js); here admins set them up, test them on a record and read
 // their run history. Wording and checks: autologic.js. Conditions reuse the rule builder.
 import { store, saveAutomation, setAutomationOn, deleteAutomation, loadRuns, testAutomation, previewAutomation, decidePendingSend } from './store.js';

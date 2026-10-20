@@ -59,7 +59,7 @@ import { signOutUser } from './auth.js';
 import { $, esc, uid, clone, isEmpty, toast, COLORS, colorOf, itemName, badge, lazy } from './ui.js';
 import examples from './examples.json';
 
-const ADMIN_VIEWS = new Set(['designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
+const ADMIN_VIEWS = new Set(['settings', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 
 // other words people search field types by
 const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold'};
@@ -452,8 +452,8 @@ function asideCount(){
   return (wfOn(f)&&sw.list?sw.list.length:0)+(ew.recordId===view.recordId?ew.list.length:0);
 }
 function paintAsideCount(){const el=$('.rs-strip');if(!el)return;const n=asideCount();el.querySelector('.rs-n')?.replaceChildren(String(n));el.querySelector('.rs-n')?.toggleAttribute('hidden',!n);el.setAttribute('aria-label',`Show Activity${n?` (${n})`:''}`);}
-/** Administration in the sidebar: folded unless you open it (remembered on this device) or you're on one of its pages. */
-const admOpen=()=>{if(ADMIN_VIEWS.has(view.name))return true;try{return localStorage.getItem('fw.adminOpen')==='1';}catch(e){return false;}};
+/** Settings (administrators): one item at the bottom of the sidebar, lit on any of its pages. */
+const inSettings=()=>ADMIN_VIEWS.has(view.name)&&view.name!=='import';
 function renderSide(){
   const fsFocus=document.activeElement?.id==='fs-q'?document.activeElement.selectionStart:null; // a redraw while searching keeps the cursor
   const activeForm=(view.name==='records'||view.name==='record')?view.formId:null;
@@ -464,7 +464,6 @@ function renderSide(){
   const rail=railOn();
   const tip=label=>rail?` title="${esc(label)}" aria-label="${esc(label)}"`:'';
   const navBtn=(act,on,label,glyph,extra='')=>`<button class="nav${on?' on':''}" data-act="${act}"${on?' aria-current="page"':''}${tip(label)}><span class="glyph navg">${glyph}</span><span class="t">${label}</span>${extra}</button>`;
-  const ao=adm&&(admOpen()||rail);
   $('#side').innerHTML=`
     <div class="brand"><span class="brand-mark"><i></i></span><b>Formwright</b><button type="button" class="ibtn side-tog" data-act="side-rail" aria-pressed="${rail}" aria-keyshortcuts="Alt+B" aria-label="${rail?'Expand the sidebar':'Collapse the sidebar'}" title="${rail?'Expand the sidebar':'Collapse the sidebar'} (Alt+B)">${rail?'»':'«'}</button></div>
     ${rail?`<button type="button" class="nav nav-find" data-act="palette"${tip('Search everything (Ctrl K)')}><span class="glyph navg"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></span><span class="t">Search</span></button>`:''}
@@ -482,17 +481,7 @@ function renderSide(){
     <div class="navlabel">Forms</div>
     ${list.length?list.map(f=>`<button class="nav nav-form${f.id===activeForm?' on':''}" data-act="nav-form" data-id="${f.id}"${f.id===activeForm?' aria-current="page"':''} title="${esc(f.name)}"${rail?` aria-label="${esc(f.name)}"`:''}>${badge(f)}<span class="t">${esc(f.name)}</span><span class="n">${recordsOf(f.id).length}</span></button>`).join(''):'<p class="nav-empty">No forms shared with you yet.</p>'}
     ${total>list.length?`<button class="nav nav-all" data-act="${rail?'palette':'fs-all'}"${tip(`All forms (${total})`)}><span class="glyph navg rail-only" aria-hidden="true">⋯</span><span class="t">All forms (${total})</span><span aria-hidden="true">→</span></button>`:''}
-    ${adm?`${rail?'<div class="rail-sep" role="separator"></div>':''}<button class="nav nav-fold" data-act="adm-fold" aria-expanded="${ao}"><span class="t">Administration</span><span class="fold-ic" aria-hidden="true">${ao?'▾':'▸'}</span></button>
-    ${ao?`<div class="nav-adm">
-    ${navBtn('nav-designer',view.name==='designer'||view.name==='formEdit','Form designer','⚙',`<span class="n">${store.forms.length}</span>`)}
-    ${navBtn('nav-groups',view.name==='groups'||view.name==='groupEdit','Security groups','◫',`<span class="n">${store.groups.length}</span>`)}
-    ${navBtn('nav-roles',view.name==='roles'||view.name==='roleEdit','Roles','◉',`<span class="n">${(store.roles||[]).length}</span>`)}
-    ${navBtn('nav-users',view.name==='users','Users','☺',`<span class="n">${store.users.length}</span>`)}
-    ${navBtn('nav-imports',view.name==='imports','Import history','⇪',`<span class="n">${store.imports.length}</span>`)}
-    ${navBtn('nav-exports',view.name==='exports','PDF exports','⇩')}
-    ${navBtn('nav-automations',view.name==='automations'||view.name==='automation','Automations','↯',`<span class="n">${store.automations.filter(a=>a.on).length||''}</span>`)}
-    ${navBtn('nav-schedules',view.name==='schedules','Schedules','◷',`<span class="n">${scheduleCount()||''}</span>`)}
-    ${navBtn('nav-audit',view.name==='audit','Audit trail','⌕')}</div>`:''}`:''}
+    ${adm?`<div class="nav-bottom">${navBtn('nav-settings',inSettings(),'Settings',GEAR)}</div>`:''}
     <div class="side-foot">${ui.appear?appearanceHTML():''}${store.user?personAv(store.user.uid,name,{small:true}):''}<div class="who" title="${esc(name)}"><b>${esc(name)}</b><span>${adm?'Administrator':'Member'}</span></div><div class="foot-acts"><button type="button" class="ibtn theme-btn" data-act="appear" aria-expanded="${!!ui.appear}" aria-label="Appearance: mode, colour and density" title="Appearance">${THEME_ICON[readTheme(localStorage)]}<span class="foot-l">Appearance</span></button><button class="btn sm ghost" data-act="sign-out">Sign out</button></div></div>`;
   if(fsFocus!=null){const q=$('#fs-q');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(fsFocus,fsFocus)}catch(e){}paintFormResults();}}
 }
@@ -506,6 +495,35 @@ function appearanceHTML(){
     <div class="ap-row"><span class="ap-l" id="ap-col">Colour</span><div class="ap-sw" role="group" aria-labelledby="ap-col">${SCHEMES.map(k=>`<button type="button" class="ap-scheme${sc===k?' on':''}" aria-pressed="${sc===k}" data-act="ap-scheme" data-v="${k}"><span class="ap-dot" style="background:${sw[k][0]};box-shadow:6px 0 0 ${sw[k][1]}" aria-hidden="true"></span>${schemeLabel(k)}</button>`).join('')}</div></div>
     <div class="ap-row"><span class="ap-l" id="ap-den">Density</span><div class="segs" role="group" aria-labelledby="ap-den">${DENSITIES.map(k=>`<button type="button" class="${dn===k?'on':''}" aria-pressed="${dn===k}" data-act="ap-density" data-v="${k}">${densityLabel(k)}</button>`).join('')}</div></div>
     <p class="help">Saved on this device only.</p></div>`;
+}
+/* ---------- Settings (administrators) ---------- */
+// The Settings page: every administration screen as a card, in groups. On each of those screens
+// the same list runs down the left (a swipeable row on phones) so you can move between them.
+// The form editor and the import wizard keep their full width.
+const GEAR='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+const NO_FRAME=new Set(['settings','formEdit','import']);
+function settingsGroups(){return [
+  {h:'Forms and data',items:[
+    {act:'nav-designer',on:['designer'],t:'Form designer',g:'⚙',n:store.forms.length,d:'Build forms, fields, sections and workflows.'},
+    {act:'nav-imports',on:['imports'],t:'Import history',g:'⇪',n:store.imports.length,d:'Past imports and rule changes, with Undo for 7 days.'},
+    {act:'nav-exports',on:['exports'],t:'PDF exports',g:'⇩',d:'Company name and logo on PDF and Word exports.'}]},
+  {h:'People and access',items:[
+    {act:'nav-users',on:['users'],t:'Users',g:'☺',n:store.users.length,d:'Who has an account, their groups, roles and Cadence access.'},
+    {act:'nav-groups',on:['groups','groupEdit'],t:'Security groups',g:'◫',n:store.groups.length,d:'Which forms each group can see and change.'},
+    {act:'nav-roles',on:['roles','roleEdit'],t:'Roles',g:'◉',n:(store.roles||[]).length,d:'Jobs people do, for workflow stages, tasks and emails.'}]},
+  {h:'Automation',items:[
+    {act:'nav-automations',on:['automations','automation'],t:'Automations',g:'↯',n:store.automations.filter(a=>a.on).length,d:'When something happens, do something: email, set a field, make a task.'},
+    {act:'nav-schedules',on:['schedules'],t:'Schedules',g:'◷',n:scheduleCount(),d:'Everything that goes out on its own, in one list.'}]},
+  {h:'Records',items:[
+    {act:'nav-audit',on:['audit'],t:'Audit trail',g:'⌕',d:'Every change, who made it and when.'}]}];}
+const stN=i=>typeof i.n==='number'&&i.n>0;
+function viewSettings(){
+  return `<div class="head"><div class="ttl"><div><h1>Settings</h1><p class="sub">Set up forms, people and automations. Only administrators see Settings.</p></div></div></div>
+  ${settingsGroups().map((g,k)=>`<section class="st-sec" aria-labelledby="st-h${k}"><h2 class="dz-h" id="st-h${k}">${g.h}</h2><div class="st-grid">${g.items.map(i=>`<button type="button" class="st-card" data-act="${i.act}"><span class="glyph st-g" aria-hidden="true">${i.g}</span><span class="st-tx"><b>${i.t}${stN(i)?` <span class="count">${i.n}</span>`:''}</b><span class="help">${i.d}</span></span><span class="st-go" aria-hidden="true">›</span></button>`).join('')}</div></section>`).join('')}`;
+}
+function settingsFrame(h){
+  const nav=settingsGroups().map(g=>`<div class="st-nh">${g.h}</div>${g.items.map(i=>{const on=i.on.includes(view.name);return `<button type="button" class="st-ni${on?' on':''}" data-act="${i.act}"${on?' aria-current="page"':''}><span class="st-ng" aria-hidden="true">${i.g}</span><span class="t">${i.t}</span>${stN(i)?`<span class="n">${i.n}</span>`:''}</button>`;}).join('')}`).join('');
+  return `<div class="st-wrap"><nav class="st-nav" aria-label="Settings"><button type="button" class="st-back" data-act="nav-settings"><span aria-hidden="true">‹</span> Settings</button>${nav}</nav><div class="st-main">${h}</div></div>`;
 }
 function renderMain(){
   const m=$('#main');let h='',title='Formwright';
@@ -523,9 +541,11 @@ function renderMain(){
   else if(view.name==='designer'){title='Form designer';h=viewDesigner();}
   else if(view.name==='formEdit'){title='Edit form';h=viewFormEdit();}
   else if(admin.handles(view)){const r=admin.renderView(view);title=r.title;h=r.html;}
+  else if(view.name==='settings'){title='Settings';h=viewSettings();}
   else if(view.name==='welcome'){title='Formwright';h=viewWelcome();}
   else if(view.name==='home'&&(h=viewStarterHome())){title='Home';}
   else if(view.name==='home'){title='Home';h=`<div class="head"><div class="ttl"><div><h1>Home</h1><p class="sub">Home shows a dashboard: your own, or the one an administrator picked for everyone.</p></div></div></div><div class="panel empty"><h2>No home dashboard yet</h2><p>Open a dashboard and press <b>Set as my home</b>.${isAdmin(store.me)?' To give everyone a Home, share a dashboard and press <b>Make everyone’s default home</b>.':''}</p><button class="btn primary" data-act="nav-dashboards">Dashboards</button></div>`;}
+  if(ADMIN_VIEWS.has(view.name)&&!NO_FRAME.has(view.name)&&isAdmin(store.me))h=settingsFrame(h);
   $('#topttl').textContent=title||'Formwright';
   const ae=document.activeElement,ks=ae&&ae.dataset?.ksearch?[ae.dataset.ksearch,ae.selectionStart]:null; // a redraw while searching keeps the cursor in the box
   const ck=cmt.keep(); // a redraw while writing a comment keeps the cursor in it
@@ -538,6 +558,7 @@ function renderMain(){
   if(view.name==='record'&&rdraft){rdraft._rs=null;applyRules(rdraft);}
   if(view.name==='formEdit'&&pdraft&&(ui.tab==='rules'||ui.tab==='preview'))applyRules(pdraft);
   if(view.name==='dashboard')fitTiles();
+  m.querySelector('.st-ni.on')?.scrollIntoView({block:'nearest',inline:'center'}); // phones: the row shows where you are
   afterDashRender(); // a dashboard that's new on screen plays its entrance
   syncTaskWatch();syncEmailWatch();syncStageWatch();cmt.sync();cmt.afterRender();wordui.sync();
 }
@@ -2201,6 +2222,7 @@ document.addEventListener('click',async e=>{
     case 'nav-audit':go({name:'audit'});break;
     case 'nav-automations':go({name:'automations'});break;
     case 'nav-schedules':go({name:'schedules'});break;
+    case 'nav-settings':go({name:'settings'});break;
     case 'rec-duplicate':{
       const rec=view.recordId?recById(view.recordId):null,form=rec?formById(rec.formId):null;
       if(!rec||!form||!canCreate(store.me,form.id))return;
@@ -2228,7 +2250,6 @@ document.addEventListener('click',async e=>{
     case 'ap-density':applyDensity(document,el.dataset.v,localStorage);renderSide();$('[data-act="ap-density"].on')?.focus();break;
     case 'side-rail':setRail(!railOn());break;
     case 'aside-fold':setAsideFold(!asideFolded());break;
-    case 'adm-fold':{const open=!admOpen();try{localStorage.setItem('fw.adminOpen',open?'1':'0');}catch(e){}renderSide();$('[data-act="adm-fold"]')?.focus();break;}
     case 'fs-all':{const q=$('#fs-q');if(q){q.focus();ui.fsOpen=true;paintFormResults();}break;}
     case 'palette':palette.open();break;
     case 'theme':{const t=applyTheme(document,nextTheme(readTheme(localStorage)),localStorage);renderSide();toast(themeLabel(t)==='Auto'?'Theme: Auto (follows this device)':'Theme: '+themeLabel(t)+' on this device');$('[data-act="theme"]')?.focus({preventScroll:true});break;}

@@ -28,12 +28,12 @@ test('a form list, a saved view, a new record', () => {
 test('screens: admin ones only for admins; My work only with a workflow', () => {
   assert.equal(linkInfo({ to: 'page', page: 'designer' }, env()).ok, false);
   assert.equal(linkInfo({ to: 'page', page: 'designer' }, env({ admin: true })).ok, true);
-  assert.equal(linkInfo({ to: 'page', page: 'designer' }, env({ admin: true })).sub, 'Administration');
+  assert.equal(linkInfo({ to: 'page', page: 'designer' }, env({ admin: true })).sub, 'Settings');
   assert.equal(linkInfo({ to: 'page', page: 'mywork' }, env()).ok, false);
   assert.equal(linkInfo({ to: 'page', page: 'mywork' }, env({ wf: true })).sub, '2 waiting on you');
   assert.equal(linkInfo({ to: 'page', page: 'dashboards' }, env()).sub, '3 dashboards');
   assert.equal(linkInfo({ to: 'page', page: 'reports' }, env()).sub, '1 report');
-  assert.equal(PAGES.filter((p) => p.admin).length, 9);
+  assert.equal(PAGES.filter((p) => p.admin).length, 10);
 });
 
 test('who sees which tiles', () => {
@@ -46,7 +46,7 @@ test('the picker, keys and Home', () => {
   const g = linkChoices(env(), forms);
   assert.deepEqual(g.map((x) => x.title), ['Forms', 'Insights']);
   assert.ok(!g[1].items.some((i) => i.key === 'page:mywork'), 'no My work without a workflow');
-  assert.deepEqual(linkChoices(env({ admin: true }), forms).map((x) => x.title), ['Forms', 'Insights', 'Administration']);
+  assert.deepEqual(linkChoices(env({ admin: true }), forms).map((x) => x.title), ['Forms', 'Insights', 'Settings']);
   for (const l of [{ to: 'list', form: 'f', view: 'v' }, { to: 'new', form: 'f' }, { to: 'page', page: 'audit' }]) assert.deepEqual(linkFromKey(linkKey(l)), l);
   assert.equal(linkFromKey('page:nope'), null);
   const see = (id) => id !== 'hidden';

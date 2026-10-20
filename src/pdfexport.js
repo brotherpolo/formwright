@@ -46,7 +46,7 @@ export async function photoBytes(blob) {
 /**
  * Make the PDF: → { bytes, name, missing }. (Export PDF downloads it; Email PDF sends it.)
  * model: as pdfdraw.js describes, except image and signature items keep `src` (a data URL,
- * or { path, url } of an upload) and brand comes from Administration → PDF exports.
+ * or { path, url } of an upload) and brand comes from Settings → PDF exports.
  * Returns { name, missing } — missing = pictures that couldn't be included.
  */
 export async function makeRecordPdf(model) {

@@ -1,4 +1,4 @@
-// Administration → PDF exports: the company name and logo printed at the top of every
+// Settings → PDF exports: the company name and logo printed at the top of every
 // record exported as a PDF. Stored in settings/exports (admins write, everyone with access reads).
 
 import { getExportSettings, saveExportSettings } from './store.js';

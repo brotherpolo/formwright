@@ -176,7 +176,7 @@ body.pd-on .pgrip{cursor:grabbing}
 .ra-dlg p{margin:0}
 .ra-list{margin:0;padding-left:20px}
 .ra-sub{margin:4px 0 0!important}
-/* Administration → Automations (autos.js) */
+/* Settings → Automations (autos.js) */
 .am-card.off{opacity:.65}
 .am-say{display:block;margin:2px 0 4px;font-size:13px;overflow-wrap:anywhere}
 .am-warn{padding:10px 14px;font-size:14px;border-color:var(--warn,#a15c00)}
@@ -354,7 +354,7 @@ body.pd-on .pgrip{cursor:grabbing}
 .am-confirm .err{color:var(--danger,#b42318)}
 .am-sched input[type="date"]{width:auto;flex:0 1 200px}
 
-/* Administration → Schedules */
+/* Settings → Schedules */
 .sc-sec{margin-top:18px}
 .sc-sec > .dz-h{display:flex;align-items:center;gap:8px;margin:0 0 8px}
 .sc-ic{background:var(--accent-soft);color:var(--accent)}

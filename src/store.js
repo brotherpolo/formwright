@@ -33,7 +33,7 @@ export const store = {
   records: [],
   profiles: {},
   groups: [],
-  roles: [], // job roles (Administration → Roles): who does the work, separate from access
+  roles: [], // job roles (Settings → Roles): who does the work, separate from access
   users: [],
   reports: [], // my reports and reports shared with everyone, newest first
   reportsReady: false,
@@ -44,7 +44,7 @@ export const store = {
   homeDefault: '', // settings/home: the dashboard Home shows for anyone without their own
   listViewsReady: false,
   imports: [], // admins: past imports, newest first
-  automations: [], automationsError: null, // admins: Administration → Automations
+  automations: [], automationsError: null, // admins: Settings → Automations
   dashMails: {}, // admins: scheduled dashboard emails, by dashboard id
   pendingSends: [], // admins: scheduled automations waiting for an OK (approve first)
   mentions: [], // My work → Mentions: comments where someone @mentioned you, newest first

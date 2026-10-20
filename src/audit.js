@@ -1,4 +1,4 @@
-// Administration → Audit trail: every change to records, forms, security groups, accounts and
+// Settings → Audit trail: every change to records, forms, security groups, accounts and
 // settings, newest first, with filters, Put back, Restore (deleted records, 90 days) and CSV.
 // The server writes the entries (Cadence folder, functions/audit.js); admins only.
 import { store, loadAudit, restoreDeleted, setRecordsValue, attachRecords, setOwner, setAutoNumber } from './store.js';
