@@ -5,6 +5,7 @@ import { readTheme, applyTheme, nextTheme, themeLabel, readScheme, applyScheme, 
 // Admin screens (users and groups) live in admin.js; data access in store.js.
 
 import { viewProblems, onClick as pbClick, onChange as pbChange, freshCount, enterProblems, initProblems } from './problemsview.js';
+import { dayKeyOf, getCalendar } from './cal.js';
 import { recentDelHTML, onClick as rdClick, onKey as rdKey, initRecentDel, closeRecentDel } from './recentdel.js';
 import { qrDialogHTML, recordUrl, printLabel, downloadPng, copyText } from './qrlabel.js';
 import { undoDelete } from './store.js';
@@ -557,7 +558,7 @@ function renderMain(){
   else if(view.name==='report'){title=reportName(view.reportId);h=viewReport(view.reportId);wide=true;}
   else if(view.name==='dashboards'){title='Dashboards';h=viewDashboards();}
   else if(view.name==='dashboard'){title=dashName(view.dashboardId);h=viewDashboard(view.dashboardId);wide='full';}
-  else if(view.name==='records'){const f=formById(view.formId);title=f?.name;h=viewRecords(f)+recentDelHTML(f);wide=true;}
+  else if(view.name==='records'){const f=formById(view.formId);title=f?.name;h=viewRecords(f)+recentDelHTML(f)+(ui.wfAsk&&f&&recById(ui.wfAsk.recId)?.formId===f.id?wfAskDialog(f,recById(ui.wfAsk.recId)):'');wide=true;}
   else if(view.name==='record'){const f=formById(view.formId);title=f?.name;h=viewRecord(f);}
   else if(view.name==='mywork'){title='My work';h=viewMyWork();}
   else if(view.name==='calendar'){title='Calendar';h=calview.viewCalendar();}
@@ -835,6 +836,24 @@ function syncStageWatch(){
 const groupName=id=>store.groups.find(g=>g.id===id)?.name||'';
 const roleName=id=>store.roles.find(r=>r.id===id)?.name||'';
 const myRoles=()=>store.me?.roles||[];
+/** Board: a card moved to another stage, the same way as the record's own buttons (listlayouts.js). */
+async function boardStageMove(rec,form,go){
+  const fresh=recById(rec.id)||rec,t=go.target;
+  if(go.kind==='start'){await doWfMove(fresh,form,t,'Started','');return;}
+  if(go.kind==='move'&&stageIndex(form,t.id)>stageIndex(form,fresh.stage)){ // moving on: what this stage needs first
+    const st=withStage(rulesOf(form,fresh,fresh.parentId?recById(fresh.parentId):null),form,fresh.stage);
+    const miss=missingToMove(form,fresh.stage,fresh.values||{},isEmpty,st.hiddenFields);
+    if(miss.length){toast(`${recTitle(fresh,form)}: fill in ${miss.map(f=>f.label).slice(0,3).join(', ')}${miss.length>3?' and more':''} first.`,{action:'Open it',duration:9000,onAction:()=>goRec(null,{name:'record',formId:form.id,recordId:fresh.id})});return;}
+  }
+  const m=go.kind==='jump'?{label:'Moved by an administrator',comment:false,jump:true}:go.move;
+  if(m.comment||m.jump){ui.wfAsk={recId:fresh.id,to:t.id,label:m.label,need:!!m.comment,comment:'',busy:false};renderMain();setTimeout(()=>document.querySelector('[data-wf-comment]')?.focus(),0);return;}
+  await doWfMove(fresh,form,t,m.label,'');
+}
+/** Board: who has a card at its stage, and when it's due. */
+function boardCardExtra(rec,form){
+  if(!wfOn(form)||!rec.stage||!stageById(form,rec.stage))return '';
+  return `<div class="bd-wf"><span class="bd-who">${esc(whoHas(rec)==='you'?'With you':'With '+whoHas(rec))}</span>${dueChip(dueOf(form,rec),true)}</div>`;
+}
 function whoHas(rec){
   if(rec.assignee)return rec.assignee===store.user?.uid?'you':realName(rec.assignee);
   if(rec.assigneeRole){const n=roleName(rec.assigneeRole);return n?`anyone in ${n}${myRoles().includes(rec.assigneeRole)?' (you’re in it)':''}`:'a role';}
@@ -2780,7 +2799,8 @@ document.addEventListener('pointercancel',endFmDrag);
 export function startApp(){
   booted=false;pendingRoute=null;view={name:'loading'};hist=[];rdraft=fdraft=pdraft=null;
   initReports({fmt,valOf,recTitle,go,renderMain,openLink,linkEnv,starterForms:()=>sidebarForms(),openRecord:(id)=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
-  initLists({ruleImpact,applyRuleChange,fmt,valOf,recTitle,titleFieldOf,parentsOf,formById,recById,recordsOf,renderMain,withFormulas,search:()=>ui.search});
+  initLists({ruleImpact,applyRuleChange,fmt,valOf,recTitle,titleFieldOf,parentsOf,formById,recById,recordsOf,renderMain,withFormulas,search:()=>ui.search,
+    canWork:r=>canWork(r,{...store.me,uid:store.user?.uid}),stageMove:boardStageMove,cardExtra:boardCardExtra,colorOf,today:()=>dayKeyOf(Date.now()),dayOf:t=>dayKeyOf(t),weekStart:()=>getCalendar().weekStart});
   initAudit({fmt,formById,recById,recTitle:(r,f)=>recTitle(r,f),go,renderMain});
   initAttach({fmt,valOf,recTitle,titleFieldOf,formById,recById});
   initRichUI();

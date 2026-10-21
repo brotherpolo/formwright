@@ -2,7 +2,9 @@
 // height, and selecting several records to change, export or delete together.
 // Column and view logic lives in listlogic.js; app.js passes in its formatting helpers.
 import './lists.css';
-import { store, saveListView, deleteListView, deleteRecords, setRecordsValue, attachRecords, setOwner } from './store.js';
+import { store, saveListView, deleteListView, deleteRecords, setRecordsValue, setRecordsValues, attachRecords, setOwner } from './store.js';
+import { bindLayouts, layoutSeg, layoutTools, boardHTML, timelineHTML, afterLayout, onClick as llClick, onChange as llChange, onKey as llKey, closeMenus as llClose } from './listlayouts.js';
+import { cleanLayout } from './layoutlogic.js';
 import { openPickParent } from './attach.js';
 import { attachChange } from './attachlogic.js';
 import { nounOf } from './dashlogic.js';
@@ -122,6 +124,8 @@ export function viewRecords(form) {
   const someOn = !allOn && rows.some((r) => LV.sel.has(r.rec.id));
 
   const dirty = !sameConfig(cfg, view.cfg);
+  const lay = cfg.layout?.kind || 'table';
+  bindLayouts(layEnv(form, shown, cfg));
   const filterable = (form.fields || []).filter((f) => FILTERABLE.has(f.type) && optionsOf(f).length);
   const settable = (form.fields || []).filter((f) => SETTABLE.has(f.type) && optionsOf(f).length);
 
@@ -144,18 +148,37 @@ export function viewRecords(form) {
   <div class="lv" id="lv">
     ${viewsBar(c, view, dirty, admin)}
     <div class="lv-tools">
+      ${layoutSeg(cfg, 'll-wide')}
       <input class="in lv-search" id="search" type="search" placeholder="Search ${esc(form.name.toLowerCase())}" value="${esc(H.search())}" aria-label="Search records">
       ${sortChip(c, shown, cfg)}
       ${LV.sheet ? '' : `<span class="ph-hide lv-tool">${filterable.length ? filterTool(filterable, all, cfg) : ''}</span>
       <span class="ph-hide lv-tool">${columnsTool(c, shown)}</span>
-      ${densitySeg(cfg, 'ph-hide')}`}
+      ${lay === 'table' ? densitySeg(cfg, 'ph-hide') : ''}`}
       <span class="lv-count ph-hide">${rows.length} of ${all.length}</span>
     </div>
-    ${LV.sel.size ? bulkBar(form, selRecs, editable, selHidden, settable) : ''}
-    ${rows.length ? table(form, c, shown, rows, allOn, someOn, cfg) + cards(form, shown, rows, allOn, `${rows.length} of ${all.length}`, cfg.density) : `<div class="panel empty"><p>No ${esc(form.name.toLowerCase())} match ${H.search().trim() ? `“${esc(H.search())}”` : 'these filters'}.</p>${filterCount(cfg) ? '<button class="btn" data-lv="filter-clear">Clear filters</button>' : ''}</div>`}
+    ${lay !== 'table' ? layoutTools(form, cfg) : ''}
+    ${LV.sel.size && lay === 'table' ? bulkBar(form, selRecs, editable, selHidden, settable) : ''}
+    ${rows.length && lay === 'board' ? boardHTML(form, rows, cfg, layEnv(form, shown, cfg)) : rows.length && lay === 'timeline' ? timelineHTML(form, rows, cfg, layEnv(form, shown, cfg)) : rows.length ? table(form, c, shown, rows, allOn, someOn, cfg) + cards(form, shown, rows, allOn, `${rows.length} of ${all.length}`, cfg.density) : `<div class="panel empty"><p>No ${esc(form.name.toLowerCase())} match ${H.search().trim() ? `“${esc(H.search())}”` : 'these filters'}.</p>${filterCount(cfg) ? '<button class="btn" data-lv="filter-clear">Clear filters</button>' : ''}</div>`}
     ${LV.sheet ? sheetHTML(form, c, shown, cfg, filterable, all, view, admin, dirty) : ''}
     ${LV.confirm ? confirmDialog(form, selRecs, editable) : ''}${LV.setAsk && LV.setAsk.form.id === form.id ? setAskDialog() : ''}
   </div>`;
+}
+
+/** What the Board and Timeline need (listlayouts.js). */
+function layEnv(form, shown, cfg) {
+  return {
+    form, cfg, H, admin: isAdmin(store.me), cols: shown,
+    canEdit: (r) => canEditRecord(store.me, r), canWork: (r) => (H.canWork ? H.canWork(r) : false),
+    applySet, stageMove: (rec, f, go) => H.stageMove(rec, f, go), setLayout, repaint,
+    today: H.today(), dayOf: H.dayOf, weekStart: H.weekStart(), formColor: H.colorOf(form), cardExtra: H.cardExtra,
+  };
+}
+/** Change the Board or Timeline settings (or switch layout) on screen; Save view keeps them. */
+function setLayout(patch) {
+  const form = formNow(); if (!form) return;
+  LV.cfg = { ...LV.cfg, layout: cleanLayout({ ...(LV.cfg.layout || {}), ...patch }, form) };
+  if (patch.kind && patch.kind !== 'table') LV.sel = new Set();
+  repaint();
 }
 
 function viewsBar(c, view, dirty, admin) {
@@ -185,7 +208,7 @@ function viewsBar(c, view, dirty, admin) {
     if (items.length) right = `<div class="lv-anchor lv-right"><button type="button" class="btn ghost" data-lv="pop" data-v="view" aria-expanded="${LV.pop === 'view'}" aria-label="View options">View options</button>${LV.pop === 'view' ? `<div class="lv-pop right">${items.join('')}</div>` : ''}</div>`;
   }
   const phone = `<div class="lv-phonebar"><select class="in" data-lvc="viewsel" aria-label="View">${c.views.map((v) => `<option value="${esc(v.id)}"${v.id === view.id ? ' selected' : ''}>${esc(v.name)}${v.builtin ? '' : v.shared ? ' · Everyone' : ' · Just me'}</option>`).join('')}</select>
-    <button type="button" class="btn lv-more" data-lv="sheet" aria-haspopup="dialog" aria-expanded="${LV.sheet}" aria-label="List options: filter, columns, sort, row height${admin ? ', form settings' : ''}">${ICON_MORE}</button></div>`;
+    ${layoutSeg(LV.cfg, 'll-ph')}<button type="button" class="btn lv-more" data-lv="sheet" aria-haspopup="dialog" aria-expanded="${LV.sheet}" aria-label="List options: filter, columns, sort, row height${admin ? ', form settings' : ''}">${ICON_MORE}</button></div>`;
   return `<div class="lv-views">${phone}<div class="lv-tabs" role="tablist" aria-label="Saved views">${tabs}</div>${dirty || LV.naming ? right : `<span class="ph-hide">${right}</span>`}</div>`;
 }
 
@@ -397,6 +420,7 @@ const ICON = {
 
 /** After the list is drawn: mixed state on select-all, focus for the name box and dialog. */
 export function afterRecords() {
+  afterLayout();
   document.querySelectorAll('#lv input[data-mixed]').forEach((i) => { i.indeterminate = true; });
   if (LV.naming && LV.naming.focus) { LV.naming.focus = false; const i = $('#lv-name'); if (i) { i.focus(); i.select(); } }
   if (LV.confirm && LV.focusDel) { LV.focusDel = false; $('#lv-del-go')?.focus(); }
@@ -494,12 +518,24 @@ async function setField(fid, opt) {
   const { form, recs } = selectedEditable(); if (!form || !recs.length) return;
   const f = (form.fields || []).find((x) => x.id === fid); if (!f) return;
   const value = f.type === 'checkbox' ? opt === 'Yes' : opt;
-  // the form's rules: would the new value hide or clear fields on these records?
-  const im = form.rules?.length && H.ruleImpact ? H.ruleImpact(form, recs.map((r) => ({ ...r, values: { ...(r.values || {}), [fid]: value } }))) : { rows: [] };
-  if (im.rows.length) { LV.pop = null; LV.setAsk = { form, recs, f, opt, value, im, busy: false }; repaint(); setTimeout(() => $('#lv-set-go')?.focus(), 0); return; }
-  LV.pop = null; LV.busy = true; repaint();
-  try { await setRecordsValue(recs, fid, value); toast(`Set ${f.label} to ${opt} on ${plural(recs.length, form)}`); }
-  catch (e) { console.error('[formwright] bulk set', e); toast('Couldn’t change those records. Nothing was changed.'); }
+  LV.pop = null;
+  await applySet(form, recs, { [fid]: value }, `Set ${f.label} to ${opt}`, true, `Set field: ${f.label} → ${opt}`);
+}
+
+/**
+ * Change fields on records (Set field, a Board card, a Timeline bar). The form's rules first:
+ * when the change would hide or clear other fields, ask, then do both together.
+ * set: { fieldId: value }; what: "Set Stage to Done", said in the question and the message.
+ */
+export async function applySet(form, recs, set, what, many = false, hist = '') {
+  const im = form.rules?.length && H.ruleImpact ? H.ruleImpact(form, recs.map((r) => ({ ...r, values: { ...(r.values || {}), ...set } }))) : { rows: [] };
+  if (im.rows.length) { LV.setAsk = { form, recs, set, what, many, hist: hist || what, im, busy: false }; repaint(); setTimeout(() => $('#lv-set-go')?.focus(), 0); return; }
+  LV.busy = true; repaint();
+  try {
+    if (Object.keys(set).length === 1) { const [k, v] = Object.entries(set)[0]; await setRecordsValue(recs, k, v); }
+    else await setRecordsValues(recs, set);
+    toast(many ? `${what} on ${plural(recs.length, form)}` : what);
+  } catch (e) { console.error('[formwright] set field', e); toast(e?.code === 'permission-denied' ? 'You can’t change that one.' : 'Couldn’t change that. Nothing was changed.'); }
   LV.busy = false; repaint();
 }
 
@@ -508,7 +544,7 @@ function setAskDialog() {
   const a = LV.setAsk, form = a.form, labels = new Map((form.fields || []).map((x) => [x.id, x.label]));
   const n = [...a.im.perField.values()].reduce((x, y) => x + y, 0);
   return `<div class="lv-scrim" data-lv="set-cancel"><div class="lv-dlg" role="dialog" aria-modal="true" aria-labelledby="lv-set-h">
-    <h2 id="lv-set-h">Set ${esc(a.f.label)} to ${esc(a.opt)} on ${plural(a.recs.length, form)}?</h2>
+    <h2 id="lv-set-h">${esc(a.what)}${a.many ? ` on ${plural(a.recs.length, form)}` : ''}?</h2>
     <p>The form’s rules then hide or clear these, so ${n === 1 ? 'one value is' : `${n} values are`} emptied on ${plural(a.im.rows.length, form)}:</p>
     <ul>${[...a.im.perField].map(([fid, k]) => `<li><b>${esc(labels.get(fid) || 'Field')}</b>: ${k}</li>`).join('')}</ul>
     <div class="lv-facts"><p class="lv-fact">${isAdmin(store.me) ? 'It’s listed in Import history, where you can undo it for 7 days. ' : ''}Every change is in the audit trail.</p></div>
@@ -519,8 +555,8 @@ async function setAskGo() {
   const a = LV.setAsk; if (!a || a.busy) return;
   a.busy = true; repaint();
   const clear = new Map(a.im.rows.map((r) => [r.id, r.clear]));
-  const rows = a.recs.map((r) => ({ id: r.id, set: { [a.f.id]: a.value }, clear: clear.get(r.id) || [] }));
-  try { await H.applyRuleChange(a.form, rows, `Set field: ${a.f.label} → ${a.opt}`); toast(`Set ${a.f.label} to ${a.opt} on ${plural(a.recs.length, a.form)}`); LV.setAsk = null; }
+  const rows = a.recs.map((r) => ({ id: r.id, set: { ...a.set }, clear: clear.get(r.id) || [] }));
+  try { await H.applyRuleChange(a.form, rows, a.hist || a.what); toast(a.many ? `${a.what} on ${plural(a.recs.length, a.form)}` : a.what); LV.setAsk = null; }
   catch (e) { console.error('[formwright] bulk set', e); a.busy = false; toast('Couldn’t change those records. Check your connection and try again.'); }
   repaint();
 }
@@ -617,7 +653,10 @@ export function resetLists() {
 
 /* ---------- events ---------- */
 
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
+  if (document.getElementById('lv') && llClose(e.target) && !e.target.closest('[data-ll]')) { repaint(); return; }
+  const ll = e.target.closest('#lv [data-ll]');
+  if (ll && await llClick(ll.dataset.ll, ll, e)) return;
   const el = e.target.closest('[data-lv]');
   const inLv = e.target.closest('#lv') || e.target.closest('#lv-undo');
   // A click anywhere outside an open menu closes it.
@@ -684,6 +723,7 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('change', (e) => {
   const t = e.target;
+  if (t.dataset && t.dataset.llc && t.closest('#lv') && llChange(t)) return;
   if (!t.dataset || !t.dataset.lvc || !t.closest('#lv')) return;
   const k = t.dataset.lvc;
   const where = t.closest('.lv-cards') ? '#lv .lv-cards ' : '#lv ';
@@ -725,6 +765,7 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (document.getElementById('lv') && llKey(e)) return;
   if (e.target.id === 'lv-name') {
     if (e.key === 'Enter') { e.preventDefault(); saveNamed(); }
     else if (e.key === 'Escape') { LV.naming = null; repaint(); }

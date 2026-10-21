@@ -82,6 +82,8 @@ src/
   problems.js              Reports what goes wrong in the browser to problems/{id}
   problemsview.js          Settings → Problems and backups
   recentdel.js             Recently deleted under a form's list (admins): Restore
+  layoutlogic.js           Board and Timeline: columns, moves, spans, the axis (pure, unit-tested)
+  listlayouts.js           A form's list as a Board or a Timeline, with dragging
   dash.js, dash.css        Reports and dashboards screens (charts reuse reports.css)
   dashlogic.js             Report types, filters, periods, sharing, moving old reports (pure, unit-tested)
   reportlogic.js           Field joins, totals, time buckets and the gap-free grid (pure, unit-tested)
@@ -335,6 +337,18 @@ Each form's list can be set up from the list itself.
 - **Phones:** the list shows cards with tick boxes. The toolbar is compact: **+ New**, a view picker, **⋯**, then search and a **sort chip** (↓ Date ▾: tap the arrow to reverse, ▾ to sort by another field, including Last updated and Created). **⋯** opens a sheet with Filter, Columns, Sort, Row height, the view's actions (rename, share, delete, save changes) and, for administrators, Edit form and Import and templates. When a view has unsaved changes, one line says "Changed from …" with **Reset** and **Save…** (Save… opens the sheet's save choices).
 
 A view only decides how the list looks. It never shows anyone records they couldn't already see.
+
+## Board and Timeline (a form's list)
+
+**Table | Board | Timeline** at the top of any form's list shows the same records (with the view's filters and search) another way. Save view keeps which one, and how it's set, so a team can have a "Pipeline board" next to its usual list.
+
+- **Board:** a column per stage (forms with a workflow) or per option of a dropdown, single-choice or yes/no field (**Columns**), each with its count and, with **Total**, the sum of a number field ("Review · 4 · CA$212,000"). Cards show the title, the view's first few columns, and on a workflow form who has it and when it's due.
+  - **Moving a card:** drag it to another column (mouse or pen), or **⋯ → Move to** (phones, keyboard). A field is set the way **Set field** does it on several records, including the question when the form's rules would clear something. A stage moves the way the record's own buttons do: only that stage's moves (the menu names them, "Build · Win it"), only for whoever has the record or an administrator, a reason asked for when the move needs one, and "Fill in … first" (with **Open it**) when the stage needs fields filled. Administrators can move a record to any stage; it asks why, as on the record. Columns a card can't go to fade while it's dragged.
+  - People who can't change a record can't move its card.
+- **Timeline:** a bar per record from one date to another (**From**, **To**; "One day" for a single date, or **Created on**), coloured by stage or a choice field, in start-date order. **Weeks**, **Months** or **Quarters** across the top; **Today** is marked and the chart opens near it. Names stay on the left while it scrolls, and a record that's out of view says so at the edge ("‹ Ended Jul 1", "Starts Mar 2 ›"). A bar with a start but no end is striped. Records with no start date are counted underneath.
+  - **Changing dates:** drag a bar to move it (both dates move together), or drag either end to change one date (mouse or pen); or click it, or press Enter on it, for **Change dates** (phones too). A date and time keeps its time. Bars that start on **Created on** can't move.
+- The chart and board stay where you'd scrolled them after a change.
+- Logic in `src/layoutlogic.js` (unit-tested); drawn in `src/listlayouts.js`. A saved view keeps it as `listViews/{id}.layout` (`kind, by, sum, start, end, color, zoom`; Table views save as before), which needs the Cadence rules from this update.
 
 ## Automations (administrators)
 

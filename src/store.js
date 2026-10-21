@@ -570,6 +570,16 @@ export async function setRecordsValue(recs, fieldId, value) {
   );
 }
 
+/** Set several fields on records at once (a Timeline bar's two dates): set { fieldId: value }. */
+export async function setRecordsValues(recs, set) {
+  const me = store.user.uid, now = Date.now();
+  await commitOps(recs.map((r) => (b) => {
+    const data = { updatedAt: now, updatedBy: me };
+    Object.entries(set || {}).forEach(([k, v]) => { data['values.' + k] = plain(v); });
+    b.update(doc(db, 'records', r.id), data);
+  }));
+}
+
 /** Replace records' values (rules emptying fields, a bulk set): changes [{ id, values }]. Auto numbers are untouched. */
 export async function rewriteValues(changes) {
   const me = store.user.uid, now = Date.now();
