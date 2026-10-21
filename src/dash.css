@@ -471,3 +471,50 @@ button.db-li:hover{background:var(--accent-soft)}
 .rp-pt.part i{opacity:1;background:var(--surface);box-shadow:0 0 0 2px var(--series)}
 .rp-sofar{position:absolute;margin-right:12px;font:10.5px var(--mono);color:var(--muted);pointer-events:none;white-space:nowrap}
 .rp-xax span.thin{visibility:hidden}
+
+/* Live filters: a tile that filters the reports on the dashboard (dash.js, lflogic.js) */
+.db-lf .rp-wb{padding:12px 14px 10px;display:flex;flex-direction:column;min-height:0}
+.db-lf .rp-wh + .rp-wb{padding-top:4px}
+.lf{display:flex;flex-direction:column;gap:8px;height:100%;min-height:0}
+.lf-h{display:flex;align-items:center;gap:8px;min-width:0}
+.lf-h b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lf-h .grow{flex:1}
+.lf-clear{border:0;background:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--accent);cursor:pointer;padding:2px 0}
+.lf-clear:hover{text-decoration:underline}
+.lf-q{padding:6px 10px;font-size:13px;min-height:0}
+.lf-list{display:flex;flex-direction:column;gap:1px;overflow-y:auto;flex:1 1 auto;min-height:0;scrollbar-width:thin}
+.lf-o{display:flex;align-items:center;gap:9px;padding:6px 8px;border:0;border-radius:8px;background:none;font:inherit;font-size:13.5px;color:var(--fg,var(--ink));text-align:left;cursor:pointer;width:100%;min-height:32px}
+.lf-o:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.lf-o.on{background:color-mix(in srgb,var(--accent) 13%,transparent);font-weight:600}
+.lf-o .bx{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--line-strong);display:grid;place-items:center;font-size:11px;line-height:1;color:#fff;flex:none}
+.lf-o[role="radio"] .bx{border-radius:50%}
+.lf-o.on .bx{background:var(--accent);border-color:var(--accent)}
+.lf-o .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lf-o .n{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;font-weight:400}
+.lf-o.zero{opacity:.45}
+.lf-none{margin:4px 8px;font-size:12.5px;color:var(--muted)}
+.lf-f{font-size:11.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none}
+.lf-ddw{justify-content:center}
+.lf-dd{display:flex;align-items:center;gap:8px;width:100%;border:1px solid var(--line-strong);border-radius:9px;padding:7px 10px;font:inherit;font-size:13.5px;background:var(--surface);color:var(--fg,var(--ink));cursor:pointer;text-align:left;min-height:38px}
+.lf-dd:hover{border-color:var(--accent)}
+.lf-dd .vals{flex:1;min-width:0;display:flex;gap:4px;overflow:hidden;white-space:nowrap}
+.lf-dd .ch{background:color-mix(in srgb,var(--accent) 13%,transparent);border-radius:999px;padding:1px 8px;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.lf-dd .ph{color:var(--muted)}
+.lf-dd .car{color:var(--muted)}
+.lf-empty{justify-content:center;align-items:flex-start}
+.lf-pop{position:fixed;z-index:60;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 50px rgba(15,18,30,.2);padding:8px;display:flex;flex-direction:column;gap:6px;min-height:0}
+.lf-pop .lf-list{max-height:320px}
+.lf-tags{display:flex;gap:4px;flex-wrap:nowrap;overflow:hidden;margin-top:3px;min-width:0}
+.lf-tag{display:inline-block;flex:0 1 auto;padding:0 8px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--fg,var(--ink));font-size:11.5px;font-weight:600;line-height:1.6;vertical-align:1px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lf-ed{position:fixed;right:24px;top:96px;z-index:55;width:min(380px,calc(100vw - 32px));max-height:calc(100dvh - 120px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 60px rgba(15,18,30,.22);padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+.lf-ed h3{margin:0 0 4px;font-size:16px}
+.lf-ed .help{margin:0}
+.lf-also{display:flex;flex-direction:column;gap:2px}
+.lf-arow{display:flex;gap:9px;align-items:flex-start;padding:4px 0;cursor:pointer}
+.lf-arow input{margin-top:3px}
+.lf-arow b{font-weight:600;font-size:13.5px;display:block}
+.lf-arow small{display:block;color:var(--muted);font-size:12px}
+.lf-segs{display:flex;gap:18px;flex-wrap:wrap;margin-top:4px}
+.lf-act{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.db-lf .rp-wh .btn.sm{margin-left:auto}
+@media (max-width:760px){.db-lf .lf-list{max-height:260px}.db-tile.db-lf{min-height:0}.lf-ed{left:16px;right:16px;top:auto;bottom:16px;width:auto}}

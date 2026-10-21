@@ -89,9 +89,14 @@ export function filterReaches(ctx, def, ref) {
   return !!ref && chainOf(ctx, def.form).includes(ref.form);
 }
 
+/** Which of a filter's fields (a live filter can have several, on different forms) reaches a report, or null. */
+export function ffReach(ctx, def, ff) {
+  return ((ff && ff.refs && ff.refs.length ? ff.refs : [ff && ff.ref]) || []).find((r) => r && fieldOf(ctx, r) && filterReaches(ctx, def, r)) || null;
+}
+
 /**
  * Records for a report: its own conditions (AND/OR), then the dashboard's field filters
- * (any ticked value) and period.  extra: { fields: [{ ref, values }], range: { from, to } }
+ * (any ticked value) and period.  extra: { fields: [{ ref, refs?, values }], range: { from, to } }
  */
 export function rowsFor(ctx, def, extra = {}) {
   let list = ctx.records.filter((r) => r.formId === def.form);
@@ -100,8 +105,10 @@ export function rowsFor(ctx, def, extra = {}) {
     list = list.filter((r) => (def.join === 'or' ? conds.some((c) => condHit(ctx, r, c)) : conds.every((c) => condHit(ctx, r, c))));
   }
   (extra.fields || []).forEach((ff) => {
-    if (!ff || !ff.values || !ff.values.length || !filterReaches(ctx, def, ff.ref)) return;
-    list = list.filter((r) => ff.values.some((v) => condHit(ctx, r, { ref: ff.ref, op: 'is', value: v })));
+    if (!ff || !ff.values || !ff.values.length) return;
+    const ref = ffReach(ctx, def, ff);
+    if (!ref) return;
+    list = list.filter((r) => ff.values.some((v) => condHit(ctx, r, { ref, op: 'is', value: v })));
   });
   if (extra.range) {
     const dref = dateRefOf(ctx, def);
@@ -440,7 +447,7 @@ export function usedOn(dashboards, reportId) {
 export const CANVAS_COLS = 24;
 export const GRID = 24;
 export const MIN_W = 3;
-export const minH = (t) => (t && (t.text || t.link) ? 2 : 3); // text blocks and shortcuts can be short
+export const minH = (t) => (t && (t.text || t.link || t.filter) ? 2 : 3); // text blocks, shortcuts and live filters can be short
 const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 const clampTile = (t) => {
   const w = Math.max(MIN_W, Math.min(CANVAS_COLS, Math.round(t.w ?? 12)));
@@ -508,6 +515,7 @@ export function canvasHeight(tiles) { return tiles.reduce((m, t) => Math.max(m, 
 export function tileSize(type) {
   if (type === 'kpi') return { w: 6, h: 4 };
   if (type === 'text') return { w: 8, h: 4 };
+  if (type === 'filter') return { w: 6, h: 6 };
   if (['table', 'grouped', 'pivot'].includes(type)) return { w: 24, h: 10 };
   return { w: 12, h: 8 };
 }

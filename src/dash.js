@@ -17,13 +17,14 @@ import {
 } from './reportlogic.js';
 import {
   TYPES, PERIODS, PERIOD_GROUPS, periodName, chainFields, rowsFor, periodRange, kpiOf, slicesOf, groupRows, pivotOf, sortRecs, normalizeDef,
-  newDef, migrateLegacy, visibleTo, usedOn, filterReaches, dateRefOf, keysOf, groupable as canSplit, groupLabel, BYS,
+  newDef, migrateLegacy, visibleTo, usedOn, filterReaches, ffReach, dateRefOf, keysOf, groupable as canSplit, groupLabel, BYS,
   drillRows, drillLabel, bucketOf, nounOf, shareOf,
   canvasTiles, gridTiles, resolveCanvas, placeTile, canvasHeight, tileSize, readingOrder, CANVAS_COLS, GRID, MIN_W, minH,
 } from './dashlogic.js';
 import { fmtMeasure, fmtShort, measureLabel, cellText, isNumRef } from './dashfmt.js';
 import { headerButton as dmHeader } from './dashmailui.js';
 import { spanName, axisName, yearOf } from './cal.js';
+import { lfRefs, lfExtra, lfLabel, lfValues, lfChoices, lfMatches, lfThrough, dashForms, normalizeFilter, togglePick, fromOldFilters, refKeyOf, reachRef } from './lflogic.js';
 
 let H = { fmt: null, valOf: null, recTitle: null, go: null, openRecord: null, renderMain: null, openLink: null, linkEnv: () => ({}), starterForms: () => [] };
 export function initReports(helpers) { H = { ...H, ...helpers }; }
@@ -35,6 +36,7 @@ const D = {
   sorts: {},                              // table sorts per tile/report
   returnTo: null,                         // dashboard to add a new report to after its first save
   migrating: false, migrated: new Set(),
+  lfEdit: null, lfPop: null, lfQ: {}, lfMoved: new Set(), // live filters: the one being set up, the open dropdown, searches, dashboards whose old filters were turned into live filters
   drill: null,                            // the records behind a clicked bar, slice, cell or number
   hintFor: null, hintOn: false,           // the touch tip under the filters
 };
@@ -117,8 +119,8 @@ function captionOf(c, def, n, extra) {
   const parts = [n.toLocaleString() + ' ' + nounOf(form, n)];
   const conds = (def.conditions || []).filter((x) => x.ref && fieldOf(c, x.ref) && x.value !== '');
   if (conds.length) parts.push(conds.map((x) => refLabel(c, x.ref, def.form) + (x.op === 'not' ? ' is not ' : ' is ') + x.value).join(def.join === 'or' ? ' or ' : ' and '));
-  const blocked = (extra?.fields || []).filter((ff) => ff.values?.length && !filterReaches(c, def, ff.ref));
-  if (blocked.length) parts.push(blocked.map((ff) => (fieldOf(c, ff.ref)?.label || 'filter')).join(', ') + ' filter doesn’t reach this report');
+  const blocked = (extra?.fields || []).filter((ff) => ff.values?.length && !ffReach(c, def, ff));
+  if (blocked.length) parts.push(blocked.map((ff) => (ff.label || fieldOf(c, ff.ref)?.label || 'filter')).join(', ') + ' filter doesn’t reach this report');
   return parts.join(' · ');
 }
 
@@ -333,7 +335,7 @@ function drillHTML(where) {
   const ctxChips = [];
   if (dd.extra?.range && dd.extra.periodKey) ctxChips.push('Dashboard: ' + periodName(dd.extra.periodKey, dd.extra.custom));
   else if (def.type === 'kpi' && def.compare) ctxChips.push('This month');
-  (dd.extra?.fields || []).forEach((ff) => { if (ff.values?.length && filterReaches(c, def, ff.ref)) ctxChips.push(`Dashboard: ${fieldOf(c, ff.ref)?.label || 'filter'} is ${ff.values[0]}`); });
+  (dd.extra?.fields || []).forEach((ff) => { if (ff.values?.length && ffReach(c, def, ff)) ctxChips.push(`Dashboard: ${ff.label || fieldOf(c, ff.ref)?.label || 'filter'} is ${ff.values.join(' or ')}`); });
   const conds = (def.conditions || []).filter((x) => x.ref && fieldOf(c, x.ref) && x.value !== '' && x.value != null);
   if (conds.length) ctxChips.push('Report: ' + conds.map((x) => refLabel(c, x.ref, def.form) + (x.op === 'not' ? ' is not ' : ' is ') + x.value).join(def.join === 'or' ? ' or ' : ' and '));
   const m = def.measure || { fn: 'count' };
@@ -389,6 +391,7 @@ function ringSlice(el, e) {
  * each redraw and when the window changes size; phones (tiles stacked, any height) skip it.
  */
 export function fitTiles() {
+  placeLfPop();
   document.querySelectorAll('#db-cv .db-tile').forEach((tile) => {
     const wb = tile.querySelector('.rp-wb');
     if (!wb) return;
@@ -407,10 +410,10 @@ export function fitTiles() {
       k.style.fontSize = '';
       let fs = parseFloat(getComputedStyle(k).fontSize) || 0;
       const min = Math.max(16, Math.min(fs, 64) * 0.5);
-      while (k.scrollWidth > k.clientWidth + 1 && fs > min) { fs = Math.max(min, fs * 0.92); k.style.fontSize = fs + 'px'; }
+      while (k.scrollWidth > k.clientWidth && fs > min) { fs = Math.max(min, fs * 0.92); k.style.fontSize = fs + 'px'; } // even 1px over shows an ellipsis
     });
     // numbers that still don't fit switch to the short form (CA$91.5k)
-    if ([...wb.querySelectorAll('.rp-kpi, .db-pivot .db-cellb')].some((e) => e.scrollWidth > e.clientWidth + 1)) tile.classList.add('compact');
+    if ([...wb.querySelectorAll('.rp-kpi, .db-pivot .db-cellb')].some((e) => e.scrollWidth > e.clientWidth)) tile.classList.add('compact');
     // a KPI drops its extras, smallest first
     for (const sel of ['.db-kd', '.rp-kpisub']) if (over()) hide(wb.querySelector(sel));
     // bars squeeze together, then the ones that still don't fit go behind "See all"
@@ -773,7 +776,7 @@ export function viewDashboards() {
 export function dashName(id) { return (D.edit && D.did === id ? D.edit.name : dashById(id)?.name) || 'Dashboard'; }
 
 function filterState(x) {
-  const fv = D.fv[x.id] || (D.fv[x.id] = { period: x.filters?.period || 'all', from: x.filters?.from || '', to: x.filters?.to || '', fields: {} });
+  const fv = D.fv[x.id] || (D.fv[x.id] = { period: x.filters?.period || 'all', from: x.filters?.from || '', to: x.filters?.to || '', fields: {}, lf: readPicks(x.id) });
   return fv;
 }
 function extraFor(x, fv) {
@@ -782,7 +785,8 @@ function extraFor(x, fv) {
   return {
     periodKey: fv.period, custom,
     range: range ? { from: range.from, to: range.to } : null,
-    fields: (x.filters?.fields || []).map((ref) => ({ ref, values: fv.fields[refKey(ref)] ? [fv.fields[refKey(ref)]] : [] })),
+    fields: (x.filters?.fields || []).map((ref) => ({ ref, values: fv.fields[refKey(ref)] ? [fv.fields[refKey(ref)]] : [] }))
+      .concat(lfExtra(ctx(), (x.tiles || []).filter((t) => t.filter), fv.lf || {})),
   };
 }
 
@@ -807,6 +811,127 @@ export function thinAxes(root = document) {
 }
 let thinT = 0;
 if (typeof window !== 'undefined') window.addEventListener('resize', () => { clearTimeout(thinT); thinT = setTimeout(() => thinAxes(), 120); });
+
+/* ---------- live filters ----------
+   A tile that filters the reports on the dashboard by a field, for whoever is looking (their
+   picks are kept on this device). lflogic.js works out what reaches what. */
+const LF_KEY = (id) => 'fw.lf.' + id;
+function readPicks(id) { try { const v = JSON.parse(localStorage.getItem(LF_KEY(id)) || '{}'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } }
+function savePicks(id, picks) { try { localStorage.setItem(LF_KEY(id), JSON.stringify(picks || {})); } catch (e) { /* private mode */ } }
+/** The reports on a dashboard, as tiles with their definitions, in reading order. */
+function reportTiles(c, x) { return readingOrder(canvasTiles(x.tiles || [])).filter((t) => t.report && reportById(t.report)).map((t) => ({ t, def: normalizeDef(c, reportById(t.report).def), name: reportById(t.report).name })); }
+const lfRow = (tid, o, on, pick) => `<button type="button" class="lf-o${on ? ' on' : ''}${o.n === 0 && !on ? ' zero' : ''}" role="${pick === 'one' ? 'radio' : 'checkbox'}" aria-checked="${on}" data-d="lfpick" data-v="${esc(tid)}" data-x="${esc(o.v)}"><span class="bx" aria-hidden="true">${on ? '✓' : ''}</span><span class="t">${esc(o.v)}</span>${o.n != null ? `<span class="n">${o.n.toLocaleString()}</span>` : ''}</button>`;
+/** The values for one live filter tile, with counts, and what it reaches. */
+function lfState(c, x, t, extra) {
+  const flt = normalizeFilter(t.filter), fv = filterState(x), picked = (fv.lf || {})[t.id] || [];
+  const reps = reportTiles(c, x), refs = lfRefs(flt);
+  const reached = reps.filter((r) => reachRef(c, r.def, refs));
+  const others = (extra.fields || []).filter((ff) => ff.id !== t.id);
+  const vals = flt.ref && fieldOf(c, flt.ref) ? lfValues(c, flt, { countDef: reached[0]?.def || null, others, range: extra.range, picked }) : [];
+  return { flt, picked, reps, reached, vals, label: lfLabel(c, flt), noun: reached[0] ? (c.formById(reached[0].def.form)?.name || '').toLowerCase() : '' };
+}
+function lfListHTML(tid, st, q) {
+  const t = String(q || '').trim().toLowerCase();
+  const pickedSet = new Set(st.picked);
+  const list = st.vals.filter((o) => !t || o.v.toLowerCase().includes(t));
+  const ordered = [...list.filter((o) => pickedSet.has(o.v)), ...list.filter((o) => !pickedSet.has(o.v))];
+  const shown = ordered.slice(0, 150);
+  return `${shown.map((o) => lfRow(tid, o, pickedSet.has(o.v), st.flt.pick)).join('') || `<p class="lf-none">${t ? 'Nothing matches.' : 'No values yet.'}</p>`}${ordered.length > shown.length ? `<p class="lf-none">${ordered.length - shown.length} more: search to find them.</p>` : ''}`;
+}
+function lfTileHTML(c, x, t, extra, edit) {
+  const st = lfState(c, x, t, extra);
+  const grip = `<button type="button" class="db-grip" data-cv="move" data-v="${esc(t.id)}" aria-label="Move the live filter. Arrow keys move it; Shift and arrow keys resize it." title="Drag to move"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="8" cy="6" r="1.8"/><circle cx="16" cy="6" r="1.8"/><circle cx="8" cy="12" r="1.8"/><circle cx="16" cy="12" r="1.8"/><circle cx="8" cy="18" r="1.8"/><circle cx="16" cy="18" r="1.8"/></svg></button>`;
+  const rz = edit ? `<button type="button" class="db-rz" data-cv="rz" data-v="${esc(t.id)}" aria-label="Resize the live filter, now ${t.w} columns by ${t.h} rows" title="Drag to resize"></button><span class="db-badge" hidden></span>` : '';
+  const head = edit ? `<div class="rp-wh">${grip}<div class="rp-wt"><div class="rp-cap">Live filter${st.flt.ref ? ': ' + esc(st.label) : ''}</div></div><button type="button" class="btn sm" data-d="lfset" data-v="${esc(t.id)}">Settings</button><button type="button" class="ibtn" data-d="tdel" data-v="${esc(t.id)}" aria-label="Remove this live filter">✕</button></div>` : '';
+  let body;
+  if (!st.flt.ref || !fieldOf(c, st.flt.ref)) body = `<div class="lf lf-empty"><b>Live filter</b><p class="help">${edit ? 'Choose a field in <b>Settings</b>.' : 'The field this filtered by was removed.'}</p></div>`;
+  else {
+    const clear = st.picked.length ? `<button type="button" class="lf-clear" data-d="lfclear" data-v="${esc(t.id)}">Clear</button>` : '';
+    const foot = st.reps.length ? `<div class="lf-f">Filters ${st.reached.length === st.reps.length ? (st.reps.length === 1 ? 'the report' : `all ${st.reps.length} reports`) : `${st.reached.length} of ${st.reps.length} reports`}${st.noun ? ` · counts are ${esc(st.noun)}` : ''}</div>` : '';
+    if (st.flt.show === 'dropdown') {
+      const txt = st.picked.length ? st.picked.map((v) => `<span class="ch">${esc(v)}</span>`).join('') : `<span class="ph">All</span>`;
+      body = `<div class="lf lf-ddw"><div class="lf-h"><b id="lf-h-${esc(t.id)}">${esc(st.label)}</b><span class="grow"></span>${clear}</div><button type="button" class="lf-dd" data-d="lfpop" data-v="${esc(t.id)}" aria-haspopup="true" aria-expanded="${D.lfPop === t.id}" aria-labelledby="lf-h-${esc(t.id)}"><span class="vals">${txt}</span><span class="car" aria-hidden="true">▾</span></button></div>`;
+    } else {
+      const q = D.lfQ[t.id] || '';
+      body = `<div class="lf"><div class="lf-h"><b id="lf-h-${esc(t.id)}">${esc(st.label)}</b><span class="grow"></span>${clear}</div>${st.vals.length > 7 ? `<input type="search" class="in lf-q" data-lfq="${esc(t.id)}" placeholder="Search ${st.vals.length}" aria-label="Search ${esc(st.label)}" value="${esc(q)}">` : ''}<div class="lf-list" role="group" aria-labelledby="lf-h-${esc(t.id)}">${lfListHTML(t.id, st, q)}</div>${foot}</div>`;
+    }
+  }
+  return `<article class="rp-w db-tile db-lf" data-tile="${esc(t.id)}" style="${tileBox(t)}" aria-label="Live filter${st.flt.ref ? ': ' + esc(st.label) : ''}">${head}<div class="rp-wb">${body}</div>${rz}</article>`;
+}
+/** The open dropdown of a live filter: a list under its button. */
+function lfPopHTML(c, x, extra) {
+  const t = (x.tiles || []).find((y) => y.id === D.lfPop && y.filter);
+  if (!t) return '';
+  const st = lfState(c, x, t, extra), q = D.lfQ[t.id] || '';
+  return `<div class="lf-pop" role="dialog" aria-label="${esc(st.label)}" data-lfpop="${esc(t.id)}">${st.vals.length > 7 ? `<input type="search" class="in lf-q" data-lfq="${esc(t.id)}" placeholder="Search ${st.vals.length}" aria-label="Search ${esc(st.label)}" value="${esc(q)}">` : ''}<div class="lf-list">${lfListHTML(t.id, st, q)}</div></div>`;
+}
+// a live filter's dropdown closes on a click elsewhere or Escape; its settings close on Escape
+document.addEventListener('click', (e) => {
+  if (D.lfPop && !e.target.closest?.('.lf-pop, [data-d="lfpop"]')) { D.lfPop = null; repaint(); }
+}, true);
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (D.lfPop) { const id = D.lfPop; D.lfPop = null; e.stopPropagation(); repaint(() => document.querySelector(`[data-d="lfpop"][data-v="${CSS.escape(id)}"]`)?.focus()); }
+  else if (D.lfEdit && document.querySelector('.lf-ed')) { D.lfEdit = null; e.stopPropagation(); repaint(); }
+});
+window.addEventListener('resize', () => placeLfPop());
+
+/** Put the open dropdown under its button (after each redraw). */
+export function placeLfPop() {
+  const pop = document.querySelector('.lf-pop'); if (!pop) return;
+  const btn = document.querySelector(`[data-d="lfpop"][data-v="${CSS.escape(pop.dataset.lfpop)}"]`);
+  if (!btn) { pop.remove(); return; }
+  const r = btn.getBoundingClientRect(), w = Math.max(r.width, 240), left = Math.min(r.left, window.innerWidth - w - 8);
+  const below = window.innerHeight - r.bottom - 12, up = below < 220 && r.top > below;
+  Object.assign(pop.style, { left: Math.max(8, left) + 'px', width: w + 'px', top: up ? 'auto' : r.bottom + 4 + 'px', bottom: up ? window.innerHeight - r.top + 4 + 'px' : 'auto', maxHeight: Math.max(160, (up ? r.top : below) - 8) + 'px' });
+}
+/** Live filter settings (while editing): the field, what else it filters, how it shows. */
+function lfEditHTML(c, x) {
+  const t = (x.tiles || []).find((y) => y.id === D.lfEdit && y.filter);
+  if (!t) return '';
+  const flt = normalizeFilter(t.filter);
+  const reps = reportTiles(c, x);
+  const forms = reps.length ? dashForms(c, reps.map((r) => r.def)) : c.forms.map((f) => f.id);
+  const choices = lfChoices(c, forms);
+  const groups = forms.map((fid) => [c.formById(fid), choices.filter((y) => y.ref.form === fid)]).filter(([f, l]) => f && l.length);
+  const cur = refKeyOf(flt.ref);
+  const matches = flt.ref ? lfMatches(c, flt.ref, forms) : [];
+  const also = new Set(flt.also.map(refKeyOf));
+  const through = flt.ref ? lfThrough(c, flt.ref, forms).map((fid) => c.formById(fid)?.name).filter(Boolean) : [];
+  const why = { link: 'Links to the same records.', name: 'Same name and type on another form.', kind: 'Same kind of field, another name. Tick to filter it too.' };
+  const seg = (d, v, l, on) => `<button type="button" class="${on ? 'on' : ''}" aria-pressed="${on}" data-d="${d}" data-v="${v}">${l}</button>`;
+  return `<aside class="lf-ed" role="dialog" aria-label="Live filter settings">
+    <h3>Live filter</h3>
+    <label class="db-lab" for="lf-ref">Filter by</label>
+    <select class="in" id="lf-ref" data-dv="lf-ref"><option value="">Choose a field…</option>${groups.map(([f, l]) => `<optgroup label="${esc(f.name)}">${l.map((y) => `<option value="${esc(refKeyOf(y.ref))}"${refKeyOf(y.ref) === cur ? ' selected' : ''}>${esc(y.f.label || 'Untitled field')}</option>`).join('')}</optgroup>`).join('')}</select>
+    ${flt.ref ? `<label class="db-lab" for="lf-label">Name</label><input class="in" id="lf-label" data-dv="lf-label" maxlength="60" placeholder="${esc(fieldOf(c, flt.ref)?.label || '')}" value="${esc(t.filter.label || '')}">
+    ${through.length ? `<p class="help">Also filters reports on ${esc(through.join(', '))}, through their link to ${esc(c.formById(flt.ref.form)?.name || '')}.</p>` : ''}
+    ${matches.length ? `<div class="db-lab">Also filter</div><div class="lf-also">${matches.map((m) => `<label class="lf-arow"><input type="checkbox" data-dv="lf-also" value="${esc(refKeyOf(m.ref))}"${also.has(refKeyOf(m.ref)) ? ' checked' : ''}><span><b>${esc(m.form.name)} › ${esc(m.f.label || 'Untitled field')}</b><small>${why[m.why]}</small></span></label>`).join('')}</div>` : ''}
+    <div class="lf-segs"><div><div class="db-lab">Show as</div><div class="db-seg">${seg('lfshow', 'list', 'List', flt.show === 'list')}${seg('lfshow', 'dropdown', 'Dropdown', flt.show === 'dropdown')}</div></div>
+    <div><div class="db-lab">Pick</div><div class="db-seg">${seg('lfmode', 'one', 'One', flt.pick === 'one')}${seg('lfmode', 'many', 'Several', flt.pick === 'many')}</div></div></div>` : ''}
+    <div class="lf-act"><button type="button" class="btn ghost" data-d="tdel" data-v="${esc(t.id)}">Remove</button><button type="button" class="btn primary" data-d="lfdone">Done</button></div>
+  </aside>`;
+}
+/** "Customer: Acme" on each report a live filter reaches with something picked. */
+function lfTags(c, def, extra) {
+  return (extra?.fields || []).filter((ff) => ff.id && ff.values?.length && ffReach(c, def, ff)).map((ff) => `<span class="lf-tag">${esc(ff.label)}: ${esc(ff.values.length > 2 ? ff.values.slice(0, 2).join(', ') + ' +' + (ff.values.length - 2) : ff.values.join(', '))}</span>`).join('');
+}
+/** Dashboards with the old "+ Filter by…" dropdowns: turn them into live filter tiles, once, keeping picks. */
+function moveOldFilters(x) {
+  if (D.lfMoved.has(x.id)) return;
+  D.lfMoved.add(x.id);
+  const old = (x.filters?.fields || []).filter((r) => r && r.form && r.id);
+  if (!old.length) return;
+  setTimeout(async () => {
+    const fv = filterState(x);
+    const made = fromOldFilters(old);
+    const tiles = gridTiles(x.tiles || [], x.filters).map((t) => ({ ...t, y: t.y + 2 }));
+    made.forEach((m) => { const v = fv.fields[refKey(m.filter.ref)]; if (v) fv.lf[m.id] = [v]; });
+    savePicks(x.id, fv.lf);
+    try { await saveDashboard(x.id, { ...dashData(x), tiles: [...made, ...tiles], filters: { ...clone(x.filters || {}), fields: [], grid: GRID }, updatedAt: Date.now() }); toast('This dashboard’s filters are now Live filters, at the top. Move or change them in Edit dashboard.'); }
+    catch (e) { console.warn('[formwright] live filters', e?.code || e); }
+  }, 0);
+}
 
 /** The dashboard's period: a list grouped by days, weeks, months, quarters and years, the dates it
  *  covers, and From and To for a custom range. */
@@ -850,16 +975,7 @@ export function viewDashboard(id) {
     const k = refKey(ref);
     return `<label class="db-ff"><span>${esc(refLabel(c, ref, ''))}</span><select class="in" data-df="${esc(k)}"><option value="">All</option>${valuesFor(c, ref).map((v) => opt(v, v, fv.fields[k] || '')).join('')}</select>${edit ? `<button type="button" class="ibtn" data-d="ffdel" data-v="${esc(k)}" aria-label="Remove this filter">✕</button>` : ''}</label>`;
   }).join('');
-  let addFilter = '';
-  if (edit) {
-    const forms = new Set();
-    (x.tiles || []).forEach((t) => { const r = reportById(t.report); if (r) chainOf(c, r.def.form).forEach((fid) => forms.add(fid)); });
-    const cands = [];
-    forms.forEach((fid) => { const form = c.formById(fid); if (form) chainFields(c, fid).filter((y) => y.ref.form === fid && (y.kind === 'group' || y.kind === 'key') && y.f.type !== 'color').forEach((y) => cands.push(y)); });
-    const have = new Set((x.filters?.fields || []).map(refKey));
-    const left = cands.filter((y) => !have.has(refKey(y.ref)));
-    if (left.length) addFilter = `<select class="in db-addf" data-dv="addfilter" aria-label="Add a filter"><option value="">+ Filter by…</option>${left.map((y) => opt(refKey(y.ref), y.form.name + ' › ' + y.f.label, '')).join('')}</select>`;
-  }
+  if (!edit && may && src && (src.filters?.fields || []).length) moveOldFilters(src); // the old "+ Filter by…" dropdowns become live filters
   return `<div id="dbx" class="db-dash rp${edit ? ' can-edit' : ''}">
   <div class="db-head">
     ${edit ? `<input id="db-name" class="db-name" value="${esc(x.name)}" aria-label="Dashboard name" data-dv="dname">` : `<h1 class="db-title">${esc(x.name)}</h1>`}
@@ -869,7 +985,7 @@ export function viewDashboard(id) {
     ${x.shared ? `<span class="chip">Shared${(x.groups || []).length ? ' with ' + (x.groups || []).map((g) => esc(store.groups.find((y) => y.id === g)?.name || 'a group')).join(', ') : ''}</span>` : ''}
     <span class="grow"></span>
     ${edit ? `${D.confirm === 'deldash' ? `<button class="btn danger armed" data-d="deldash">Tap again to delete</button>` : `<button class="btn danger" data-d="deldash">Delete</button>`}
-      <button class="btn" data-d="addtext">+ Text block</button><button class="btn${D.picker === 'links' ? ' on' : ''}" data-d="linkpicker">+ Shortcut</button><button class="btn${D.picker === true ? ' on' : ''}" data-d="picker">+ Add report</button>
+      <button class="btn" data-d="addlf">+ Live filter</button><button class="btn" data-d="addtext">+ Text block</button><button class="btn${D.picker === 'links' ? ' on' : ''}" data-d="linkpicker">+ Shortcut</button><button class="btn${D.picker === true ? ' on' : ''}" data-d="picker">+ Add report</button>
       <button class="btn ghost" data-d="canceledit">Cancel</button><button class="btn primary" data-d="savedash">Save dashboard</button>`
       : may ? `<button class="btn" data-d="editdash">Edit dashboard</button>` : `<span class="chip">View only</span>`}
   </div>
@@ -877,12 +993,13 @@ export function viewDashboard(id) {
   ${edit && D.picker === 'links' ? linkPickerHTML(x) : edit && D.picker ? pickerHTML(x) : ''}
   <div class="db-filters" role="group" aria-label="Dashboard filters">
     <label class="db-lab" for="db-period">Period</label>${periodPicker(fv)}
-    ${fieldFilters}${addFilter}
+    ${fieldFilters}
     ${edit ? `<span class="help">The period you pick here is saved as the dashboard’s starting period.</span>` : ''}
   </div>
   ${edit ? `<div class="db-cvbar"><label class="switch db-float"><input type="checkbox" data-dv="float"${floatUp ? ' checked' : ''}><span class="tr"></span><span>Float items up</span></label><p class="help db-cvhelp">Drag an item by its handle to move it, or drag its bottom-right corner to resize it. Each dot is one step; 24 across. Items in the way move down. With a handle focused, arrow keys move the item and Shift + arrow keys resize it.</p></div>` : ''}
   ${!edit && placed.length ? holdHint(x.id) : ''}
   ${placed.length ? `<div class="db-cv${edit ? ' edit' : ''}${edit ? '' : ' can-drill'}" id="db-cv" data-view="${edit ? '' : esc(x.id + '|' + JSON.stringify(fv))}" style="--rows:${cvRows}"><div class="db-ghost" id="db-ghost" hidden></div>${tiles}</div>` : `<div class="panel empty"><h2>Nothing here yet</h2><p>${may ? 'Add saved reports, shortcuts or a text block.' : 'The owner hasn’t added anything yet.'}</p>${may && !edit ? '<button class="btn primary" data-d="editdash">Add reports</button>' : ''}</div>`}
+  ${D.lfPop ? lfPopHTML(c, x, extra) : ''}${edit && D.lfEdit ? lfEditHTML(c, x) : ''}
   </div>${edit ? '' : drillHTML('d:' + x.id)}`;
 }
 
@@ -968,6 +1085,7 @@ function setBox(el, t) { el.style.setProperty('--x', t.x); el.style.setProperty(
 
 function tileHTML(c, x, t, extra, edit) {
   if (t.link) return linkTileHTML(x, t, edit);
+  if (t.filter) return lfTileHTML(c, x, t, extra, edit);
   const label = t.text ? t.text.title || 'Text block' : reportById(t.report)?.name || 'Report';
   const grip = edit ? `<button type="button" class="db-grip" data-cv="move" data-v="${esc(t.id)}" aria-label="Move ${esc(label)}. Arrow keys move it; Shift and arrow keys resize it." title="Drag to move"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="8" cy="6" r="1.8"/><circle cx="16" cy="6" r="1.8"/><circle cx="8" cy="12" r="1.8"/><circle cx="16" cy="12" r="1.8"/><circle cx="8" cy="18" r="1.8"/><circle cx="16" cy="18" r="1.8"/></svg></button>` : '';
   const del = edit ? `<button type="button" class="ibtn" data-d="tdel" data-v="${esc(t.id)}" aria-label="Remove ${esc(label)} from this dashboard">✕</button>` : '';
@@ -984,10 +1102,12 @@ function tileHTML(c, x, t, extra, edit) {
   const { html, caption } = bodyHTML(c, def, extra, 't:' + x.id + ':' + t.id);
   const others = usedOn(dashesVisible(), r.id).filter((d) => d.id !== x.id);
   return `${open.replace('db-tile', 'db-tile db-t-' + def.type).replace('<article ', `<article data-k="${esc('t:' + x.id + ':' + t.id)}" `)}
-    <div class="rp-wh">${grip}<div class="rp-wt"><h3>${esc(r.name)}</h3><div class="rp-cap">${esc(caption)}${others.length ? ' · also on ' + others.map((d) => esc(d.name)).join(', ') : ''}</div></div>${edit ? del : `<button type="button" class="db-link" data-d="openrep" data-v="${esc(r.id)}">Open</button>`}</div>
+    <div class="rp-wh">${grip}<div class="rp-wt"><h3>${esc(r.name)}</h3><div class="rp-cap">${esc(caption)}${others.length ? ' · also on ' + others.map((d) => esc(d.name)).join(', ') : ''}</div>${(() => { const tg = lfTags(c, def, extra); return tg ? `<div class="lf-tags">${tg}</div>` : ''; })()}</div>${edit ? del : `<button type="button" class="db-link" data-d="openrep" data-v="${esc(r.id)}">Open</button>`}</div>
     <div class="rp-wb">${html}</div>${rz}</article>`;
 }
 
+/** Change the live filter being set up. */
+function lfChange(fn) { editTiles((tiles) => { const tile = tiles.find((y) => y.id === D.lfEdit && y.filter); if (!tile) return; const f = { ...normalizeFilter(tile.filter), ...(tile.filter.label ? { label: tile.filter.label } : {}) }; fn(f, tile); tile.filter = normalizeFilter(f); }); }
 function editTiles(fn) { if (!D.edit) return; const tiles = clone(D.edit.tiles || []); fn(tiles); D.edit.tiles = tiles; D.edit.dirty = true; repaint(); }
 
 async function saveEdit() {
@@ -1101,8 +1221,26 @@ document.addEventListener('click', async (e) => {
     }
     case 'pick': await addTile(D.did, v); break;
     case 'addtext': await addTile(D.did, null, true); break;
+    case 'addlf': { if (!D.edit) return; const tiles = canvasTiles(D.edit.tiles || []); const size = tileSize('filter'); const id = uid('lf'); tiles.push({ id, filter: { ref: null, also: [], show: 'list', pick: 'many' }, ...size, ...placeTile(tiles, size.w, size.h) }); D.edit.tiles = tiles; D.edit.dirty = true; D.lfEdit = id; D.picker = false; repaint(() => document.getElementById('lf-ref')?.focus()); break; }
+    case 'lfset': D.lfEdit = v; repaint(() => document.getElementById('lf-ref')?.focus()); break;
+    case 'lfdone': D.lfEdit = null; repaint(); break;
+    case 'lfshow': lfChange((f, tile) => { f.show = v === 'dropdown' ? 'dropdown' : 'list'; tile.h = f.show === 'dropdown' ? 2 : Math.max(tile.h, 6); }); if (D.edit) D.edit.tiles = resolveCanvas(canvasTiles(D.edit.tiles), D.lfEdit, !!D.edit.filters?.floatUp); break; // a dropdown needs two rows; a list, room for its values
+    case 'lfmode': lfChange((f) => { f.pick = v === 'one' ? 'one' : 'many'; }); break;
+    case 'lfpick': case 'lfclear': {
+      const x = D.edit && D.did ? D.edit : dashById(D.did); if (!x) return;
+      const t = (x.tiles || []).find((y) => y.id === v && y.filter); if (!t) return;
+      const fv = filterState(x); fv.lf = { ...(fv.lf || {}) };
+      fv.lf[v] = a === 'lfclear' ? [] : togglePick(fv.lf[v] || [], el.dataset.x, normalizeFilter(t.filter).pick);
+      if (!fv.lf[v].length) delete fv.lf[v];
+      savePicks(x.id, fv.lf);
+      if (a === 'lfpick' && normalizeFilter(t.filter).pick === 'one') D.lfPop = null;
+      const keep = a === 'lfpick' ? el.dataset.x : null, inPop = !!el.closest('.lf-pop');
+      repaint(() => { if (keep != null) document.querySelector(`${inPop ? '.lf-pop ' : `.db-tile[data-tile="${CSS.escape(v)}"] `}[data-d="lfpick"][data-x="${CSS.escape(keep)}"]`)?.focus({ preventScroll: true }); });
+      break;
+    }
+    case 'lfpop': D.lfPop = D.lfPop === v ? null : v; repaint(() => document.querySelector('.lf-pop .lf-q, .lf-pop .lf-o')?.focus()); break;
     case 'newrepfor': D.returnTo = D.did; if (D.edit?.dirty) await saveEdit(); D.edit = null; startNewReport(); break;
-    case 'tdel': if (D.edit) { D.edit.tiles = resolveCanvas(canvasTiles(D.edit.tiles).filter((t) => t.id !== v), null, !!D.edit.filters?.floatUp); D.edit.dirty = true; repaint(); } break;
+    case 'tdel': if (D.lfEdit === v) D.lfEdit = null; if (D.edit) { D.edit.tiles = resolveCanvas(canvasTiles(D.edit.tiles).filter((t) => t.id !== v), null, !!D.edit.filters?.floatUp); D.edit.dirty = true; repaint(); } break;
     case 'ffdel': { if (!D.edit) return; D.edit.filters = { ...(D.edit.filters || {}), fields: (D.edit.filters?.fields || []).filter((r) => refKey(r) !== v) }; D.edit.dirty = true; const fv = D.fv[D.did]; if (fv) delete fv.fields[v]; repaint(); break; }
     case 'period': { const x = D.edit && D.did ? D.edit : dashById(D.did); if (!x) return; filterState(x).period = v; if (D.edit) D.edit.dirty = true; repaint(); break; }
   }
@@ -1151,11 +1289,20 @@ document.addEventListener('change', (e) => {
       repaint(() => { if (k === 'period' && t.value === 'custom' && !fv.from) document.querySelector('[data-dv="pfrom"]')?.focus(); });
       break;
     }
+    case 'lf-ref': lfChange((f, tile) => { const r = t.value ? { form: t.value.split('.')[0], id: t.value.split('.').slice(1).join('.') } : null; f.ref = r; delete f.label; const c = ctx(); const reps = reportTiles(c, D.edit); f.also = r ? lfMatches(c, r, reps.length ? dashForms(c, reps.map((y) => y.def)) : c.forms.map((y) => y.id)).filter((m) => m.on).map((m) => m.ref) : []; const fv = filterState(D.edit); if (fv.lf) { delete fv.lf[tile.id]; savePicks(D.edit.id, fv.lf); } }); break;
+    case 'lf-label': lfChange((f) => { const l = t.value.trim().slice(0, 60); if (l) f.label = l; else delete f.label; }); break;
+    case 'lf-also': lfChange((f) => { const k = t.value, r = { form: k.split('.')[0], id: k.split('.').slice(1).join('.') }; const has = (f.also || []).some((y) => refKeyOf(y) === k); f.also = t.checked ? (has ? f.also : [...(f.also || []), r]) : (f.also || []).filter((y) => refKeyOf(y) !== k); }); break;
     case 'addfilter': if (D.edit && t.value) { D.edit.filters = { ...(D.edit.filters || { period: 'all' }), fields: (D.edit.filters?.fields || []).concat(refOf(t.value)) }; D.edit.dirty = true; repaint(); } break;
   }
 });
 
 document.addEventListener('input', (e) => {
+  if (e.target.dataset && e.target.dataset.lfq != null) { // a live filter's search: redraw, keeping the cursor
+    const id = e.target.dataset.lfq, at = e.target.selectionStart, inPop = !!e.target.closest('.lf-pop');
+    D.lfQ[id] = e.target.value;
+    repaint(() => { const q = document.querySelector(`${inPop ? '.lf-pop' : `.db-tile[data-tile="${CSS.escape(id)}"]`} [data-lfq]`); if (q) { q.focus({ preventScroll: true }); try { q.setSelectionRange(at, at); } catch (err) { /* search inputs */ } } });
+    return;
+  }
   if (e.target.id === 'dd-q' && D.drill) {
     D.drill.q = e.target.value; D.drill.shown = DD_PAGE;
     const at = e.target.selectionStart;

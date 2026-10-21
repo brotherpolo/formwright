@@ -130,7 +130,7 @@ export function reportBlock(c, def, extra, now) {
 /**
  * The whole email for a dashboard: { subject, html, text }.
  * dash: the dashboard; reports: id → saved report; opts: { now, link, schedule, company }.
- * Numbers use the dashboard's saved period; its field filters show everything (no one has picked a value).
+ * Numbers use the dashboard's saved period; live filters show everything (picks are each viewer's own).
  */
 export function dashEmail(c, dash, reports, { now = Date.now(), link = '', schedule = null, company = '' } = {}) {
   const periodKey = dash.filters?.period || 'all';
