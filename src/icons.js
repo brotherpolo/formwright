@@ -3,7 +3,9 @@
 // the form (form.icon), so nothing else ever loads the icon set (iconset.js, picker only).
 // Pure functions, unit-tested.
 //
-// form.badge = 'icon' | 'letter' (the default); form.icon = { set: 'lucide', name, shapes: [[tag, attrs]] }
+// form.badge = 'icon' | 'letter' (the default); form.icon = { set: 'lucide', name, shapes: [{ t: tag, ...attrs }] }
+// (saved as a list of objects: Firestore can't store a list inside a list; the icon set itself
+// uses [tag, attrs], and both are read)
 
 const TAGS = new Set(['path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'ellipse']);
 const ATTRS = new Set(['d', 'cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'width', 'height', 'x1', 'y1', 'x2', 'y2', 'points']);
@@ -11,15 +13,16 @@ const safe = (v) => String(v).replace(/[^0-9a-zA-Z .,\-+]/g, ''); // numbers, pa
 
 /** Tidy shapes from the icon set or a saved form: known shapes and attributes only, at most 40 shapes. */
 export function cleanShapes(shapes) {
-  return (Array.isArray(shapes) ? shapes : []).filter((s) => Array.isArray(s) && TAGS.has(s[0]) && s[1] && typeof s[1] === 'object').slice(0, 40)
-    .map(([t, a]) => [t, Object.fromEntries(Object.entries(a).filter(([k, v]) => ATTRS.has(k) && v != null && String(v).length <= 4000).map(([k, v]) => [k, safe(v)]))]);
+  return (Array.isArray(shapes) ? shapes : []).map((s) => (Array.isArray(s) ? { ...(s[1] && typeof s[1] === 'object' ? s[1] : {}), t: s[0] } : s))
+    .filter((s) => s && typeof s === 'object' && TAGS.has(s.t)).slice(0, 40)
+    .map((s) => ({ t: s.t, ...Object.fromEntries(Object.entries(s).filter(([k, v]) => ATTRS.has(k) && v != null && String(v).length <= 4000).map(([k, v]) => [k, safe(v)])) }));
 }
 
 /** The <svg> for an icon (24 × 24, 2px rounded outline in the current colour). */
 export function iconSvg(icon, size = 16, cls = '') {
   const shapes = cleanShapes(icon && icon.shapes);
   if (!shapes.length) return '';
-  return `<svg${cls ? ` class="${cls}"` : ''} width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${shapes.map(([t, a]) => `<${t}${Object.entries(a).map(([k, v]) => ` ${k}="${v}"`).join('')}/>`).join('')}</svg>`;
+  return `<svg${cls ? ` class="${cls}"` : ''} width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${shapes.map(({ t, ...a }) => `<${t}${Object.entries(a).map(([k, v]) => ` ${k}="${v}"`).join('')}/>`).join('')}</svg>`;
 }
 
 /** Does a form show an icon? */

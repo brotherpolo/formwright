@@ -28,9 +28,18 @@ test('a chosen icon is copied onto the form, and drawn in the badge’s colour',
 test('only plain shapes are drawn: nothing a saved form could use to run code', () => {
   const bad = [['script', { d: 'x' }], ['path', { d: 'M0 0"/><script>alert(1)</script>', onload: 'alert(1)', style: 'x' }], ['image', { href: 'javascript:x' }], 'nope'];
   const c = cleanShapes(bad);
-  assert.deepEqual(c, [['path', { d: 'M0 0scriptalert1script' }]]);
+  assert.deepEqual(c, [{ t: 'path', d: 'M0 0scriptalert1script' }]);
+  assert.deepEqual(cleanShapes([{ t: 'script', d: 'x' }, { t: 'path', d: 'M1 1', onclick: 'x' }]), [{ t: 'path', d: 'M1 1' }], 'saved shapes are tidied too');
   assert.doesNotMatch(iconSvg({ shapes: bad }), /<script|onload|javascript|style=/);
   assert.equal(iconSvg({ shapes: [] }), '');
+});
+
+test('what’s saved can go into Firestore: no list inside a list, for every icon', () => {
+  const nested = (v) => Array.isArray(v) ? v.some((x) => Array.isArray(x) || nested(x)) : v && typeof v === 'object' ? Object.values(v).some(nested) : false;
+  Object.keys(set).forEach((n) => assert.equal(nested(iconFor(n, set)), false, n));
+  const ic = iconFor('receipt', set);
+  assert.equal(iconSvg({ shapes: ic.shapes }, 16), iconSvg({ shapes: set.receipt }, 16), 'saved and set shapes draw the same');
+  assert.deepEqual(iconFor('receipt', set), { ...ic, shapes: cleanShapes(ic.shapes) }, 'reading a saved icon back changes nothing');
 });
 
 test('search: business words first, then names', () => {
