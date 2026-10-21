@@ -107,7 +107,7 @@
 .db-donut{display:flex;flex-wrap:wrap;align-items:center;gap:18px}
 .db-ring{width:150px;height:150px;border-radius:50%;position:relative;flex:none}
 .db-ring::after{content:"";position:absolute;inset:20%;border-radius:50%;background:var(--surface)}
-.db-ringc{position:absolute;inset:0;display:grid;place-items:center;align-content:center;z-index:1;font:600 16px/1.2 var(--display);text-align:center}
+.db-ringc{position:absolute;inset:21%;display:grid;place-items:center;align-content:center;z-index:1;font:600 16px/1.2 var(--display);text-align:center;overflow:hidden;border-radius:50%;overflow-wrap:anywhere}
 .db-ringc small{display:block;font:12px var(--body);color:var(--muted)}
 .db-leg{display:flex;flex-direction:column;gap:6px;flex:1;min-width:180px}
 .db-li{display:grid;grid-template-columns:12px minmax(0,1fr) auto 40px;gap:8px;align-items:center;font-size:13px}
@@ -190,6 +190,9 @@ button.db-li:hover{background:var(--accent-soft)}
 .db-tile button.rp-kpi{font-size:clamp(1.05rem,min(15cqw,40cqh),2.4rem);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .db-tile .rp-kpisub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @container (max-height:96px){.db-tile .db-kd{display:none}}
+.db-tile .db-kd{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;margin-top:clamp(2px,2.5cqh,10px);font-size:clamp(11px,4.5cqh,13px)}
+@container (max-width:260px){.db-tile .db-kp{display:none}}
+.db-tile .rp-ln{min-height:0}
 @container (max-height:56px){.db-tile .rp-kpisub{display:none}}
 .db-tile .db-donut{height:100%;flex-wrap:nowrap;gap:14px;align-items:flex-start}
 .db-tile .db-ring{width:min(150px,100cqh,42cqw);height:min(150px,100cqh,42cqw);position:relative;top:auto}
@@ -332,8 +335,8 @@ button.db-li:hover{background:var(--accent-soft)}
    space and sits centred; a wide tile puts the legend beside it, a tall one puts it underneath. */
 @media (min-width:761px){
 .db-tile .db-donut,.db-tile .db-donut.many{height:100%;display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch;justify-content:center;gap:10px}
-.db-tile .db-rbox{flex:1 1 0;min-height:60px;min-width:0;container-type:size;display:grid;place-items:center}
-.db-tile .db-ring,.db-tile .db-donut.many .db-ring{--ring:min(100cqw,100cqh);width:var(--ring);height:var(--ring);flex:none;position:relative;top:auto}
+.db-tile .db-rbox{flex:1 1 0;min-height:0;min-width:0;container-type:size;display:grid;place-items:center}
+.db-tile .db-ring,.db-tile .db-donut.many .db-ring{--ring:max(24px,calc(min(100cqw,100cqh) - 10px));width:var(--ring);height:var(--ring);flex:none;position:relative;top:auto}
 .db-tile .db-ring::after{inset:21%}
 .db-tile .db-ringc{font-size:clamp(12px,calc(var(--ring) * .15),40px);line-height:1.1}
 .db-tile .db-ringc small{font-size:clamp(10px,calc(var(--ring) * .07),14px)}
@@ -355,6 +358,9 @@ button.db-li:hover{background:var(--accent-soft)}
 .db-t-kpi .rp-kpisub{font-size:clamp(13px,4.5cqh,20px)}
 .db-tile.db-t-kpi button.rp-kpi{max-width:92%}
 @container (max-height:100px){.db-tile.db-t-kpi button.rp-kpi{font-size:clamp(1.3rem,66cqh,16rem)}.db-t-kpi .rp-kpisub{display:none}}
+/* with “+12% vs last month” underneath, the number leaves it room */
+.db-tile.db-t-kpi .rp-wb:has(.db-kd) button.rp-kpi{font-size:clamp(1.2rem,min(40cqh,16cqw),16rem)}
+@container (max-height:150px){.db-tile.db-t-kpi .rp-wb:has(.db-kd) .rp-kpisub{display:none}}
 }
 /* phones: a KPI number fits across the card */
 @media (max-width:760px){.db-tile.db-t-kpi button.rp-kpi{font-size:clamp(1.6rem,12cqw,2.8rem)}}
@@ -367,7 +373,7 @@ button.db-li:hover{background:var(--accent-soft)}
 .db-pb.db-t-line .rp-ln,.db-pb.db-t-area .rp-ln{height:clamp(300px,52vh,560px)}
 .db-pb.db-t-donut .db-donut,.db-pb.db-t-donut .db-donut.many{height:100%;display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:center;gap:max(24px,5cqw)}
 .db-pb.db-t-donut .db-rbox{height:100%;aspect-ratio:1;flex:0 1 auto;max-width:58%;min-width:0;container-type:size;display:grid;place-items:center}
-.db-pb.db-t-donut .db-ring,.db-pb.db-t-donut .db-donut.many .db-ring{--ring:min(100cqw,100cqh);width:var(--ring);height:var(--ring);position:relative;top:auto;flex:none}
+.db-pb.db-t-donut .db-ring,.db-pb.db-t-donut .db-donut.many .db-ring{--ring:calc(min(100cqw,100cqh) - 12px);width:var(--ring);height:var(--ring);position:relative;top:auto;flex:none}
 .db-pb.db-t-donut .db-ring::after{inset:21%}
 .db-pb.db-t-donut .db-ringc{font-size:clamp(16px,calc(var(--ring) * .14),48px);line-height:1.1}
 .db-pb.db-t-donut .db-ringc small{font-size:clamp(11px,calc(var(--ring) * .06),16px)}
@@ -424,7 +430,7 @@ button.db-li:hover{background:var(--accent-soft)}
 @keyframes dbPop { from { transform: scale(0); opacity: 0; } }
 
 /* Dashboard hover (dashanim.js): only where there's a real mouse, and not while arranging tiles. */
-.db-ringc .hv { display: block; font-size: .55em; font-family: var(--body); color: var(--muted); font-weight: 500; }
+.db-ringc .hv { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; max-width: 100%; font-size: .55em; line-height: 1.15; font-family: var(--body); color: var(--muted); font-weight: 500; }
 .rp-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--fg) 25%, transparent); pointer-events: none; opacity: 0; }
 @media (hover: hover) and (pointer: fine) {
   .db-cv:not(.edit) .db-tile { transition: left .16s ease, top .16s ease, width .16s ease, height .16s ease, box-shadow .2s ease, border-color .2s ease; }
