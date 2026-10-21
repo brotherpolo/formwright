@@ -9,6 +9,7 @@ import { isAdmin } from './access.js';
 import { dayKeyOf, parseLocal, wall, dayName } from './cal.js';
 import { KINDS, ADMIN_KINDS, VIEWS, viewRange, step, itemsFor, timeText } from './callogic.js';
 import { open as openTask, toggleDone } from './taskmodal.js';
+import { cadenceLink } from './tasks.js';
 
 let H = null; // { go, renderMain, recById, formById, recTitle, wfItems, cadenceUrl, openRecord }
 export function initCalendar(helpers) { H = helpers; }
@@ -46,7 +47,7 @@ function rowHTML(x) {
   return `<div class="cal-row" style="--c:var(--k-${x.kind})"><i aria-hidden="true"></i><div class="b">
     <span class="t${x.done ? ' done' : ''}">${x.time ? esc(timeText(x.time)) + ' · ' : ''}${esc(x.title)}</span>
     <span class="m">${esc(x.meta)}${x.late ? ` · <b class="cal-late">${x.kind === 'task' ? 'overdue' : 'late'}</b>` : ''}</span>
-    <span class="a"><button type="button" class="btn sm" data-act="cv-open" data-id="${esc(x.id)}">${x.kind === 'task' && !task?.recordId ? (H.cadenceUrl ? 'Open in Cadence' : 'Open') : ACT[x.kind]}</button>${task ? `<button type="button" class="btn sm ghost" data-act="cv-done" data-id="${esc(x.id)}">${task.done ? 'Not done' : 'Done'}</button>` : ''}</span></div></div>`;
+    <span class="a">${task && !task.recordId && H.cadenceUrl ? `<a class="btn sm" href="${esc(cadenceLink(H.cadenceUrl, { task: task.id }))}" target="cadence" rel="noopener">Open in Cadence</a>` : `<button type="button" class="btn sm" data-act="cv-open" data-id="${esc(x.id)}">${ACT[x.kind]}</button>`}${task ? `<button type="button" class="btn sm ghost" data-act="cv-done" data-id="${esc(x.id)}">${task.done ? 'Not done' : 'Done'}</button>` : ''}</span></div></div>`;
 }
 
 export function viewCalendar() {
@@ -103,7 +104,7 @@ export async function onClick(a, el) {
     if (x.kind === 'task') {
       const t = S.tasks.find((y) => y.id === x.go.task); if (!t) return true;
       if (t.recordId) openTask(t.recordId, t.id, { task: t });
-      else if (H.cadenceUrl) window.open(H.cadenceUrl, '_blank', 'noopener');
+      else if (H.cadenceUrl) window.open(cadenceLink(H.cadenceUrl, { task: t.id }), 'cadence', 'noopener'); // Cadence opens that task (?task=)
       else toast('Open Cadence to change this task.');
     } else if (x.kind === 'rep') H.go({ name: 'dashboard', dashboardId: x.go.dashboardId });
     else if (x.kind === 'auto') H.openAutomation(x.go.automationId);
