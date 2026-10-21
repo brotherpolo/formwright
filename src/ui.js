@@ -1,4 +1,5 @@
 // DOM helpers and small presentational pieces shared by the app and admin screens.
+import './pickers.js'; // date and time boxes open their picker on any click
 import { esc } from './util.js';
 
 export { esc, uid, clone, isEmpty } from './util.js';

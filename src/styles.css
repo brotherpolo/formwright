@@ -1112,3 +1112,6 @@ tr.wf-over td.title{color:var(--danger)}
 .cal-prev dt{color:var(--muted)}
 .cal-prev dd{margin:0;font-weight:500}
 .cal-act{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+
+/* Date and time boxes open their picker on any click (pickers.js) */
+input[type="date"]:not(:disabled):not([readonly]),input[type="datetime-local"]:not(:disabled):not([readonly]),input[type="time"]:not(:disabled):not([readonly]),input[type="month"]:not(:disabled):not([readonly]),input[type="week"]:not(:disabled):not([readonly]){cursor:pointer}
