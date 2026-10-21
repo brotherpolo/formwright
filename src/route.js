@@ -6,6 +6,7 @@
 //   #/report/<reportId>   one saved report
 //   #/dashboards          the Dashboards list
 //   #/calendar            the Calendar
+//   #/problems            Settings → Problems (administrators; the morning email links here)
 //   #/dashboard/<id>      one dashboard
 //   #/dashboard/<id>?f=…  one dashboard with filters set (Copy link; sharelink.js)
 // Pure functions: no DOM, no Firebase.
@@ -17,6 +18,7 @@ export function parseRoute(hash) {
   if (/^#\/reports\/?$/.test(String(hash || ''))) return { kind: 'reports' };
   if (/^#\/dashboards\/?$/.test(String(hash || ''))) return { kind: 'dashboards' };
   if (/^#\/calendar\/?$/.test(String(hash || ''))) return { kind: 'calendar' };
+  if (/^#\/problems\/?$/.test(String(hash || ''))) return { kind: 'problems' };
   const m = RE.exec(String(hash || ''));
   if (!m) return null;
   let id;
@@ -38,6 +40,7 @@ export function routeFor(view) {
   if (view.name === 'report' && view.reportId) return '#/report/' + encodeURIComponent(view.reportId);
   if (view.name === 'dashboards') return '#/dashboards';
   if (view.name === 'calendar') return '#/calendar';
+  if (view.name === 'problems') return '#/problems';
   if (view.name === 'dashboard' && view.dashboardId) return '#/dashboard/' + encodeURIComponent(view.dashboardId);
   return '';
 }

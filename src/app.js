@@ -4,7 +4,10 @@ import './grids.css';
 import { readTheme, applyTheme, nextTheme, themeLabel, readScheme, applyScheme, schemeLabel, SCHEMES, readDensity, applyDensity, densityLabel, DENSITIES } from './theme.js';
 // Admin screens (users and groups) live in admin.js; data access in store.js.
 
+import { viewProblems, onClick as pbClick, onChange as pbChange, freshCount, enterProblems, initProblems } from './problemsview.js';
+import { recentDelHTML, onClick as rdClick, onKey as rdKey, initRecentDel, closeRecentDel } from './recentdel.js';
 import { qrDialogHTML, recordUrl, printLabel, downloadPng, copyText } from './qrlabel.js';
+import { undoDelete } from './store.js';
 import { fillAutoNumbers, setAutoNumber, autoCounter, emailRecord, watchEmails, deleteSentEmails, fileBlob, getExportSettings } from './store.js';
 import { DEFAULT_SUBJECT, DEFAULT_MESSAGE, fillTemplate, parseEmails, emailSuggestions } from './emaillogic.js';
 import { runImport, rewriteValues, moveStage, watchStages } from './store.js';
@@ -63,7 +66,7 @@ import { signOutUser } from './auth.js';
 import { $, esc, uid, clone, isEmpty, toast, COLORS, colorOf, itemName, badge, lazy } from './ui.js';
 import examples from './examples.json';
 
-const ADMIN_VIEWS = new Set(['settings', 'dates', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
+const ADMIN_VIEWS = new Set(['settings', 'dates', 'problems', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 
 // other words people search field types by
 const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold'};
@@ -192,7 +195,7 @@ const ui={search:'',openField:null,tab:'fields',palette:false,confirm:null,leave
 function dirty(){return (view.name==='record'&&rdraft?.dirty)||(view.name==='formEdit'&&fdraft?.dirty)||(view.name==='report'&&reportDirty(view.reportId))||(view.name==='dashboard'&&dashDirty(view.dashboardId))||admin.isDirty(view)}
 function guard(){if(importRunning()){toast('The import is still running. Wait for it to finish.');return false;}if(dirty()&&!ui.leaveOk){ui.leaveOk=true;toast('You have unsaved changes. Tap again to leave without saving.');setTimeout(()=>ui.leaveOk=false,4000);return false;}ui.leaveOk=true;return true;}
 export function goRec(draft,v){if(!guard())return;rdraft=draft;go(v);}
-export function go(v,push=true){ui.subPop=null;ui.recMore=false;ui.qr=null;if(v.name==='record'&&v.recordId!==view.recordId)ui.rsTab='comments';ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
+export function go(v,push=true){ui.subPop=null;ui.recMore=false;ui.qr=null;closeRecentDel();if(v.name==='record'&&v.recordId!==view.recordId)ui.rsTab='comments';ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
   if(ADMIN_VIEWS.has(v.name)&&!isAdmin(store.me)){toast('Only administrators can open that.');return false;}
   if((v.name==='records'||v.name==='record')&&!canViewForm(store.me,v.formId)){toast('You don’t have access to that form.');return false;}
   if(!guard())return false;
@@ -305,6 +308,7 @@ function openRoute(r){
   if(!r)return true;
   if(r.kind==='reports'){go({name:'reports'},false);return true;}
   if(r.kind==='calendar'){go({name:'calendar'},false);return true;}
+  if(r.kind==='problems'){if(!isAdmin(store.me))return true;enterProblems();go({name:'problems'},false);return true;}
   if(r.kind==='dashboards'){go({name:'dashboards'},false);return true;}
   if(r.kind==='dashboard'){
     if(!store.dashboards.some(x=>x.id===r.id)){
@@ -524,7 +528,9 @@ function settingsGroups(){return [
     {act:'nav-automations',on:['automations','automation'],t:'Automations',g:'↯',n:store.automations.filter(a=>a.on).length,d:'When something happens, do something: email, set a field, make a task.'},
     {act:'nav-schedules',on:['schedules'],t:'Schedules',g:'◷',n:scheduleCount(),d:'Everything that goes out on its own, in one list.'}]},
   {h:'Records',items:[
-    {act:'nav-audit',on:['audit'],t:'Audit trail',g:'⌕',d:'Every change, who made it and when.'}]}];}
+    {act:'nav-audit',on:['audit'],t:'Audit trail',g:'⌕',d:'Every change, who made it and when.'}]},
+  {h:'Health',items:[
+    {act:'nav-problems',on:['problems'],t:'Problems and backups',g:'⚠',n:freshCount(),d:'What went wrong for people and the server, and how the nightly backup went.'}]}];}
 const stN=i=>typeof i.n==='number'&&i.n>0;
 function viewSettings(){
   return `<div class="head"><div class="ttl"><div><h1>Settings</h1><p class="sub">Set up forms, people and automations. Only administrators see Settings.</p></div></div></div>
@@ -534,6 +540,15 @@ function settingsFrame(h){
   const nav=settingsGroups().map(g=>`<div class="st-nh">${g.h}</div>${g.items.map(i=>{const on=i.on.includes(view.name);return `<button type="button" class="st-ni${on?' on':''}" data-act="${i.act}"${on?' aria-current="page"':''}><span class="st-ng" aria-hidden="true">${i.g}</span><span class="t">${i.t}</span>${stN(i)?`<span class="n">${i.n}</span>`:''}</button>`;}).join('')}`).join('');
   return `<div class="st-wrap"><nav class="st-nav" aria-label="Settings"><button type="button" class="st-back" data-act="nav-settings"><span aria-hidden="true">‹</span> Settings</button>${nav}</nav><div class="st-main">${h}</div></div>`;
 }
+/** Undo a deletion just made (Cadence's restoreRecord: the same record, same ID, back as it was). */
+async function undoDel(rid,form){
+  const busy=toast('Bringing it back…',{duration:15000});
+  try{
+    const out=await undoDelete(rid);busy();
+    toast(`Restored${out?.parentGone?' on its own (its parent was deleted too)':''}.`);
+    const t0=Date.now();const open=()=>{const r=recById(rid);if(r){goRec(null,{name:'record',formId:r.formId,recordId:r.id});return;}if(Date.now()-t0<6000)setTimeout(open,300);};open();
+  }catch(e){busy();console.warn('[formwright] undo delete',e?.code||e);toast(/not-found/.test(e?.code||'')&&/function|404/i.test(e?.message||'')?'Undo needs the latest Cadence functions. Deploy them first.':e?.message||'It couldn’t be brought back. An administrator can restore it from Recently deleted.');}
+}
 function renderMain(){
   const m=$('#main');let h='',title='Formwright';
   if(!store.ready){m.innerHTML='<div class="loading">Loading your forms…</div>';return;}
@@ -542,13 +557,14 @@ function renderMain(){
   else if(view.name==='report'){title=reportName(view.reportId);h=viewReport(view.reportId);wide=true;}
   else if(view.name==='dashboards'){title='Dashboards';h=viewDashboards();}
   else if(view.name==='dashboard'){title=dashName(view.dashboardId);h=viewDashboard(view.dashboardId);wide='full';}
-  else if(view.name==='records'){const f=formById(view.formId);title=f?.name;h=viewRecords(f);wide=true;}
+  else if(view.name==='records'){const f=formById(view.formId);title=f?.name;h=viewRecords(f)+recentDelHTML(f);wide=true;}
   else if(view.name==='record'){const f=formById(view.formId);title=f?.name;h=viewRecord(f);}
   else if(view.name==='mywork'){title='My work';h=viewMyWork();}
   else if(view.name==='calendar'){title='Calendar';h=calview.viewCalendar();}
   else if(view.name==='import'){title=importTitle();h=viewImport(formById(view.formId));}
   else if(view.name==='imports'){title='Import history';h=viewImports();}
   else if(view.name==='designer'){title='Form designer';h=viewDesigner();}
+  else if(view.name==='problems'){title='Problems';h=viewProblems();}
   else if(view.name==='formEdit'){title='Edit form';h=viewFormEdit();}
   else if(admin.handles(view)){const r=admin.renderView(view);title=r.title;h=r.html;}
   else if(view.name==='settings'){title='Settings';h=viewSettings();}
@@ -2229,7 +2245,7 @@ document.addEventListener('change',e=>{
 function closeFormSearch(){ui.fq='';ui.fi=0;ui.fsOpen=false;const q=$('#fs-q');if(q)q.value='';paintFormResults();}
 document.addEventListener('pointerdown',e=>{if(fsShown()&&!e.target.closest?.('.fsearch'))closeFormSearch();},true);
 document.addEventListener('pointerdown',e=>{if(ui.recMore&&!e.target.closest?.('.rb-more')){ui.recMore=false;if(ui.confirm?.startsWith?.('rec-'))ui.confirm=null;renderMain();}},true);
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.qr){e.preventDefault();ui.qr=null;renderMain();$('[data-act="rec-more"]')?.focus();return;}if(e.key==='Escape'&&ui.recMore){e.preventDefault();ui.recMore=false;renderMain();$('[data-act="rec-more"]')?.focus();}});
+document.addEventListener('keydown',e=>{if(rdKey(e))return;if(e.key==='Escape'&&ui.qr){e.preventDefault();ui.qr=null;renderMain();$('[data-act="rec-more"]')?.focus();return;}if(e.key==='Escape'&&ui.recMore){e.preventDefault();ui.recMore=false;renderMain();$('[data-act="rec-more"]')?.focus();}});
 document.addEventListener('pointerdown',e=>{if(ui.appear&&!e.target.closest?.('.appear,[data-act="appear"]')){ui.appear=false;renderSide();}},true);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.appear){e.preventDefault();ui.appear=false;renderSide();$('[data-act="appear"]')?.focus();}});
 window.addEventListener('resize',()=>{if(fsShown())paintFormResults();});
@@ -2260,6 +2276,7 @@ document.addEventListener('click',async e=>{
     case 'nav-users':go({name:'users'});break;
     case 'nav-imports':go({name:'imports'});break;
     case 'nav-audit':go({name:'audit'});break;
+    case 'nav-problems':enterProblems();go({name:'problems'});break;
     case 'nav-automations':go({name:'automations'});break;
     case 'nav-schedules':go({name:'schedules'});break;
     case 'nav-settings':go({name:'settings'});break;
@@ -2396,7 +2413,7 @@ document.addEventListener('click',async e=>{
     case 'sub-cols-reset':{const fid=rdraft?.formId;if(!fid)return;saveSub(fid,el.dataset.k,{cols:undefined});renderMain();break;}
     case 'sub-sort':{const fid=rdraft?.formId;if(!fid)return;const k=el.dataset.k,c=subCols(fid,k);if(!c)return;const cur=subPrefs(fid,k).sort;saveSub(fid,k,{sort:subNext(cur,el.dataset.v,c.firstDir(el.dataset.v))});renderMain();document.querySelector(`[data-act="sub-sort"][data-k="${CSS.escape(k)}"][data-v="${CSS.escape(el.dataset.v)}"]`)?.focus();break;}
     case 'sub-showall':{const fid=rdraft?.formId;if(!fid)return;saveSub(fid,el.dataset.k,{show:'all'});renderMain();break;}
-    case 'del-record':{const k='rec-'+view.recordId;if(ui.confirm!==k){ui.confirm=k;renderMain();$('.rb-item.danger')?.focus();return;}ui.recMore=false;ui.confirm=null;const rid=view.recordId;rdraft.dirty=false;try{await store.del('records',rid);toast('Deleted');}catch(err){toast('Delete failed. Try again.');}break;}
+    case 'del-record':{const k='rec-'+view.recordId;if(ui.confirm!==k){ui.confirm=k;renderMain();$('.rb-item.danger')?.focus();return;}ui.recMore=false;ui.confirm=null;const rid=view.recordId;rdraft.dirty=false;const delForm=formById(view.formId);try{await store.del('records',rid);toast(`Deleted. ${isAdmin(store.me)?'Administrators can also restore it from Recently deleted for 90 days.':'You can undo this for 10 minutes.'}`,{action:'Undo',duration:12000,onAction:()=>undoDel(rid,delForm)});}catch(err){toast('Delete failed. Try again.');}break;}
     case 'rate':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);const n=+el.dataset.n;d.values[f.id]=d.values[f.id]===n?0:n;markDirty(d);repaint(d,f);break;}
     case 'file-clear':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);d.values[f.id]=null;markDirty(d);repaint(d,f);break;}
     case 'sig-clear':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);d.values[f.id]=null;markDirty(d);repaint(d,f);break;}
@@ -2467,7 +2484,7 @@ document.addEventListener('click',async e=>{
     case 'load-examples':await loadExamples();break;
     case 'try-reset':pdraft=null;renderMain();break;
     case 'preview-check':{const errs=validate(fdraft,pdraft.values,draftRules(pdraft));pdraft.errors=errs;renderMain();toast(Object.keys(errs).length?`${Object.keys(errs).length} field${Object.keys(errs).length>1?'s need':' needs'} attention.`:'Everything checks out.');break;}
-    default:if(a.startsWith('cv-')&&await calview.onClick(a,el))return;await admin.onClick(el,a,id);
+    default:if(a.startsWith('cv-')&&await calview.onClick(a,el))return;if(a.startsWith('pb-')&&await pbClick(a,el))return;if(a.startsWith('rd-')&&await rdClick(a,el,e))return;await admin.onClick(el,a,id);
   }
 });
 document.addEventListener('input',e=>{
@@ -2508,6 +2525,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset.grid&&t.dataset.gf){setGridVal(t);return;}
   if(t.dataset.fid){if(t.type==='file')return onFile(t);if(t.type==='radio'||t.type==='checkbox'||t.tagName==='SELECT')setVal(t);return;}
   if(t.id==='parent-pick'){const r=t.value?recById(t.value):null;rdraft.parentId=r?.id||null;rdraft.parentFormId=r?.formId||null;markDirty(rdraft);renderMain();return;}
+  if(t.dataset.actChange==='pb-email'){await pbChange(t);return;}
   if(t.dataset.actChange==='toggle-sidebar'){const f=formById(t.dataset.id);if(!f)return;try{await store.put('forms',{...f,showInSidebar:t.checked});toast(t.checked?`${f.name} is in the sidebar`:`${f.name} is hidden from the sidebar`);}catch(err){toast('Could not save that change. Try again.');t.checked=!t.checked;}return;}
   if(t.dataset.fprop&&t.dataset.kind==='bool'){fdraft[t.dataset.fprop]=t.checked;setFdirty();return;}
   if(t.dataset.fprop==='titleField'){setFdirty();renderMain();return;}
@@ -2769,6 +2787,8 @@ export function startApp(){
   palette.initPalette({store,formById,recTitle,isAdmin:()=>isAdmin(store.me),canView:f=>canViewForm(store.me,f.id),canCreate:id=>canCreate(store.me,id),searchable:()=>allSearchable(store.forms,f=>canViewForm(store.me,f.id)).map(x=>x.form),
     go:v=>go(v),home:()=>home(),newRecord:id=>{const f=formById(id);if(f)goRec(newRecordDraft(f,null),{name:'record',formId:id,recordId:null});},openRecord:id=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
   tm.initTaskModal({store,recById,formById,recTitle,toast,cadenceUrl,tasks:()=>[...(tw.tasks||[]),...calview.calTasks()]});
+  initProblems({renderMain});
+  initRecentDel({renderMain,recById,personName,openRecord:id=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
   calview.initCalendar({go,renderMain,recById,formById:id=>{const f=formById(id);return f&&canViewForm(store.me,f.id)?f:null;},recTitle,cadenceUrl,wfItems:calWf,openRecord:id=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});else toast('That record was deleted, or you can no longer see it.');},openAutomation:id=>openAutomation(id)});
   cmt.initComments({store,view:()=>view,recById,formById,recTitle,itemName,toast,isAdmin:()=>isAdmin(store.me),canUseTasks,foldBtn,folded,
     unfold:(fid,k)=>saveFolds(setFold(folds(),fid,k,false)),openRecord:id=>{const r=recById(id);if(!r)return;if(view.name==='record'&&view.recordId===id){renderMain();return;}goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});

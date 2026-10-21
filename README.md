@@ -78,6 +78,10 @@ src/
   sharelink.js             Dashboard links that carry the period, live filter picks and a chart click (pure, unit-tested)
   qr.js                    QR codes for record labels (pure, unit-tested)
   qrlabel.js               A record's QR code dialog: print, download, copy link
+  problemlogic.js          Problems: what's reported, grouping, the backup line (pure, unit-tested)
+  problems.js              Reports what goes wrong in the browser to problems/{id}
+  problemsview.js          Settings → Problems and backups
+  recentdel.js             Recently deleted under a form's list (admins): Restore
   dash.js, dash.css        Reports and dashboards screens (charts reuse reports.css)
   dashlogic.js             Report types, filters, periods, sharing, moving old reports (pure, unit-tested)
   reportlogic.js           Field joins, totals, time buckets and the gap-free grid (pure, unit-tested)
@@ -483,6 +487,21 @@ Each form can have rules (form designer → **Rules** tab) that change the recor
 - **The rule list** (right of the rule, above Try it; first on phones): the designer shows one rule at a time and the list picks which, with **‹ Prev / Next ›** too. Each item shows the rule's name (or "Rule 3"), its sentence, and tags: Applies now, **Overlaps**, **Needs attention**, Off. **Find a rule** searches names, fields and sections. **Drag ⋮⋮** to reorder (paused while searching; the ↑ ↓ buttons on the rule still work from the keyboard). Rules are numbered by position, and the order never changes what they do, so reordering or renaming never asks to apply anything to saved records.
 - **Names:** each rule can have a name (up to 60 characters, `rule.name`), shown in the list, in problem messages ("Rule 2 · Done projects …"), in overlaps and in Import history (**Rule change: Rule 2 · Done projects**). **Rules that overlap** names the rules on each side as links that open them.
 - **Changing rules on a form with saved records:** Save form works out which saved records the new rules would empty fields on and asks: **Apply to all N** empties them now, **Leave them** saves the rules and each record follows them on its next save, or **Cancel**. Applying is written like an import, so it's listed in **Import history** as a **Rule change** (filter: All / Imports / Rule changes) with **Undo** for 7 days, and every record change is in the audit trail. Undo skips records edited since. Rule edits themselves show in the audit trail as "Show and hide rules".
+
+## Deleting, Undo and Recently deleted
+
+- **Undo:** deleting a record (⋯ More → Delete, twice) shows "Deleted" with **Undo**. Whoever deleted it can undo for 10 minutes, if they can still add records to that form; it comes back exactly as it was, with the same ID, so its child records, comments and sent emails reconnect, and it opens again. Administrators can undo any deletion.
+- **Recently deleted (administrators):** under each form's record list. It lists what was deleted from that form in the last 90 days, who deleted it and when, with **Restore** (and **Open** once it's back). The same deletions are in Settings → Audit trail (filter *Records deleted*).
+- Both use Cadence's `restoreRecord` function (the copy kept with each deletion in the audit trail). `src/recentdel.js`.
+
+## Problems and backups (Settings → Problems and backups, administrators)
+
+- **Problems:** when something goes wrong for someone (a save that fails, an error on a screen) in Formwright or Cadence, or for the server's own jobs (an email, an automation, the nightly backup), a short report is kept: what went wrong, where (the screen and the last button pressed), for whom, when, and the technical details. The same problem is grouped ("2 times · Amy, Bo · last 1 hour ago") and new ones are marked; **Details** shows the code, the page, the browser and the error. **Clear** removes a group, **Clear all** (twice) everything shown. Filter by Formwright, Cadence or Server. Reports clear themselves after 30 days.
+- **Not reported:** a lost connection, browser noise, and errors from browser extensions. At most 15 reports a page load, and the same one not again for 5 minutes.
+- **Morning email:** **Email me each morning when there are new ones** emails you at 7:05 a.m. when there's something new (nothing new, no email). Its link opens this page (`#/problems`).
+- **Backups:** the line at the top says when the last nightly backup ran and whether it worked (a failure is also listed as a problem). The backup itself is a Cadence function (see the Cadence README: Nightly backups).
+- The Settings card shows how many are new since you last looked.
+- Logic in `src/problemlogic.js` (unit-tested); reporting in `src/problems.js`; the page is `src/problemsview.js`. Stored in `problems/{id}` (anyone signed in adds their own; admins read and clear), `system/backup` (written by the server) and `settings/problems` (who gets the email).
 
 ## QR codes for records
 

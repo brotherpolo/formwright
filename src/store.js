@@ -44,6 +44,9 @@ export const store = {
   dashReady: false,
   homeDefault: '', // settings/home: the dashboard Home shows for anyone without their own
   calendar: null, // settings/calendar: time zone, week start, fiscal year (cal.js)
+  problems: [], // problems/{id}: what went wrong for people and the server (admins; Settings → Problems)
+  problemNotify: [], // settings/problems.notify: admins who get the morning email
+  backup: null, // system/backup: how the last nightly backup went (admins)
   listViewsReady: false,
   imports: [], // admins: past imports, newest first
   automations: [], automationsError: null, // admins: Settings → Automations
@@ -209,7 +212,7 @@ export function stopData() {
   if (assignedSub) { assignedSub(); assignedSub = null; }
   roleSubs.forEach((u) => u()); roleSubs.clear(); roleRecs.clear();
   assigned = [];
-  Object.assign(store, { ready: false, user: null, me: null, forms: [], records: [], profiles: {}, groups: [], users: [], reports: [], reportsReady: false, listViews: [], listViewsReady: false, imports: [], reportDefs: [], dashboards: [], dashReady: false, homeDefault: '', homeDefaultReady: false, mentions: [] });
+  Object.assign(store, { ready: false, user: null, me: null, forms: [], records: [], profiles: {}, groups: [], users: [], reports: [], reportsReady: false, listViews: [], listViewsReady: false, imports: [], reportDefs: [], dashboards: [], dashReady: false, homeDefault: '', homeDefaultReady: false, mentions: [], problems: [], problemNotify: [], backup: null });
   store.recordsLoading.clear();
 }
 
@@ -236,6 +239,11 @@ function syncAdminSubs() {
         fail('import history')
       )
     );
+    // Settings → Problems, and how the nightly backup went (older rules: none of these yet)
+    adminUnsubs.push(onSnapshot(query(collection(db, 'problems'), orderBy('at', 'desc'), limit(500)),
+      (s) => { store.problems = s.docs.map((d) => ({ ...d.data(), id: d.id })); changed(); }, () => { store.problems = []; }));
+    adminUnsubs.push(onSnapshot(doc(db, 'system', 'backup'), (s) => { store.backup = s.exists() ? s.data() : null; changed(); }, () => { store.backup = null; }));
+    adminUnsubs.push(onSnapshot(doc(db, 'settings', 'problems'), (s) => { store.problemNotify = s.exists() && Array.isArray(s.data().notify) ? s.data().notify : []; changed(); }, () => { store.problemNotify = []; }));
     adminUnsubs.push(onSnapshot(collection(db, 'dashMails'),
       (s) => { store.dashMails = Object.fromEntries(s.docs.map((d) => [d.id, { ...d.data(), id: d.id }])); changed(); },
       () => { store.dashMails = {}; })); // older security rules: no schedules yet
@@ -358,6 +366,21 @@ export async function setDefaultHome(id) {
 /** The dashboard that opens when you start Formwright ('' for none). */
 export async function setHomeDashboard(id) {
   await setDoc(doc(db, 'profiles', store.user.uid), { homeDashboard: String(id || '').slice(0, 100) }, { merge: true });
+}
+
+/* ---------- Problems (Settings → Problems) ---------- */
+/** Report something that went wrong (problems.js; anyone signed in, their own; the rules check it). */
+export async function reportProblem(p) { await setDoc(doc(collection(db, 'problems')), p); }
+/** Admins: clear reports. */
+export async function clearProblems(ids) {
+  const list = [...new Set(ids || [])];
+  for (let i = 0; i < list.length; i += 400) { const b = writeBatch(db); list.slice(i, i + 400).forEach((id) => b.delete(doc(db, 'problems', id))); await b.commit(); }
+}
+/** Admins: get the morning email of new problems, or stop. */
+export async function setProblemEmail(on) {
+  const me = store.user.uid, now = new Set(store.problemNotify || []);
+  if (on) now.add(me); else now.delete(me);
+  await setDoc(doc(db, 'settings', 'problems'), { notify: [...now].slice(0, 20), updatedAt: Date.now(), updatedBy: me });
 }
 
 /* ---------- Dates and time (settings/calendar) ---------- */
@@ -824,6 +847,10 @@ export async function loadAudit({ filter = null, from = null, to = null, after =
 /** Admins: bring a deleted record back from its audit entry. */
 export async function restoreDeleted(auditId) {
   return (await httpsCallable(fns(), 'restoreRecord')({ auditId })).data;
+}
+/** Undo a deletion you just made (the server allows it for 10 minutes, on a form you can still add to). */
+export async function undoDelete(recordId) {
+  return (await httpsCallable(fns(), 'restoreRecord')({ recordId })).data;
 }
 
 /* ---------- Writes ---------- */

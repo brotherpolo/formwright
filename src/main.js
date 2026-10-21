@@ -5,6 +5,10 @@ import { ensureAccount, startData, stopData } from './store.js';
 import { showAuth, hideAuth } from './auth.js';
 import { startApp, stopApp } from './app.js';
 import { $, esc } from './ui.js';
+import { installProblems } from './problems.js';
+
+// what goes wrong in this browser is reported to Settings → Problems (problems.js)
+installProblems({ title: () => document.getElementById('topttl')?.textContent || '' });
 
 if (!configured) {
   showAuth();
