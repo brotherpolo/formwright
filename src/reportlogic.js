@@ -15,6 +15,7 @@
 //   formById(id), recById(id), records (visible records)
 //   valOf(field, rec, form), fmt(field, value), recTitle(rec, form), profiles
 
+import { startOf, nextOf, parseLocal } from './cal.js';
 import { shownName } from './fieldnames.js';
 export const GRID = 12;
 export const WIDTHS = [3, 4, 6, 8, 9, 12];
@@ -105,7 +106,9 @@ export function timeOf(v) {
   if (v == null || v === '') return null;
   if (typeof v === 'number') return v;
   const s = String(v);
-  const t = new Date(s.length === 10 ? s + 'T00:00' : s).getTime();
+  const local = parseLocal(s); // a date, or a date and time with no zone: on the company's clocks
+  if (local != null) return local;
+  const t = new Date(s).getTime();
   return isNaN(t) ? null : t;
 }
 
@@ -184,47 +187,53 @@ export function groupsOf(ctx, w, list) {
   return items;
 }
 
-/** Buckets ending at `now`: the last 26 weeks (Monday starts) or 12 months. */
-export const INTERVALS = ['week', 'month', 'quarter', 'year'];
+/** How a chart over time can step: by day, week, month, quarter or year; 'auto' picks one for the dates shown. */
+export const INTERVALS = ['day', 'week', 'month', 'quarter', 'year'];
 export const MAX_BUCKETS = 400;
-const LAST_N = { week: 26, month: 12, quarter: 8, year: 5 };
+/** Most points a chart over time shows; past this it steps up (weeks to months, say) and says so. */
+export const MAX_POINTS = 120;
+const LAST_N = { day: 30, week: 26, month: 12, quarter: 8, year: 5 };
+export const lastN = (iv) => LAST_N[iv] || 12;
 
-/** The start of the week (Monday), month, quarter or year a moment falls in, and the next one. */
-export function periodStart(t, iv) {
-  const d = new Date(t), y = d.getFullYear(), m = d.getMonth();
-  if (iv === 'week') return new Date(y, m, d.getDate() - ((d.getDay() + 6) % 7)).getTime();
-  if (iv === 'quarter') return new Date(y, m - (m % 3), 1).getTime();
-  if (iv === 'year') return new Date(y, 0, 1).getTime();
-  return new Date(y, m, 1).getTime();
-}
-export function periodNext(t, iv, k = 1) {
-  const d = new Date(t), y = d.getFullYear(), m = d.getMonth();
-  if (iv === 'week') return new Date(y, m, d.getDate() + 7 * k).getTime();
-  if (iv === 'quarter') return new Date(y, m + 3 * k, 1).getTime();
-  if (iv === 'year') return new Date(y + k, 0, 1).getTime();
-  return new Date(y, m + k, 1).getTime();
+/** The start of the day, week, month, quarter or year a moment falls in (company calendar), and the next one. */
+export function periodStart(t, iv) { return startOf(t, INTERVALS.includes(iv) ? iv : 'month'); }
+export function periodNext(t, iv, k = 1) { return nextOf(t, INTERVALS.includes(iv) ? iv : 'month', k); }
+
+/** The step 'auto' uses for a stretch of time: days up to about six weeks, weeks up to about six months, then months, quarters, years. */
+export function autoInterval(from, to) {
+  const days = (to - from) / 864e5;
+  return days <= 45 ? 'day' : days <= 190 ? 'week' : days <= 3 * 366 ? 'month' : days <= 12 * 366 ? 'quarter' : 'year';
 }
 
 /**
- * A chart over time: one bucket per week, month, quarter or year, with the measure of the
- * records in it: [{ start, end, date, value }].
+ * A chart over time: one bucket per day, week, month, quarter or year, with the measure of the
+ * records in it: [{ start, end, date, value, partial }] (partial: the bucket still running at `now`).
  * Which stretch of time it covers:
- *   range given (a dashboard's period) -> that period
+ *   range given (a dashboard's period) -> that period (up to now)
  *   w.span 'custom'                    -> w.from .. w.to (either may be blank: the records' first or last date)
  *   w.span 'fit'                       -> the first to the last date in the records
- *   otherwise ('last')                 -> the last 26 weeks, 12 months, 8 quarters or 5 years
- * At most MAX_BUCKETS, keeping the most recent.
+ *   otherwise ('last')                 -> the last 30 days, 26 weeks, 12 months, 8 quarters or 5 years
+ * w.interval 'auto' picks the step for that stretch. More than MAX_POINTS steps up to the next
+ * size until it fits. The list carries .iv (the step used), .asked (the one chosen) and
+ * .stepped (true when it had to step up).
  */
 export function bucketsOf(ctx, w, list, now, range) {
-  const iv = INTERVALS.includes(w.interval) ? w.interval : 'week';
+  const asked = w.interval === 'auto' || INTERVALS.includes(w.interval) ? w.interval : 'week';
   const times = list.map((r) => timeOf(valueOf(ctx, r, w.time)));
   const known = times.filter((t) => t != null);
   const lo = known.length ? Math.min(...known) : null, hi = known.length ? Math.max(...known) : null;
   let from = null, to = null;
-  if (range) { from = range.from; to = Math.min(range.to - 1, Math.max(now, range.from)); }
-  else if (w.span === 'custom') { from = w.from ? timeOf(w.from) : lo; to = w.to ? timeOf(w.to) + 864e5 - 1 : hi; }
+  if (range) { // a custom range may be open at one end: start with the records, or run to now
+    from = range.from > -8e15 ? range.from : lo;
+    to = range.to < 8e15 ? Math.min(range.to - 1, Math.max(now, range.from)) : Math.max(hi ?? now, now);
+  }
+  else if (w.span === 'custom') { from = w.from ? timeOf(w.from) : lo; to = w.to ? periodNext(timeOf(w.to), 'day') - 1 : hi; }
   else if (w.span === 'fit') { from = lo; to = hi; }
-  if (from == null || to == null || from > to) { to = now; from = periodNext(periodStart(now, iv), iv, -(LAST_N[iv] - 1)); }
+  let iv = asked === 'auto' ? (from != null && to != null && from <= to ? autoInterval(from, to) : 'month') : asked;
+  if (from == null || to == null || from > to) { to = now; from = periodNext(periodStart(now, iv), iv, -(lastN(iv) - 1)); }
+  const count = (v) => { let n = 0; for (let s = periodStart(from, v); s <= to && n <= MAX_POINTS; s = periodNext(s, v)) n++; return n; };
+  let stepped = false;
+  while (iv !== 'year' && count(iv) > MAX_POINTS) { iv = INTERVALS[INTERVALS.indexOf(iv) + 1]; stepped = true; }
   const starts = [];
   for (let s = periodStart(from, iv); s <= to && starts.length < 20000; s = periodNext(s, iv)) starts.push(s);
   const keep = starts.slice(-MAX_BUCKETS);
@@ -236,7 +245,9 @@ export function bucketsOf(ctx, w, list, now, range) {
     while (a < b) { const mid = (a + b + 1) >> 1; if (out[mid].start <= t) a = mid; else b = mid - 1; }
     out[a].rows.push(r);
   });
-  return out.map(({ rows, ...x }) => ({ ...x, value: measureOf(ctx, w, rows) || 0 }));
+  const res = out.map(({ rows, ...x }) => ({ ...x, value: measureOf(ctx, w, rows) || 0, partial: x.start <= now && now < x.end }));
+  res.iv = iv; res.asked = asked; res.stepped = stepped;
+  return res;
 }
 
 /** A round step for axis gridlines. */
@@ -264,7 +275,7 @@ export function autoTitle(ctx, w) {
   const counting = !w.measure || w.measure.fn === 'count' || !w.measure.ref;
   if (w.type === 'kpi') return counting ? 'Number of ' + (form ? form.name.toLowerCase() : 'records') : cap(mn);
   if (w.type === 'bar') { const g = fieldOf(ctx, w.group); return cap(mn) + ' by ' + (g ? g.label.toLowerCase() : '…'); }
-  if (w.type === 'line') return cap(mn) + ' per ' + (w.interval || 'week');
+  if (w.type === 'line') return cap(mn) + (w.interval === 'auto' ? ' over time' : ' per ' + (w.interval || 'week'));
   return form ? form.name : 'Table';
 }
 

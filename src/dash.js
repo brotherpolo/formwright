@@ -16,13 +16,14 @@ import {
   fieldOf, valueOf, textOf, kindOf, chainOf, measureOf, bucketsOf, niceStep, refLabel, autoTitle, titleFieldOf, parentsOf,
 } from './reportlogic.js';
 import {
-  TYPES, PERIODS, chainFields, rowsFor, periodRange, kpiOf, slicesOf, groupRows, pivotOf, sortRecs, normalizeDef,
+  TYPES, PERIODS, PERIOD_GROUPS, periodName, chainFields, rowsFor, periodRange, kpiOf, slicesOf, groupRows, pivotOf, sortRecs, normalizeDef,
   newDef, migrateLegacy, visibleTo, usedOn, filterReaches, dateRefOf, keysOf, groupable as canSplit, groupLabel, BYS,
   drillRows, drillLabel, bucketOf, nounOf, shareOf,
   canvasTiles, gridTiles, resolveCanvas, placeTile, canvasHeight, tileSize, readingOrder, CANVAS_COLS, GRID, MIN_W, minH,
 } from './dashlogic.js';
 import { fmtMeasure, fmtShort, measureLabel, cellText, isNumRef } from './dashfmt.js';
 import { headerButton as dmHeader } from './dashmailui.js';
+import { spanName, axisName, yearOf } from './cal.js';
 
 let H = { fmt: null, valOf: null, recTitle: null, go: null, openRecord: null, renderMain: null, openLink: null, linkEnv: () => ({}), starterForms: () => [] };
 export function initReports(helpers) { H = { ...H, ...helpers }; }
@@ -131,7 +132,8 @@ function bodyHTML(c, def, extra, key) {
     const k = kpiOf(c, def, ex, Date.now());
     let cmp = '';
     if (def.compare) {
-      if (k.delta == null) cmp = `<div class="db-kd">Nothing in ${esc(k.prevLabel)} to compare with</div>`;
+      if (k.noPrev) cmp = `<div class="db-kd">Pick both dates to compare with the days before</div>`;
+      else if (k.delta == null) cmp = `<div class="db-kd">Nothing in ${esc(k.prevLabel)} to compare with</div>`;
       else { const up = k.delta >= 0; cmp = `<div class="db-kd"><span aria-hidden="true">${up ? '▲' : '▼'}</span> ${up ? '+' : ''}${Math.round(k.delta)}% vs ${esc(k.prevLabel)} <span class="db-kp">(${esc(fmtMeasure(c, def, k.prev))})</span></div>`; }
     }
     return { html: `<button type="button" class="rp-kpi db-dr" data-d="drill" data-k="${esc(key)}" title="See the records behind this number">${both(c, def, k.value)}</button><div class="rp-kpisub">${esc(measureLabel(c, def))}${def.compare && !extra?.range ? ' · ' + esc(k.label) : ''}</div>${cmp}`, caption: captionOf(c, def, k.n, extra) };
@@ -154,26 +156,28 @@ function bodyHTML(c, def, extra, key) {
   }
   if (time) {
     if (!fieldOf(c, def.time)) return { caption, html: `<p class="rp-empty">Choose a date field in the report’s settings.</p>` };
-    const iv = def.interval || 'month';
     const b = bucketsOf(c, def, list, Date.now(), ex?.range);
+    const iv = b.iv;
     const n = b.length;
     const step = niceStep(Math.max(0, ...b.map((x) => x.value)) / 4);
     const top = step * 4;
     const X = (i) => (n === 1 ? 50 : (i / (n - 1)) * 100);
     const Y = (v) => (v / top) * 100;
-    const path = b.map((x, i) => (i ? 'L' : 'M') + X(i).toFixed(2) + ' ' + (100 - Y(x.value)).toFixed(2)).join(' ');
-    const years = n > 1 && b[0].date.getFullYear() !== b[n - 1].date.getFullYear();
-    const yy = (d) => (years ? ' ’' + String(d.getFullYear()).slice(2) : '');
-    const label = (x) => (iv === 'week' ? x.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + yy(x.date)
-      : iv === 'month' ? x.date.toLocaleDateString(undefined, { month: 'short' }) + yy(x.date)
-      : iv === 'quarter' ? 'Q' + (Math.floor(x.date.getMonth() / 3) + 1) + ' ’' + String(x.date.getFullYear()).slice(2)
-      : String(x.date.getFullYear()));
-    const every = Math.max(1, Math.ceil(n / 8));
-    return { caption, html: `<div class="rp-ln"><div class="rp-plot">
+    const pt = (x, i) => X(i).toFixed(2) + ' ' + (100 - Y(x.value)).toFixed(2);
+    // the bucket still running (this week, say) is drawn dashed and marked "so far", so a half-done week doesn't read as a drop
+    const part = n > 1 && b[n - 1].partial;
+    const solid = part ? b.slice(0, -1) : b;
+    const path = solid.map((x, i) => (i ? 'L' : 'M') + pt(x, i)).join(' ');
+    const tail = part ? `M${pt(b[n - 2], n - 2)} L${pt(b[n - 1], n - 1)}` : '';
+    const full = b.map((x, i) => (i ? 'L' : 'M') + pt(x, i)).join(' ');
+    const years = n > 1 && yearOf(b[0].start, iv) !== yearOf(b[n - 1].start, iv);
+    const note = b.stepped ? `Shown by ${iv}: ${b.asked === 'day' ? 'days' : b.asked + 's'} would be too many to show` : b.asked === 'auto' ? `By ${iv} (auto)` : '';
+    return { caption: caption + (note ? ' · ' + note : ''), html: `<div class="rp-ln"><div class="rp-plot">
       ${[0, 1, 2, 3, 4].map((k) => `<div class="rp-gl" style="bottom:${k * 25}%"><span>${esc(fmtShort(c, def, step * k))}</span></div>`).join('')}
-      <svg class="rp-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${def.type === 'area' ? `<path class="rp-area" d="${path} L100 100 L0 100 Z"></path>` : ''}<path class="rp-path" d="${path}"></path></svg>
-      ${b.map((x, i) => { const tip = bucketOf(x.start, iv).k + ' · ' + fmtMeasure(c, def, x.value); return `<button type="button" class="rp-pt${X(i) > 85 ? ' end' : X(i) < 15 ? ' start' : ''}" data-d="drill" data-k="${esc(key)}" data-i="${i}" style="left:${X(i).toFixed(2)}%;bottom:${Y(x.value).toFixed(2)}%" aria-label="${esc(tip)}"><i></i><span class="rp-tip">${esc(tip)}</span></button>`; }).join('')}
-    </div><div class="rp-xax">${b.map((x, i) => ((n - 1 - i) % every === 0 ? `<span style="left:${X(i).toFixed(2)}%${X(i) > 92 ? ';transform:translateX(-100%)' : X(i) < 8 ? ';transform:none' : ''}">${esc(label(x))}</span>` : '')).join('')}</div></div>` };
+      <svg class="rp-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${def.type === 'area' ? `<path class="rp-area" d="${full} L100 100 L0 100 Z"></path>` : ''}<path class="rp-path" d="${path}"></path>${tail ? `<path class="rp-path rp-part" d="${tail}"></path>` : ''}</svg>
+      ${b.map((x, i) => { const tip = bucketOf(x.start, iv).k + (x.partial ? ' (so far)' : '') + ' · ' + fmtMeasure(c, def, x.value); return `<button type="button" class="rp-pt${X(i) > 85 ? ' end' : X(i) < 15 ? ' start' : ''}${x.partial && part ? ' part' : ''}" data-d="drill" data-k="${esc(key)}" data-i="${i}" style="left:${X(i).toFixed(2)}%;bottom:${Y(x.value).toFixed(2)}%" aria-label="${esc(tip)}"><i></i><span class="rp-tip">${esc(tip)}</span></button>`; }).join('')}
+      ${part ? `<span class="rp-sofar" style="right:0;bottom:calc(${Y(b[n - 1].value).toFixed(2)}% + 10px)">so far</span>` : ''}
+    </div><div class="rp-xax">${b.map((x, i) => (true ? `<span style="left:${X(i).toFixed(2)}%${X(i) > 92 ? ';transform:translateX(-100%)' : X(i) < 8 ? ';transform:none' : ''}">${esc(axisName(x.start, iv, years))}</span>` : '')).join('')}</div></div>` };
   }
   if (def.type === 'pivot') {
     const p = pivotOf(c, def, list);
@@ -251,9 +255,9 @@ function drillPick(data) {
     if (!it) return null;
     filters.push({ ref: def.group, keys: it.keys, title: it.key });
   } else if (def.type === 'line' || def.type === 'area') {
-    const b = bucketsOf(c, def, list(), Date.now(), ex?.range)[+data.i];
+    const bs = bucketsOf(c, def, list(), Date.now(), ex?.range), b = bs[+data.i];
     if (!b) return null;
-    const k = bucketOf(b.start, def.interval || 'month').k;
+    const k = bucketOf(b.start, bs.iv).k;
     filters.push({ ref: def.time, from: b.start, to: b.end, text: k.startsWith('Week') ? 'the w' + k.slice(1) : k, title: k });
   } else if (def.type === 'pivot') {
     const p = pivotOf(c, def, list());
@@ -327,7 +331,7 @@ function drillHTML(where) {
   const aria = (i) => (dd.sort && dd.sort.i === i ? (dd.sort.dir > 0 ? 'ascending' : 'descending') : 'none');
   // what else narrows these records, shown so the count matches what was clicked
   const ctxChips = [];
-  if (dd.extra?.range && dd.extra.periodKey) ctxChips.push('Dashboard: ' + ((PERIODS.find((p) => p[0] === dd.extra.periodKey) || [])[1] || 'period'));
+  if (dd.extra?.range && dd.extra.periodKey) ctxChips.push('Dashboard: ' + periodName(dd.extra.periodKey, dd.extra.custom));
   else if (def.type === 'kpi' && def.compare) ctxChips.push('This month');
   (dd.extra?.fields || []).forEach((ff) => { if (ff.values?.length && filterReaches(c, def, ff.ref)) ctxChips.push(`Dashboard: ${fieldOf(c, ff.ref)?.label || 'filter'} is ${ff.values[0]}`); });
   const conds = (def.conditions || []).filter((x) => x.ref && fieldOf(c, x.ref) && x.value !== '' && x.value != null);
@@ -501,7 +505,7 @@ function reportRow(c, r, dashes) {
     value: { text: t === 'table' ? '' : measureLabel(c, def) },
     group: { text: ['grouped', 'pivot', 'bar', 'donut'].includes(t) && def.group ? lab(def.group) + byWord(def.group) : '' },
     col: { text: t === 'pivot' && def.col ? lab(def.col) + byWord(def.col) : '' },
-    time: { text: ['line', 'area'].includes(t) && def.time ? lab(def.time) + ', by ' + (def.interval || 'month') : '' },
+    time: { text: ['line', 'area'].includes(t) && def.time ? lab(def.time) + (def.interval === 'auto' ? ', by day, week or month' : ', by ' + (def.interval || 'month')) : '' },
     conds: { text: conds },
     owner: { text: who(r.ownerId) },
     sharing: { text: sharingText(r) },
@@ -516,7 +520,7 @@ function dashRow(x, home) {
     sharing: { text: sharingText(x) },
     updated: dateCell(x.updatedAt),
     reports: { text: reps.join(', ') },
-    period: { text: (PERIODS.find((p) => p[0] === (x.filters?.period || 'all')) || PERIODS[0])[1] },
+    period: { text: periodName(x.filters?.period || 'all', x.filters) },
     owner: { text: who(x.ownerId) },
     created: dateCell(x.createdAt),
   } };
@@ -671,10 +675,10 @@ function settingsHTML(c, d) {
   if (t === 'pivot') h += `<div class="db-sec"><label class="db-lab">Columns</label>${sel('col', groupable.filter((x) => refKey(x.ref) !== refKey(def.group && { form: def.group.form, id: def.group.id }) || x.kind === 'date').map((x) => opt(refKey(x.ref), lab(x), refKey(def.col && { form: def.col.form, id: def.col.id }))).join(''), '')}${bySel('colby', def.col, 'Split by')}</div>`;
   if (t === 'line' || t === 'area') {
     h += `<div class="db-sec"><label class="db-lab">Over time, by</label>${sel('time', dates.map((x) => opt(refKey(x.ref), lab(x), refKey(def.time))).join(''), '')}
-      <div class="db-seg" role="group" aria-label="Interval">${[['week', 'Weeks'], ['month', 'Months'], ['quarter', 'Quarters'], ['year', 'Years']].map(([k, l]) => `<button type="button" class="${(def.interval || 'month') === k ? 'on' : ''}" aria-pressed="${(def.interval || 'month') === k}" data-d="interval" data-v="${k}">${l}</button>`).join('')}</div></div>
-      <div class="db-sec"><label class="db-lab" for="db-span">Dates shown</label>${sel('span', [['fit', 'From the first record to the last'], ['last', 'The last ' + ({ week: '26 weeks', month: '12 months', quarter: '8 quarters', year: '5 years' })[def.interval || 'month']], ['custom', 'Choose dates']].map(([k, l]) => opt(k, l, def.span || 'fit')).join(''), '', ' id="db-span"')}
+      <div class="db-seg" role="group" aria-label="Interval">${[['auto', 'Auto'], ['day', 'Days'], ['week', 'Weeks'], ['month', 'Months'], ['quarter', 'Quarters'], ['year', 'Years']].map(([k, l]) => `<button type="button" class="${(def.interval || 'month') === k ? 'on' : ''}" aria-pressed="${(def.interval || 'month') === k}" data-d="interval" data-v="${k}">${l}</button>`).join('')}</div></div>
+      <div class="db-sec"><label class="db-lab" for="db-span">Dates shown</label>${sel('span', [['fit', 'From the first record to the last'], ['last', 'The last ' + ({ day: '30 days', week: '26 weeks', month: '12 months', quarter: '8 quarters', year: '5 years' })[def.interval || 'month'] || '12 months'], ['custom', 'Choose dates']].map(([k, l]) => opt(k, l, def.span || 'fit')).join(''), '', ' id="db-span"')}
         ${def.span === 'custom' ? `<div class="db-dates"><label><span class="db-lab">From</span><input class="in" type="date" data-dv="tfrom" value="${esc(def.from || '')}"></label><label><span class="db-lab">To</span><input class="in" type="date" data-dv="tto" value="${esc(def.to || '')}"></label></div><p class="help">Leave one blank to start or end with your records.</p>` : ''}
-        <p class="help">On a dashboard with a period picked (This year, say), the chart shows that period instead.</p></div>`;
+        <p class="help">On a dashboard with a period picked (This year, say), the chart shows that period instead. <b>Auto</b> picks days, weeks or months to suit the dates shown; a chart with more than 120 points steps up to the next size.</p></div>`;
   }
   if (t === 'table' || t === 'grouped') {
     const cols = def.columns || [];
@@ -683,7 +687,7 @@ function settingsHTML(c, d) {
       <button type="button" class="ibtn" data-d="colmove" data-v="${i}" data-dir="-1" aria-label="Move left"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" class="ibtn" data-d="colmove" data-v="${i}" data-dir="1" aria-label="Move right"${i === cols.length - 1 ? ' disabled' : ''}>↓</button><button type="button" class="ibtn" data-d="coldel" data-v="${i}" aria-label="Remove ${esc(refLabel(c, r, def.form))}">✕</button></div>`).join('')}
       ${left.length && cols.length < 12 ? sel('addcol', opt('', '+ Add a column', '') + left.map((x) => opt(refKey(x.ref), lab(x), '')).join(''), '', ' aria-label="Add a column"') : ''}</div>`;
   }
-  if (t === 'kpi') h += `<div class="db-sec"><label class="switch"><input type="checkbox" data-dv="compare"${def.compare ? ' checked' : ''}><span class="tr"></span><span>Compare with the period before</span></label><p class="help">On a dashboard it compares with the period before the one picked there; here, this month with last month.</p></div>`;
+  if (t === 'kpi') h += `<div class="db-sec"><label class="switch"><input type="checkbox" data-dv="compare"${def.compare ? ' checked' : ''}><span class="tr"></span><span>Compare with the period before</span></label><p class="help">Shows “+12% vs last month”, say. On a dashboard it compares with the period before the one picked there (last month for This month, the month before for Last month); here, this month with last month.</p></div>`;
   if (!['line', 'area'].includes(t)) {
     h += `<div class="db-sec"><label class="db-lab">Date for periods</label>${sel('dateRef', dates.map((x) => opt(refKey(x.ref), lab(x), refKey(dateRefOf(c, def)))).join(''), '')}<p class="help">Which date a dashboard’s period (This month, This year…) looks at.</p></div>`;
   }
@@ -769,16 +773,52 @@ export function viewDashboards() {
 export function dashName(id) { return (D.edit && D.did === id ? D.edit.name : dashById(id)?.name) || 'Dashboard'; }
 
 function filterState(x) {
-  const fv = D.fv[x.id] || (D.fv[x.id] = { period: x.filters?.period || 'all', fields: {} });
+  const fv = D.fv[x.id] || (D.fv[x.id] = { period: x.filters?.period || 'all', from: x.filters?.from || '', to: x.filters?.to || '', fields: {} });
   return fv;
 }
 function extraFor(x, fv) {
-  const range = periodRange(fv.period, Date.now());
+  const custom = fv.period === 'custom' ? { from: fv.from || '', to: fv.to || '' } : null;
+  const range = periodRange(fv.period, Date.now(), custom);
   return {
-    periodKey: fv.period,
+    periodKey: fv.period, custom,
     range: range ? { from: range.from, to: range.to } : null,
     fields: (x.filters?.fields || []).map((ref) => ({ ref, values: fv.fields[refKey(ref)] ? [fv.fields[refKey(ref)]] : [] })),
   };
+}
+
+/**
+ * Axis labels on charts over time: as many as fit without touching, evenly spaced and always
+ * including the latest. Runs after each redraw and when the window changes size, since how
+ * many fit depends on how wide the chart is (a phone fits about four).
+ */
+export function thinAxes(root = document) {
+  root.querySelectorAll('.rp-xax').forEach((ax) => {
+    const sp = [...ax.children];
+    sp.forEach((x) => x.classList.remove('thin'));
+    if (sp.length < 2 || !ax.getBoundingClientRect().width) return;
+    const box = sp.map((x) => { const r = x.getBoundingClientRect(); return [r.left, r.right]; });
+    const n = sp.length;
+    for (let every = 1; every <= n; every++) {
+      let ok = true, edge = Infinity;
+      for (let i = n - 1; i >= 0; i -= every) { if (box[i][1] + 8 > edge) { ok = false; break; } edge = box[i][0]; }
+      if (ok) { sp.forEach((x, i) => x.classList.toggle('thin', (n - 1 - i) % every !== 0)); return; }
+    }
+  });
+}
+let thinT = 0;
+if (typeof window !== 'undefined') window.addEventListener('resize', () => { clearTimeout(thinT); thinT = setTimeout(() => thinAxes(), 120); });
+
+/** The dashboard's period: a list grouped by days, weeks, months, quarters and years, the dates it
+ *  covers, and From and To for a custom range. */
+function periodPicker(fv) {
+  const o = (k) => { const l = (PERIODS.find((p) => p[0] === k) || [k, k])[1]; return `<option value="${k}"${fv.period === k ? ' selected' : ''}>${esc(k === 'custom' ? l + '…' : l)}</option>`; };
+  const list = PERIOD_GROUPS.map(([g, ks]) => (g ? `<optgroup label="${esc(g)}">${ks.map(o).join('')}</optgroup>` : ks.map(o).join(''))).join('');
+  const custom = fv.period === 'custom' ? { from: fv.from || '', to: fv.to || '' } : null;
+  const r = periodRange(fv.period, Date.now(), custom);
+  const span = r && r.from > -8e15 && r.to < 8e15 ? spanName(r.from, r.to) : r ? r.label.replace(/^./, (ch) => ch.toUpperCase()) : '';
+  return `<select class="in db-psel" id="db-period" data-dv="period">${list}</select>
+    ${custom ? `<span class="db-prange"><label><span class="sr">From</span><input class="in" type="date" data-dv="pfrom" value="${esc(fv.from || '')}" aria-label="From"${fv.to ? ` max="${esc(fv.to)}"` : ''}></label><span aria-hidden="true">to</span><label><span class="sr">To</span><input class="in" type="date" data-dv="pto" value="${esc(fv.to || '')}" aria-label="To"${fv.from ? ` min="${esc(fv.from)}"` : ''}></label></span>` : ''}
+    ${span && fv.period !== 'custom' ? `<span class="db-pspan">${esc(span)}</span>` : custom && !r ? '<span class="db-pspan">Pick the first and last day</span>' : ''}`;
 }
 
 export function viewDashboard(id) {
@@ -836,7 +876,7 @@ export function viewDashboard(id) {
   ${edit && admin() ? `<div class="panel db-sharebar">${sharingHTML(x, 'dash')}</div>` : ''}
   ${edit && D.picker === 'links' ? linkPickerHTML(x) : edit && D.picker ? pickerHTML(x) : ''}
   <div class="db-filters" role="group" aria-label="Dashboard filters">
-    <span class="db-lab">Period</span><div class="db-seg">${PERIODS.map(([k, l]) => `<button type="button" class="${fv.period === k ? 'on' : ''}" aria-pressed="${fv.period === k}" data-d="period" data-v="${k}">${l}</button>`).join('')}</div>
+    <label class="db-lab" for="db-period">Period</label>${periodPicker(fv)}
     ${fieldFilters}${addFilter}
     ${edit ? `<span class="help">The period you pick here is saved as the dashboard’s starting period.</span>` : ''}
   </div>
@@ -953,7 +993,7 @@ function editTiles(fn) { if (!D.edit) return; const tiles = clone(D.edit.tiles |
 async function saveEdit() {
   const x = D.edit; if (!x) return;
   const fv = filterState(x);
-  const data = { ...dashData(x), name: (x.name || '').trim().slice(0, 120) || 'Dashboard', shared: admin() ? !!x.shared : false, groups: admin() && x.shared ? x.groups || [] : [], filters: { period: fv.period, fields: clone(x.filters?.fields || []), floatUp: !!x.filters?.floatUp, grid: GRID }, updatedAt: Date.now() };
+  const data = { ...dashData(x), name: (x.name || '').trim().slice(0, 120) || 'Dashboard', shared: admin() ? !!x.shared : false, groups: admin() && x.shared ? x.groups || [] : [], filters: { period: fv.period, ...(fv.period === 'custom' ? { from: fv.from || '', to: fv.to || '' } : {}), fields: clone(x.filters?.fields || []), floatUp: !!x.filters?.floatUp, grid: GRID }, updatedAt: Date.now() };
   try { await saveDashboard(x.id, data); } catch (e) { console.error(e); toast(e?.code === 'permission-denied' ? 'You can’t change this dashboard.' : 'Saving failed. Check your connection and try again.'); return; }
   D.edit = null; D.picker = false; D.confirm = null; toast('Dashboard saved'); repaint();
 }
@@ -1102,6 +1142,15 @@ document.addEventListener('change', (e) => {
     case 'dash-group': if (D.edit) { D.edit.groups = t.checked ? [...new Set([...(D.edit.groups || []), t.value])] : (D.edit.groups || []).filter((g) => g !== t.value); D.edit.dirty = true; repaint(); } break;
     case 'float': if (D.edit) { D.edit.filters = { ...(D.edit.filters || { period: 'all', fields: [] }), floatUp: t.checked }; D.edit.tiles = resolveCanvas(canvasTiles(D.edit.tiles), null, t.checked); D.edit.dirty = true; repaint(); } break;
     case 'linkview': editTiles((tiles) => { const tile = tiles.find((y) => y.id === t.dataset.v); if (tile && tile.link) { if (t.value) tile.link = { ...tile.link, view: t.value }; else { const { view, ...rest } = tile.link; tile.link = rest; } } }); break;
+    case 'period': case 'pfrom': case 'pto': {
+      const x = D.edit && D.did ? D.edit : dashById(D.did); if (!x) return;
+      const fv = filterState(x);
+      if (k === 'period') fv.period = PERIODS.some((p) => p[0] === t.value) ? t.value : 'all';
+      else fv[k === 'pfrom' ? 'from' : 'to'] = /^\d{4}-\d{2}-\d{2}$/.test(t.value) ? t.value : '';
+      if (D.edit) D.edit.dirty = true;
+      repaint(() => { if (k === 'period' && t.value === 'custom' && !fv.from) document.querySelector('[data-dv="pfrom"]')?.focus(); });
+      break;
+    }
     case 'addfilter': if (D.edit && t.value) { D.edit.filters = { ...(D.edit.filters || { period: 'all' }), fields: (D.edit.filters?.fields || []).concat(refOf(t.value)) }; D.edit.dirty = true; repaint(); } break;
   }
 });

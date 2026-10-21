@@ -1,8 +1,9 @@
 // Scheduled dashboard emails: when one is due, and the email itself. Built on the server (Cadence's
 // functions, dashMailer) from the same numbers the dashboard shows. Email programs don't run scripts
 // or draw charts, so charts become small tables with bars made of coloured cells. Pure: no DOM.
-import { fieldOf, bucketsOf, measureOf, refLabel } from './reportlogic.js';
-import { PERIODS, periodRange, rowsFor, kpiOf, slicesOf, groupRows, pivotOf, sortRecs, normalizeDef, readingOrder, canvasTiles, groupLabel } from './dashlogic.js';
+import { fieldOf, bucketsOf, measureOf, refLabel, INTERVALS } from './reportlogic.js';
+import { bucketName, dayName } from './cal.js';
+import { periodName, periodRange, rowsFor, kpiOf, slicesOf, groupRows, pivotOf, sortRecs, normalizeDef, readingOrder, canvasTiles, groupLabel } from './dashlogic.js';
 import { fmtMeasure, measureLabel, cellText, isNumRef } from './dashfmt.js';
 
 export const FREQS = [['weekdays', 'Every weekday'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['daily', 'Every day']];
@@ -69,13 +70,6 @@ const table = (rows, head = '') => `<table role="presentation" cellpadding="0" c
 const barCell = (v, max, color = BAR) => { const w = Math.max(1, Math.round((max > 0 ? Math.max(0, v) / max : 0) * 100)); return `<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse"><tr><td style="width:${w}%;height:10px;background:${color};border-radius:3px;font-size:0;line-height:0">&nbsp;</td>${w < 100 ? `<td style="width:${100 - w}%;font-size:0;line-height:0">&nbsp;</td>` : ''}</tr></table>`; };
 const more = (n, what) => (n > 0 ? `<p style="margin:6px 0 0;font-size:12px;color:${MUTED}">and ${n} more ${what}</p>` : '');
 
-function periodLabel(iv, d) {
-  if (iv === 'week') return 'Week of ' + d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
-  if (iv === 'month') return d.toLocaleDateString('en-CA', { month: 'short', year: 'numeric' });
-  if (iv === 'quarter') return 'Q' + (Math.floor(d.getMonth() / 3) + 1) + ' ' + d.getFullYear();
-  return String(d.getFullYear());
-}
-
 /** One report as email HTML (and a line of plain text). */
 export function reportBlock(c, def, extra, now) {
   const form = c.formById(def.form);
@@ -97,11 +91,13 @@ export function reportBlock(c, def, extra, now) {
   }
   if (def.type === 'line' || def.type === 'area') {
     if (!fieldOf(c, def.time)) return { html: '', text: '' };
-    const iv = def.interval || 'month';
-    const b = bucketsOf(c, def, list, now, extra.range).slice(-12);
+    // an email lists one row per bucket: step up (days to weeks, say) until it's 14 rows or fewer, then keep the latest 12
+    let all = bucketsOf(c, def, list, now, extra.range);
+    for (let i = INTERVALS.indexOf(all.iv) + 1; all.length > 14 && i < INTERVALS.length; i++) all = bucketsOf(c, { ...def, interval: INTERVALS[i] }, list, now, extra.range);
+    const iv = all.iv, b = all.slice(-12);
     const max = Math.max(0, ...b.map((x) => x.value)) || 1;
-    const rows = b.map((x) => `<tr>${td(esc(periodLabel(iv, x.date)), 'width:34%;white-space:nowrap')}${td(barCell(x.value, max), 'width:44%')}${td(esc(fmtMeasure(c, def, x.value)), 'text-align:right;white-space:nowrap')}</tr>`).join('');
-    return { html: table(rows), text: b.map((x) => `${periodLabel(iv, x.date)}: ${fmtMeasure(c, def, x.value)}`).join('; ') };
+    const rows = b.map((x) => `<tr>${td(esc(bucketName(x.start, iv) + (x.partial ? ' (so far)' : '')), 'width:34%;white-space:nowrap')}${td(barCell(x.value, max), 'width:44%')}${td(esc(fmtMeasure(c, def, x.value)), 'text-align:right;white-space:nowrap')}</tr>`).join('');
+    return { html: table(rows), text: b.map((x) => `${bucketName(x.start, iv)}${x.partial ? ' (so far)' : ''}: ${fmtMeasure(c, def, x.value)}`).join('; ') };
   }
   if (def.type === 'pivot') {
     const p = pivotOf(c, def, list);
@@ -138,11 +134,12 @@ export function reportBlock(c, def, extra, now) {
  */
 export function dashEmail(c, dash, reports, { now = Date.now(), link = '', schedule = null, company = '' } = {}) {
   const periodKey = dash.filters?.period || 'all';
-  const range = periodRange(periodKey, now);
-  const extra = { periodKey, range: range ? { from: range.from, to: range.to } : null, fields: [] };
-  const date = new Date(now).toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  const periodName = (PERIODS.find((p) => p[0] === periodKey) || PERIODS[0])[1];
-  const parts = [], text = [`${dash.name || 'Dashboard'} · ${periodName} · ${date}`, ''];
+  const custom = periodKey === 'custom' ? { from: dash.filters?.from || '', to: dash.filters?.to || '' } : null;
+  const range = periodRange(periodKey, now, custom);
+  const extra = { periodKey, custom, range: range ? { from: range.from, to: range.to } : null, fields: [] };
+  const date = dayName(now, { weekday: true });
+  const pName = periodName(periodKey, custom);
+  const parts = [], text = [`${dash.name || 'Dashboard'} · ${pName} · ${date}`, ''];
   readingOrder(canvasTiles(dash.tiles || []).filter((t) => t.report || t.text)).forEach((t) => {
     if (t.text) {
       parts.push(`<tr><td style="padding:14px 0 6px">${t.text.title ? `<div style="font-size:15px;font-weight:700;color:${INK}">${esc(t.text.title)}</div>` : ''}${String(t.text.body || '').split(/\n{2,}/).filter(Boolean).map((p) => `<p style="margin:6px 0 0;font-size:13px;color:${INK}">${esc(p)}</p>`).join('')}</td></tr>`);
@@ -160,10 +157,10 @@ export function dashEmail(c, dash, reports, { now = Date.now(), link = '', sched
   const foot = `${schedule ? esc(scheduleText(schedule)) + '. ' : ''}Sent by Formwright${company ? ' for ' + esc(String(company).replace(/\.$/, '')) : ''}. An administrator can change who gets this on the dashboard (Email schedule).`;
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:${SOFT}"><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:${SOFT}"><tr><td align="center" style="padding:20px 12px">
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:680px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-      <tr><td style="padding:0 0 14px"><div style="font-size:22px;font-weight:700;color:${INK}">${esc(dash.name || 'Dashboard')}</div><div style="font-size:13px;color:${MUTED};margin-top:2px">${esc(periodName)} · ${esc(date)}${link ? ` · <a href="${esc(link)}" style="color:${BAR}">Open the dashboard</a>` : ''}</div></td></tr>
+      <tr><td style="padding:0 0 14px"><div style="font-size:22px;font-weight:700;color:${INK}">${esc(dash.name || 'Dashboard')}</div><div style="font-size:13px;color:${MUTED};margin-top:2px">${esc(pName)} · ${esc(date)}${link ? ` · <a href="${esc(link)}" style="color:${BAR}">Open the dashboard</a>` : ''}</div></td></tr>
       ${parts.join('')}
       <tr><td style="padding:10px 0 0;font-size:12px;color:${MUTED}">${foot}</td></tr>
     </table></td></tr></table></body></html>`;
   if (link) text.push('', 'Open the dashboard: ' + link);
-  return { subject: `${dash.name || 'Dashboard'} · ${new Date(now).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}`.slice(0, 200), html, text: text.join('\n') };
+  return { subject: `${dash.name || 'Dashboard'} · ${dayName(now, { year: false })}`.slice(0, 200), html, text: text.join('\n') };
 }

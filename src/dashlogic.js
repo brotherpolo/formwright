@@ -8,8 +8,9 @@
 //          conditions: [{ ref, op: 'is'|'not', value }], join: 'and'|'or', dateRef?, compare?, sort? }
 // A dashboard (dashboards/{id}): { name, ownerId, shared, groups: [groupId], tiles, filters, createdAt, updatedAt }
 //   tiles:   [{ id, report: reportId, cols, rows }] or [{ id, text: { title, body }, cols, rows }]
-//   filters: { period: 'all'|'month'|'30d'|'quarter'|'year', fields: [ref] }
+//   filters: { period: a PERIODS key, from?, to? ('YYYY-MM-DD', for 'custom'), fields: [ref] }
 
+import { startOf, nextOf, parseLocal, dayName, spanName, bucketName } from './cal.js';
 import {
   fieldOf, valueOf, timeOf, textOf, kindOf, chainOf, measureOf, reportFields, titleFieldOf,
   defaultColumns, isEmptyVal, layout,
@@ -19,7 +20,21 @@ export const TYPES = [
   ['table', 'Table'], ['grouped', 'Grouped table'], ['pivot', 'Pivot'], ['bar', 'Bar'],
   ['line', 'Line'], ['area', 'Area'], ['donut', 'Donut'], ['kpi', 'KPI'],
 ];
-export const PERIODS = [['all', 'All time'], ['month', 'This month'], ['30d', 'Last 30 days'], ['quarter', 'This quarter'], ['year', 'This year']];
+/** Dashboard periods, in the order the picker lists them (grouped as PERIOD_GROUPS). */
+export const PERIODS = [
+  ['today', 'Today'], ['yesterday', 'Yesterday'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'],
+  ['week', 'This week'], ['lastweek', 'Last week'],
+  ['month', 'This month'], ['lastmonth', 'Last month'],
+  ['quarter', 'This quarter'], ['lastquarter', 'Last quarter'],
+  ['year', 'This year'], ['lastyear', 'Last year'],
+  ['all', 'All time'], ['custom', 'Custom range'],
+];
+export const PERIOD_GROUPS = [
+  ['Days', ['today', 'yesterday', '7d', '30d']], ['Weeks', ['week', 'lastweek']], ['Months', ['month', 'lastmonth']],
+  ['Quarters', ['quarter', 'lastquarter']], ['Years', ['year', 'lastyear']], ['', ['all', 'custom']],
+];
+export const periodName = (key, custom) => (key === 'custom' && custom && (custom.from || custom.to) ? customName(custom) : (PERIODS.find((p) => p[0] === key) || PERIODS.find((p) => p[0] === 'all'))[1]);
+function customName(cu) { const r = periodRange('custom', Date.now(), cu); return r ? spanName(r.from, r.to) : 'Custom range'; }
 export const MAX_PIVOT_ROWS = 30;
 export const MAX_PIVOT_COLS = 12;
 
@@ -97,28 +112,51 @@ export function rowsFor(ctx, def, extra = {}) {
 
 /* ---------- periods ---------- */
 
-/** { from, to, prevFrom, prevTo, label, prevLabel } for a period key, or null for all time. */
-export function periodRange(key, now) {
-  const d = new Date(now);
-  const y = d.getFullYear(), m = d.getMonth();
-  const at = (yy, mm, dd = 1) => new Date(yy, mm, dd).getTime();
+/**
+ * { from, to, prevFrom, prevTo, label, prevLabel } for a period key, or null for all time.
+ * [from, to) in the company's calendar (time zone, week start, fiscal year: cal.js). The "prev"
+ * stretch is the period before, for a KPI's "+12% vs last month". custom: { from, to } as
+ * 'YYYY-MM-DD' (both days included); a blank end runs from (or to) the start (or end) of time.
+ */
+export function periodRange(key, now, custom) {
+  const day = (k = 0) => nextOf(startOf(now, 'day'), 'day', k);
+  const of = (iv, k, label, prevLabel) => { const s = nextOf(startOf(now, iv), iv, k); return { from: s, to: nextOf(s, iv), prevFrom: nextOf(s, iv, -1), prevTo: s, label, prevLabel }; };
+  const back = (n, label) => { const to = day(1), from = day(1 - n); return { from, to, prevFrom: day(1 - 2 * n), prevTo: from, label, prevLabel: `the ${n} days before` }; };
   switch (key) {
-    case 'month': return { from: at(y, m), to: at(y, m + 1), prevFrom: at(y, m - 1), prevTo: at(y, m), label: 'this month', prevLabel: 'last month' };
-    case '30d': { const to = new Date(y, m, d.getDate() + 1).getTime(); const day = 864e5; return { from: to - 30 * day, to, prevFrom: to - 60 * day, prevTo: to - 30 * day, label: 'the last 30 days', prevLabel: 'the 30 days before' }; }
-    case 'quarter': { const q = Math.floor(m / 3) * 3; return { from: at(y, q), to: at(y, q + 3), prevFrom: at(y, q - 3), prevTo: at(y, q), label: 'this quarter', prevLabel: 'last quarter' }; }
-    case 'year': return { from: at(y, 0), to: at(y + 1, 0), prevFrom: at(y - 1, 0), prevTo: at(y, 0), label: 'this year', prevLabel: 'last year' };
+    case 'today': return of('day', 0, 'today', 'yesterday');
+    case 'yesterday': return of('day', -1, 'yesterday', 'the day before');
+    case '7d': return back(7, 'the last 7 days');
+    case '30d': return back(30, 'the last 30 days');
+    case 'week': return of('week', 0, 'this week', 'last week');
+    case 'lastweek': return of('week', -1, 'last week', 'the week before');
+    case 'month': return of('month', 0, 'this month', 'last month');
+    case 'lastmonth': return of('month', -1, 'last month', 'the month before');
+    case 'quarter': return of('quarter', 0, 'this quarter', 'last quarter');
+    case 'lastquarter': return of('quarter', -1, 'last quarter', 'the quarter before');
+    case 'year': return of('year', 0, 'this year', 'last year');
+    case 'lastyear': return of('year', -1, 'last year', 'the year before');
+    case 'custom': {
+      const a = custom && parseLocal(custom.from), z = custom && parseLocal(custom.to);
+      if (a == null && z == null) return null;
+      const from = a ?? -8.64e15, to = z != null ? nextOf(z, 'day') : 8.64e15;
+      if (from >= to) return null;
+      if (a == null || z == null) return { from, to, prevFrom: null, prevTo: null, label: a == null ? 'up to ' + dayName(z) : 'since ' + dayName(a), prevLabel: '' };
+      const days = Math.round((to - from) / 864e5);
+      return { from, to, prevFrom: nextOf(from, 'day', -days), prevTo: from, label: spanName(from, to), prevLabel: days === 1 ? 'the day before' : `the ${days} days before` };
+    }
     default: return null;
   }
 }
 
 /** A KPI's value now and in the period before: on a dashboard its period, otherwise this month vs last. */
 export function kpiOf(ctx, def, extra, now) {
-  const range = extra.range ? periodRange(extra.periodKey, now) : null;
+  const range = extra.range ? periodRange(extra.periodKey, now, extra.custom) : null;
   const cur = rowsFor(ctx, def, extra);
   const value = measureOf(ctx, def, cur);
   if (!def.compare) return { value, n: cur.length };
   const r = range || periodRange('month', now);
   const curRows = range ? cur : rowsFor(ctx, def, { ...extra, range: { from: r.from, to: r.to } });
+  if (r.prevFrom == null) return { value: range ? value : measureOf(ctx, def, curRows), n: curRows.length, prev: null, delta: null, noPrev: true, label: r.label, prevLabel: r.prevLabel };
   const prevRows = rowsFor(ctx, def, { ...extra, range: { from: r.prevFrom, to: r.prevTo } });
   const a = measureOf(ctx, def, curRows), b = measureOf(ctx, def, prevRows);
   const delta = b ? ((a - b) / Math.abs(b)) * 100 : null;
@@ -138,25 +176,18 @@ function orderKeys(f, keys, totals) {
 
 /* ---------- grouping by numbers and dates ---------- */
 
-export const BYS = [['week', 'Week'], ['month', 'Month'], ['quarter', 'Quarter'], ['year', 'Year']];
+export const BYS = [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['quarter', 'Quarter'], ['year', 'Year']];
 const BY_IDS = BYS.map((b) => b[0]);
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Fields a report can split by: choices, text, links, Created by, numbers, and dates (by a period). */
 export const groupable = (x) => ['group', 'key', 'num', 'date'].includes(x.kind) && x.f.type !== 'color';
 const isDateField = (f) => kindOf(f) === 'date';
 
-/** The period a date falls in: { k: label, s: start time } ('Oct 2026', 'Week of Oct 5, 2026', 'Q4 2026', '2026'). */
+/** The period a date falls in: { k: label, s: start time } ('Oct 5, 2026', 'Week of Oct 5, 2026', 'Oct 2026', 'Q4 2026' or 'Q2 FY2027', '2026' or 'FY2027'), in the company's calendar. */
 export function bucketOf(t, by) {
-  const d = new Date(t);
-  const y = d.getFullYear(), m = d.getMonth();
-  if (by === 'year') return { k: String(y), s: new Date(y, 0, 1).getTime() };
-  if (by === 'quarter') { const q = Math.floor(m / 3); return { k: `Q${q + 1} ${y}`, s: new Date(y, q * 3, 1).getTime() }; }
-  if (by === 'week') {
-    const st = new Date(y, m, d.getDate() - ((d.getDay() + 6) % 7)); // Monday
-    return { k: `Week of ${MON[st.getMonth()]} ${st.getDate()}, ${st.getFullYear()}`, s: st.getTime() };
-  }
-  return { k: `${MON[m]} ${y}`, s: new Date(y, m, 1).getTime() };
+  const iv = BY_IDS.includes(by) ? by : 'month';
+  const s = startOf(t, iv);
+  return { k: bucketName(s, iv), s };
 }
 
 /** The group keys for one value, each with a sort value for numbers and periods. */
@@ -341,7 +372,7 @@ export function normalizeDef(ctx, def0) {
   }
   if (['line', 'area'].includes(t)) {
     if (!fieldOf(ctx, def.time)) { const own = fields.find((x) => x.kind === 'date' && !x.f.system && x.ref.form === def.form); def.time = own ? own.ref : { form: def.form, id: '_created' }; }
-    def.interval = ['week', 'month', 'quarter', 'year'].includes(def.interval) ? def.interval : 'month';
+    def.interval = ['auto', 'day', 'week', 'month', 'quarter', 'year'].includes(def.interval) ? def.interval : 'month';
     def.span = ['fit', 'last', 'custom'].includes(def.span) ? def.span : 'fit';
     ['from', 'to'].forEach((k) => { if (!(typeof def[k] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(def[k]))) delete def[k]; });
   }

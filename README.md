@@ -107,6 +107,8 @@ src/
   pdfdraw.js               Export PDF: draws the document with pdf-lib (unit-tested)
   pdfexport.js             Export PDF: fetches photos, loads pdf-lib on first use, downloads the file
   exportset.js             Settings → PDF exports: company name and logo
+  cal.js                   The company calendar: time zone, week start, fiscal year; days, weeks, quarters, names (pure, unit-tested)
+  calset.js, calpreview.js Settings → Dates and time, and its preview
   duplogic.js              Duplicate: which values a copy keeps (pure, unit-tested)
   rules.js                 Show/hide rules: conditions, what's hidden, required or cleared, clashes, effect on saved records (pure, unit-tested)
   rulesui.js               Form designer → Rules tab: building rules with clicks (its condition builder is reused by automations)
@@ -162,6 +164,7 @@ Security rules, Storage rules, indexes and their tests live in the Cadence folde
 | `stageOverdue/{recordId}` | which overdue reminder and escalation were sent for a record's current stage | server only |
 | `listViews/{id}` | `formId, name, ownerId, shared, cols[], sort{key, dir}, filters{fieldId: [options]}, density, createdAt, updatedAt` | owner (private); admins (shared, and `dflt-<formId>`) |
 | `imports/{id}` | `formId, formName, fileName, ownerId, createdAt, stamp, status, added[], updated[], counts{}, finishedAt, undoneAt, undoneBy, undo{}` | admins |
+| `settings/calendar` | `timeZone, weekStart (0 Sunday, 1 Monday), fyStart (1-12), updatedAt, updatedBy`: Settings → Dates and time | admins (everyone let in reads it) |
 | `settings/exports` | `companyName, logo` (PNG or JPEG data URL, under 600 KB)`, updatedAt, updatedBy`: the top of exported PDFs | admins (everyone let in reads it) |
 | `counters/{formId}__{fieldId}` | `next`, `years{YYYY: next}`: the next auto number | server only (admins read) |
 | `audit/{id}` | `at, by, byName, area, kind, formId, formName, recordId, title, targetId, targetName, changes[{key, label, type, from, to}], note, snapshot, restoredAt, restoredBy` | server only (admins read) |
@@ -177,11 +180,12 @@ Files go to Cloud Storage. The record stores `{name, size, type, path, url}`. Si
 
 **A report** is one chart, table or number, saved by itself so it can go on any number of dashboards. Change it once and every dashboard that shows it updates.
 
-- **Types:** Table, Grouped table (with subtotals), Pivot (rows × columns, like Client × Stage), Bar, Line, Area, Donut, and KPI (one number, optionally compared with the period before).
+- **Types:** Table, Grouped table (with subtotals), Pivot (rows × columns, like Client × Stage), Bar, Line, Area, Donut, and KPI (one number). A KPI can **Compare with the period before**: "▲ +12% vs last month (CA$1,200)". On a dashboard that's the period before the one picked (the month before for Last month, the 90 days before a 90-day custom range); in the report editor, this month against last month.
 - **Data from** picks the form. A report can also use fields of the forms above it: a Line items report can group by the project's stage or the client's name. That's how sub-form rows are reported "through" their parent.
 - **Value:** a count of records, or the total or average of a number field.
 - **Only records where:** any number of conditions (*Stage is not Done*), joined by **and** or **or**.
-- **Date for periods:** which date a dashboard's period (This month, This year…) looks at. Charts over time ignore the period; they always show the last 12 months or 26 weeks.
+- **Date for periods:** which date a dashboard's period (This month, This year…) looks at.
+- **Charts over time** (Line, Area) step by **Auto**, **Days**, **Weeks**, **Months**, **Quarters** or **Years**. **Auto** picks for the dates shown: days up to about six weeks, weeks up to about six months, then months, then quarters, then years, and says which ("By day (auto)"). **Dates shown:** from the first record to the last, the last 30 days / 26 weeks / 12 months / 8 quarters / 5 years, or dates you choose; on a dashboard with a period picked, that period. A chart never has more than 120 points: past that it steps up (weeks to months, say) and says so under the title ("Shown by month: weeks would be too many to show"). Axis labels are spaced so they never touch, however narrow the chart (a phone fits about four), always including the latest. The step still running (this week, this month) is drawn dashed and marked **so far**, and its tooltip says "(so far)", so a half-finished week doesn't read as a drop. Bar charts, pivots and grouped tables can split a date by day too.
 - **Add to dashboard** puts it on an existing dashboard or a new one. The top of the editor lists the dashboards it's on.
 
 **The Reports and Dashboards lists** are tables. **Name** is always the first column; **Columns** adds, removes and reorders the rest (reports: Type, Data from, On dashboards, Last updated, Value, Grouped by, Split by, Over time, Conditions, Owner, Sharing, Created; dashboards: Reports, Home, Sharing, Last updated, Reports on it, Starting period, Owner, Created). The choice is kept for you on each device. One search box looks through the name and every column shown, words in any order. Click a heading to sort (again to reverse); click a row to open it. On phones each row is a card.
@@ -200,7 +204,8 @@ Files go to Cloud Storage. The record stores `{name, size, type, path, url}`. Si
   - On phones, each report is a small card: the number for a KPI, the ring for a donut (no legend), the top 5 bars with short labels, the line or area chart, and the top 3 rows of a table, grouped table (its groups) or pivot (row totals). "See all" opens the rest.
   - Tap a bar, slice or point to see its records; tap anywhere else on a card to see all of its records. Press and hold (any touch screen) for a bubble with the name, the number of records, the total and its share. A tip says so the first three times a dashboard is opened.
   - Dashboards saved before the canvas keep their arrangement as the starting layout.
-- **Filters:** a period (All time, This month, Last 30 days, This quarter, This year) and any number of field filters you add while editing (*Clients › Company name*). Everyone can change them while viewing; the period picked while editing is saved as the starting one. A field filter applies to each report whose form is that form or sits below it; the others say it doesn't reach them.
+- **Filters:** a period and any number of field filters you add while editing (*Clients › Company name*). Everyone can change them while viewing; the period picked while editing is saved as the starting one. A field filter applies to each report whose form is that form or sits below it; the others say it doesn't reach them.
+- **Period:** a list grouped by **Days** (Today, Yesterday, Last 7 days, Last 30 days), **Weeks** (This week, Last week), **Months** (This month, Last month), **Quarters** (This quarter, Last quarter) and **Years** (This year, Last year), then **All time** and **Custom range…** (From and To; both days count; leave one blank to run from the first record or up to now). The dates it covers show beside it ("Sep 1 – 30, 2026"). Weeks, quarters and years follow **Settings → Dates and time**. A custom range saved with the dashboard is stored as `filters: { period: 'custom', from, to }`; scheduled emails use it too.
 - **Home:** **Set as home** on any dashboard makes it open when you start Formwright. Everyone picks their own.
 - **Movement:** charts make an entrance when you open a dashboard, come back to it, or change its period or filters. Numbers count up, bars grow from the left, a donut sweeps round, lines draw themselves; tiles further down play as you scroll to them. Live changes while you're looking (someone saving a record) just update the numbers. If the app is opened straight onto a dashboard, the entrance waits for the records to load, and a redraw mid-way carries each chart on from where it was (`src/dashanim.js`, styles in `dash.css`).
 - **Pointing at charts (computers):** tiles lift slightly; the bar you point at stands out while the others fade; the donut slice or legend entry under the mouse lights up and the centre shows it ("4 · Scoping · 21%"); on line and area charts a guide line snaps to the nearest point and shows its value. Clicking still opens the records behind it. Phones and tablets keep tap-to-open, nothing moves while you arrange a dashboard (Edit dashboard), and anyone whose device asks for **reduced motion** gets the charts without animation.
@@ -340,12 +345,22 @@ A view only decides how the list looks. It never shows anyone records they could
 
 **Settings**, at the bottom of the sidebar, is where administrators set Formwright up. It opens a page of cards in four groups, each with a line saying what it's for and a count:
 
-- **Forms and data:** Form designer, Import history, PDF exports
+- **Forms and data:** Form designer, Import history, PDF exports, Dates and time
 - **People and access:** Users, Security groups, Roles
 - **Automation:** Automations, Schedules
 - **Records:** Audit trail
 
 On each of those screens the same list runs down the left (on a phone, a row of buttons you swipe along), so you can move between them; **‹ Settings** goes back to the cards. The form editor and the import wizard keep the full width. Settings stays lit in the sidebar on all of them, and each page can also be found with **Ctrl K** or added to a dashboard as a shortcut. Members don't see Settings, and the pages turn them away if they follow a link.
+
+## Dates and time (administrators)
+
+**Settings → Dates and time** sets how every report, dashboard and dashboard email counts dates, the same for everyone (`settings/calendar`; `src/cal.js` does the counting, unit-tested in several time zones):
+
+- **Time zone** (Toronto unless changed). Each day starts at midnight there, whatever zone someone's phone or computer is set to, so a bill entered at 11 p.m. lands on that day for everyone, in charts by day and in Today / Yesterday. Dates typed into forms are read on the company's clocks.
+- **Weeks start on** Monday (unless changed) or Sunday: This week, Last week, and charts by week ("Week of Oct 19, 2026").
+- **Fiscal year starts in** January unless changed. This quarter, Last quarter, This year, Last year and charts by quarter or year follow it. Starting in any month but January, they're named by the year they end in: with April, FY2027 runs April 2026 to March 2027, and October 2026 is Q3 FY2027.
+
+A box underneath shows today, this week, this quarter and this year with the settings as they are on screen; nothing changes for anyone until **Save**. Dashboard email send times still follow Eastern time.
 
 ## Schedules (administrators)
 

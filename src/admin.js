@@ -6,13 +6,14 @@ import { store, saveGroup, deleteGroup, saveJobRole, deleteJobRole, setUserJobRo
 import { go, render, renderMain, byOrder } from './app.js';
 import { esc, uid, clone, toast, badge } from './ui.js';
 import * as exportset from './exportset.js';
+import * as calset from './calset.js';
 import * as audit from './audit.js';
 import * as autos from './autos.js';
 import * as schedules from './schedules.js';
 import { personAv } from './avatar.js';
 import { LEVELS, NONE, PRESETS, normalize, describeLevel, levelFor, isAdmin, accessParents } from './access.js';
 
-const VIEWS = new Set(['users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'exports', 'audit', 'automations', 'automation', 'schedules']);
+const VIEWS = new Set(['calendar', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 let gdraft = null;
 let rdraft = null;        // the role being edited: { id, name, description, members, isNew, dirty }
 let confirmDel = false;
@@ -25,7 +26,7 @@ const VIEW_LABEL = { none: 'Can’t see', own: 'Only their own', all: 'All recor
 const EDIT_LABEL = { none: 'Can’t edit', own: 'Their own', all: 'All records' };
 
 export const handles = (view) => VIEWS.has(view.name);
-export const isDirty = (view) => (view.name === 'groupEdit' && !!gdraft?.dirty && !leaveArmed) || (view.name === 'roleEdit' && !!rdraft?.dirty && !leaveArmed) || (view.name === 'exports' && exportset.isDirty()) || autos.isDirty(view);
+export const isDirty = (view) => (view.name === 'groupEdit' && !!gdraft?.dirty && !leaveArmed) || (view.name === 'roleEdit' && !!rdraft?.dirty && !leaveArmed) || (view.name === 'exports' && exportset.isDirty()) || (view.name === 'calendar' && calset.isDirty()) || autos.isDirty(view);
 
 const userName = (u) => store.profiles[u.id]?.displayName || u.displayName || (u.email || '').split('@')[0] || 'Unnamed user';
 const sortedUsers = () => [...store.users].sort((a, b) => userName(a).localeCompare(userName(b)));
@@ -41,6 +42,7 @@ export function renderView(view) {
   if (view.name === 'roles') return { title: 'Roles', html: viewRoles() };
   if (view.name === 'roleEdit') return { title: 'Edit role', html: viewRoleEdit() };
   if (view.name === 'exports') return { title: 'PDF exports', html: exportset.viewExports() };
+  if (view.name === 'calendar') return { title: 'Dates and time', html: calset.viewCalendar() };
   if (view.name === 'audit') return { title: 'Audit trail', html: audit.viewAudit(view) };
   if (view.name === 'automations') return { title: 'Automations', html: autos.viewAutomations() };
   if (view.name === 'automation') return { title: 'Automation', html: autos.viewAutomation() };
@@ -261,6 +263,7 @@ function removedHTML() {
 
 export async function onClick(el, a, id) {
   if (a.startsWith('ex-') && (await exportset.onClick(a))) return;
+  if (a.startsWith('cal-') && (await calset.onClick(a, el))) return;
   if (a.startsWith('au-') && (await audit.onClick(a, el))) return;
   if (a.startsWith('am-') && (await autos.onClick(a, el))) return;
   if (a.startsWith('sc-') && (await schedules.onClick(a, el))) return;
@@ -416,6 +419,7 @@ export function onInput(t) {
 
 export async function onChange(t) {
   if (await exportset.onChange(t)) return;
+  if (calset.onChange(t)) return;
   if (audit.onChange(t)) return;
   if (autos.onChange(t)) return;
   if (t.dataset.gacc != null && gdraft) {

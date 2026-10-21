@@ -23,6 +23,7 @@ const ADMIN_PAGES = [
   { id: 'audit', label: 'Audit trail', glyph: '⌕' },
   { id: 'imports', label: 'Import history', glyph: '⇪' },
   { id: 'exports', label: 'PDF exports', glyph: '⇩' },
+  { id: 'calendar', label: 'Dates and time', glyph: '☼' },
 ];
 
 export function initPalette(helpers) {

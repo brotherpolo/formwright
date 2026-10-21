@@ -1099,3 +1099,16 @@ tr.wf-over td.title{color:var(--danger)}
   .st-ni .n,.st-ng{display:none}
   .st-back{flex:none;padding:6px 8px;white-space:nowrap}
 }
+
+/* Settings → Dates and time */
+.calset{max-width:640px;padding:20px 22px}
+.calset .flabel{display:block;margin-bottom:6px}
+.calset select.in{display:block;width:100%}
+.calset .help{margin:6px 0 0}
+.calset select.in{max-width:360px}
+.cal-seg{max-width:260px}
+.cal-prev{margin-top:20px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:color-mix(in srgb,var(--accent) 5%,var(--surface))}
+.cal-prev dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:8px 0 0;font-size:14px}
+.cal-prev dt{color:var(--muted)}
+.cal-prev dd{margin:0;font-weight:500}
+.cal-act{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}

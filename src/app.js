@@ -14,7 +14,7 @@ import { parseRoute, routeFor } from './route.js';
 import { effectiveHome, viewStarterHome } from './dash.js';
 import { afterDashRender } from './dashanim.js';
 import { nounOf as nounOfForm } from './dashlogic.js';
-import { initReports, closeCatalogPop, viewReportsList, viewReport, reportName, leaveReport, reportBusy, viewDashboards, viewDashboard, dashName, maybeMigrate, reportDirty, dashDirty, forgetDrafts, counts, drillNav, fitTiles } from './dash.js';
+import { initReports, closeCatalogPop, viewReportsList, viewReport, reportName, leaveReport, reportBusy, viewDashboards, viewDashboard, dashName, maybeMigrate, reportDirty, dashDirty, forgetDrafts, counts, drillNav, fitTiles, thinAxes } from './dash.js';
 import { initLists, viewRecords, afterRecords, resetLists, useView } from './lists.js';
 import { initAttach, openPickChildren, closeAttach } from './attach.js';
 import { titleSortOf, columnCatalog, defaultConfig, cellOf, defaultViewId } from './listlogic.js';
@@ -31,6 +31,7 @@ import { FX } from './formulas.js';
 import { isAdmin, formLevel, canViewForm, canCreate, canEditRecord } from './access.js';
 import * as admin from './admin.js';
 import { leave as exportLeave } from './exportset.js';
+import { leave as calLeave } from './calset.js';
 import { initAudit } from './audit.js';
 import { fieldItem, fileName as pdfFileName } from './pdfdoc.js';
 import { copyValues, relinkRow } from './duplogic.js';
@@ -59,7 +60,7 @@ import { signOutUser } from './auth.js';
 import { $, esc, uid, clone, isEmpty, toast, COLORS, colorOf, itemName, badge, lazy } from './ui.js';
 import examples from './examples.json';
 
-const ADMIN_VIEWS = new Set(['settings', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
+const ADMIN_VIEWS = new Set(['settings', 'calendar', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 
 // other words people search field types by
 const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold'};
@@ -219,6 +220,7 @@ function openLink(g){
   if(g.name==='new'){const f=formById(g.formId);if(f&&canCreate(store.me,f.id))goRec(newRecordDraft(f,null),{name:'record',formId:f.id,recordId:null});return;}
   if(g.name==='home'){goHome();return;}
   if(g.name==='exports'&&view.name!=='exports')exportLeave();
+  if(g.name==='calendar'&&view.name!=='calendar')calLeave();
   go({name:g.name});
 }
 /** What dashboard shortcuts need to know about this person. */
@@ -506,7 +508,8 @@ function settingsGroups(){return [
   {h:'Forms and data',items:[
     {act:'nav-designer',on:['designer'],t:'Form designer',g:'⚙',n:store.forms.length,d:'Build forms, fields, sections and workflows.'},
     {act:'nav-imports',on:['imports'],t:'Import history',g:'⇪',n:store.imports.length,d:'Past imports and rule changes, with Undo for 7 days.'},
-    {act:'nav-exports',on:['exports'],t:'PDF exports',g:'⇩',d:'Company name and logo on PDF and Word exports.'}]},
+    {act:'nav-exports',on:['exports'],t:'PDF exports',g:'⇩',d:'Company name and logo on PDF and Word exports.'},
+    {act:'nav-calendar',on:['calendar'],t:'Dates and time',g:'☼',d:'Time zone, the day weeks start and the fiscal year, for reports and dashboards.'}]},
   {h:'People and access',items:[
     {act:'nav-users',on:['users'],t:'Users',g:'☺',n:store.users.length,d:'Who has an account, their groups, roles and Cadence access.'},
     {act:'nav-groups',on:['groups','groupEdit'],t:'Security groups',g:'◫',n:store.groups.length,d:'Which forms each group can see and change.'},
@@ -560,6 +563,7 @@ function renderMain(){
   if(view.name==='dashboard')fitTiles();
   m.querySelector('.st-ni.on')?.scrollIntoView({block:'nearest',inline:'center'}); // phones: the row shows where you are
   afterDashRender(); // a dashboard that's new on screen plays its entrance
+  thinAxes(m); // chart axis labels: as many as fit
   syncTaskWatch();syncEmailWatch();syncStageWatch();cmt.sync();cmt.afterRender();wordui.sync();
 }
 
@@ -2223,6 +2227,7 @@ document.addEventListener('click',async e=>{
     case 'nav-automations':go({name:'automations'});break;
     case 'nav-schedules':go({name:'schedules'});break;
     case 'nav-settings':go({name:'settings'});break;
+    case 'nav-calendar':if(view.name!=='calendar')calLeave();go({name:'calendar'});break;
     case 'rec-duplicate':{
       const rec=view.recordId?recById(view.recordId):null,form=rec?formById(rec.formId):null;
       if(!rec||!form||!canCreate(store.me,form.id))return;

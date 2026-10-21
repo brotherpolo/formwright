@@ -1,6 +1,7 @@
 // Data layer: Firestore subscriptions, writes, and Storage uploads.
 // The UI reads the synchronous arrays on `store` and re-renders when `store.onChange` fires.
 
+import { setCalendar, normalizeCal } from './cal.js';
 import { app, db, storage } from './firebase.js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
@@ -42,6 +43,7 @@ export const store = {
   dashboards: [], // dashboards: mine and shared ones
   dashReady: false,
   homeDefault: '', // settings/home: the dashboard Home shows for anyone without their own
+  calendar: null, // settings/calendar: time zone, week start, fiscal year (cal.js)
   listViewsReady: false,
   imports: [], // admins: past imports, newest first
   automations: [], automationsError: null, // admins: Settings → Automations
@@ -181,6 +183,11 @@ export function startData(user) {
   let mUnsub = onSnapshot(query(collection(db, 'mentions'), where('to', '==', user.uid), orderBy('at', 'desc'), limit(200)), onMentions,
     () => { mUnsub = mentionsPlain(); }); // the index isn't built yet (or older rules): without the order
   baseUnsubs.push(() => mUnsub());
+  // the company calendar reports and dashboards count with (settings/calendar, Settings → Dates and time)
+  memberParts.push({
+    start: () => onSnapshot(doc(db, 'settings', 'calendar'), (s) => { store.calendar = setCalendar(s.exists() ? s.data() : null); changed(); }, () => { store.calendar = setCalendar(null); changed(); }),
+    empty: () => { store.calendar = setCalendar(null); },
+  });
   // the dashboard Home shows for anyone who hasn't picked their own (settings/home, set by an admin)
   memberParts.push({
     start: () => onSnapshot(doc(db, 'settings', 'home'), (s) => { store.homeDefault = s.exists() ? String(s.data().dashboardId || '') : ''; store.homeDefaultReady = true; changed(); }, () => { store.homeDefault = ''; store.homeDefaultReady = true; changed(); }),
@@ -351,6 +358,13 @@ export async function setDefaultHome(id) {
 /** The dashboard that opens when you start Formwright ('' for none). */
 export async function setHomeDashboard(id) {
   await setDoc(doc(db, 'profiles', store.user.uid), { homeDashboard: String(id || '').slice(0, 100) }, { merge: true });
+}
+
+/* ---------- Dates and time (settings/calendar) ---------- */
+
+export async function saveCalendar(c) {
+  const x = normalizeCal(c);
+  await setDoc(doc(db, 'settings', 'calendar'), { ...x, updatedAt: Date.now(), updatedBy: store.user.uid });
 }
 
 /* ---------- PDF exports: company name and logo (settings/exports) ---------- */

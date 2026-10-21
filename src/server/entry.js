@@ -6,4 +6,5 @@ export { fillTemplate } from '../emaillogic.js';
 export { ruleFires, testCond, opOf, ACTION_LABEL } from '../rules.js';
 export { wfOn, firstStage, assigneeFor, stageDue, dayKey, overdueStep, daysOverdue } from '../workflow.js';
 export { dashEmail, dueSlot, partsIn, recipients, scheduleText } from '../dashmail.js';
+export { setCalendar, normalizeCal } from '../cal.js';
 export { scheduleNow, nextRuns, nextRun, normalize as normalizeSchedule, hourText, dayText, scheduleText as autoScheduleText } from '../autosched.js';
