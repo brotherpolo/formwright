@@ -4,6 +4,7 @@ import './grids.css';
 import { readTheme, applyTheme, nextTheme, themeLabel, readScheme, applyScheme, schemeLabel, SCHEMES, readDensity, applyDensity, densityLabel, DENSITIES } from './theme.js';
 // Admin screens (users and groups) live in admin.js; data access in store.js.
 
+import { qrDialogHTML, recordUrl, printLabel, downloadPng, copyText } from './qrlabel.js';
 import { fillAutoNumbers, setAutoNumber, autoCounter, emailRecord, watchEmails, deleteSentEmails, fileBlob, getExportSettings } from './store.js';
 import { DEFAULT_SUBJECT, DEFAULT_MESSAGE, fillTemplate, parseEmails, emailSuggestions } from './emaillogic.js';
 import { runImport, rewriteValues, moveStage, watchStages } from './store.js';
@@ -11,7 +12,7 @@ import { canUseTasks } from './store.js';
 import { store, uploadFile, deleteFormCascade, loadExamples as writeExamples, watchTasks, setTaskDone, saveRecordBundle, recomputeAllAccess, attachRecords } from './store.js';
 import { cadenceUrl } from './firebase.js';
 import { parseRoute, routeFor } from './route.js';
-import { effectiveHome, viewStarterHome } from './dash.js';
+import { effectiveHome, viewStarterHome, applyShared } from './dash.js';
 import { afterDashRender } from './dashanim.js';
 import { nounOf as nounOfForm } from './dashlogic.js';
 import { initReports, closeCatalogPop, viewReportsList, viewReport, reportName, leaveReport, reportBusy, viewDashboards, viewDashboard, dashName, maybeMigrate, reportDirty, dashDirty, forgetDrafts, counts, drillNav, fitTiles, thinAxes } from './dash.js';
@@ -191,7 +192,7 @@ const ui={search:'',openField:null,tab:'fields',palette:false,confirm:null,leave
 function dirty(){return (view.name==='record'&&rdraft?.dirty)||(view.name==='formEdit'&&fdraft?.dirty)||(view.name==='report'&&reportDirty(view.reportId))||(view.name==='dashboard'&&dashDirty(view.dashboardId))||admin.isDirty(view)}
 function guard(){if(importRunning()){toast('The import is still running. Wait for it to finish.');return false;}if(dirty()&&!ui.leaveOk){ui.leaveOk=true;toast('You have unsaved changes. Tap again to leave without saving.');setTimeout(()=>ui.leaveOk=false,4000);return false;}ui.leaveOk=true;return true;}
 export function goRec(draft,v){if(!guard())return;rdraft=draft;go(v);}
-export function go(v,push=true){ui.subPop=null;ui.recMore=false;if(v.name==='record'&&v.recordId!==view.recordId)ui.rsTab='comments';ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
+export function go(v,push=true){ui.subPop=null;ui.recMore=false;ui.qr=null;if(v.name==='record'&&v.recordId!==view.recordId)ui.rsTab='comments';ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
   if(ADMIN_VIEWS.has(v.name)&&!isAdmin(store.me)){toast('Only administrators can open that.');return false;}
   if((v.name==='records'||v.name==='record')&&!canViewForm(store.me,v.formId)){toast('You don’t have access to that form.');return false;}
   if(!guard())return false;
@@ -310,6 +311,7 @@ function openRoute(r){
       if(!store.dashReady)return false; // still arriving
       toast('That dashboard isn’t available. It may have been deleted, or it isn’t shared with you.');return true;
     }
+    if(r.f)applyShared(r.id,r.f); // a shared link's filters (sharelink.js)
     go({name:'dashboards'},false);go({name:'dashboard',dashboardId:r.id});return true;
   }
   if(r.kind==='report'){
@@ -748,6 +750,7 @@ function viewRecord(form){
   const more=[];
   if(rec&&isAdmin(store.me))more.push(`<button type="button" role="menuitem" class="rb-item" data-act="rec-history">History</button>`);
   if(rec&&canCreate(store.me,form.id))more.push(`<button type="button" role="menuitem" class="rb-item" data-act="rec-duplicate">Duplicate</button>`);
+  if(rec)more.push(`<button type="button" role="menuitem" class="rb-item" data-act="rec-qr">QR code</button>`);
   if(rec&&isAdmin(store.me))more.push(`<button type="button" role="menuitem" class="rb-item" data-act="email-pdf">Email PDF</button>`);
   if(rec&&!ro)more.push(`<button type="button" role="menuitem" class="rb-item danger${ui.confirm===delKey?' armed':''}" data-act="del-record">${ui.confirm===delKey?(kids?`Tap again to delete (${kids} child record${kids>1?'s':''} stay)`:'Tap again to delete'):'Delete'}</button>`);
   const moreHTML=more.length?`<div class="rb-more"><button type="button" class="btn" data-act="rec-more" aria-haspopup="menu" aria-expanded="${!!ui.recMore}" aria-label="More actions"><span aria-hidden="true">⋯</span> More</button>${ui.recMore?`<div class="rb-menu" role="menu" aria-label="More actions">${more.join('')}</div>`:''}</div>`:'';
@@ -773,7 +776,7 @@ function viewRecord(form){
   ${sectionsHTML}${backHTML}
   ${!rec&&children.length?`<p class="help">Save this ${esc(itemName(form).toLowerCase())} to add ${children.map(c=>esc(c.cf.name.toLowerCase())).join(' and ')}.</p>`:''}
   </div>${asideHTML}</div>
-  ${cellPopup()}${ui.mail&&ui.mail.rec===rec?.id?mailDialog(form,rec):''}${ui.cascade&&ui.cascade.parentId===rec?.id?cascadeDialog():''}${ui.mailView&&ui.mailView.rec===rec?.id?mailViewDialog():''}${ui.mailDelAll?.stage===2&&ew.recordId===rec?.id&&ew.list.length?delAllDialog():''}${ui.wfAsk&&ui.wfAsk.recId===rec?.id?wfAskDialog(form,rec):''}${ui.modeAsk&&rec?modeAskDialog(form):''}`;
+  ${cellPopup()}${ui.qr&&ui.qr===rec?.id?qrDialogHTML({url:recordUrl(rec.id),title:recTitle(rec,form),formName:form.name||'Record',item:itemName(form),badgeHTML:badge(form)}):''}${ui.mail&&ui.mail.rec===rec?.id?mailDialog(form,rec):''}${ui.cascade&&ui.cascade.parentId===rec?.id?cascadeDialog():''}${ui.mailView&&ui.mailView.rec===rec?.id?mailViewDialog():''}${ui.mailDelAll?.stage===2&&ew.recordId===rec?.id&&ew.list.length?delAllDialog():''}${ui.wfAsk&&ui.wfAsk.recId===rec?.id?wfAskDialog(form,rec):''}${ui.modeAsk&&rec?modeAskDialog(form):''}`;
 }
 /** Leaving Edit view with unsaved changes: Save, Discard or Keep editing. */
 function modeAskDialog(form){
@@ -2226,7 +2229,7 @@ document.addEventListener('change',e=>{
 function closeFormSearch(){ui.fq='';ui.fi=0;ui.fsOpen=false;const q=$('#fs-q');if(q)q.value='';paintFormResults();}
 document.addEventListener('pointerdown',e=>{if(fsShown()&&!e.target.closest?.('.fsearch'))closeFormSearch();},true);
 document.addEventListener('pointerdown',e=>{if(ui.recMore&&!e.target.closest?.('.rb-more')){ui.recMore=false;if(ui.confirm?.startsWith?.('rec-'))ui.confirm=null;renderMain();}},true);
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.recMore){e.preventDefault();ui.recMore=false;renderMain();$('[data-act="rec-more"]')?.focus();}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.qr){e.preventDefault();ui.qr=null;renderMain();$('[data-act="rec-more"]')?.focus();return;}if(e.key==='Escape'&&ui.recMore){e.preventDefault();ui.recMore=false;renderMain();$('[data-act="rec-more"]')?.focus();}});
 document.addEventListener('pointerdown',e=>{if(ui.appear&&!e.target.closest?.('.appear,[data-act="appear"]')){ui.appear=false;renderSide();}},true);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ui.appear){e.preventDefault();ui.appear=false;renderSide();$('[data-act="appear"]')?.focus();}});
 window.addEventListener('resize',()=>{if(fsShown())paintFormResults();});
@@ -2299,6 +2302,12 @@ document.addEventListener('click',async e=>{
     case 'save-record':saveRecord();break;
     case 'rec-mode':toggleRecMode();break;
     case 'rs-tab':ui.rsTab=el.dataset.v;renderMain();$(`#rs-t-${CSS.escape(el.dataset.v)}`)?.focus();break;
+    case 'rec-qr':{const rec=recById(view.recordId);if(!rec)break;ui.recMore=false;ui.qr=rec.id;renderMain();setTimeout(()=>$('[data-act="qr-print"]')?.focus(),0);break;}
+    case 'qr-close':ui.qr=null;renderMain();$('[data-act="rec-more"]')?.focus();break;
+    case 'qr-scrim':if(e.target===el){ui.qr=null;renderMain();}break;
+    case 'qr-print':printLabel();break;
+    case 'qr-png':{const rec=recById(ui.qr),form=rec&&formById(rec.formId);if(rec)downloadPng(recordUrl(rec.id),recTitle(rec,form));break;}
+    case 'qr-copy':{const rec=recById(ui.qr);if(rec)copyText(recordUrl(rec.id));break;}
     case 'rec-more':ui.recMore=!ui.recMore;renderMain();if(ui.recMore)setTimeout(()=>$('.rb-menu .rb-item')?.focus(),0);else $('[data-act="rec-more"]')?.focus();break;
     case 'mode-keep':if(el.dataset.act==='mode-keep'&&(e.target===el||el.tagName==='BUTTON')){ui.modeAsk=false;renderMain();}break;
     case 'mode-discard':ui.modeAsk=false;rdraft=null;renderMain();break;

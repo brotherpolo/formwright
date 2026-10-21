@@ -1202,3 +1202,23 @@ input[type="date"]:not(:disabled):not([readonly]),input[type="datetime-local"]:n
 .ip-i:hover{background:color-mix(in srgb,var(--accent) 8%,transparent);border-color:var(--line)}
 .ip-i.on{background:color-mix(in srgb,var(--accent) 16%,transparent);border-color:var(--accent);color:var(--accent)}
 .ip-foot{margin:0;display:flex;justify-content:space-between;align-items:center}
+
+/* a record's QR code label (⋯ More → QR code) */
+.qr-dlg{max-width:480px;display:flex;flex-direction:column;gap:12px}
+.qr-top{display:flex;align-items:center;gap:8px}.qr-top h2{margin:0;flex:1}
+.qr-dlg>.help{margin:0}
+.qr-label{display:flex;align-items:center;gap:16px;padding:14px;border:1.5px dashed var(--line-strong);border-radius:12px;background:#fff;color:#111}
+.qr-code{flex:none;line-height:0}.qr-code svg{width:168px;height:168px;display:block}
+.qr-txt{display:flex;flex-direction:column;gap:6px;min-width:0}
+.qr-form{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#444}
+.qr-title{font:700 20px/1.2 var(--display);overflow-wrap:anywhere;color:#111}
+.qr-hint{font-size:12px;color:#555}
+.qr-acts{display:flex;flex-wrap:wrap;gap:8px}
+@media (max-width:480px){.qr-label{flex-direction:column;text-align:center}.qr-txt{align-items:center}}
+@media print{
+  html.qr-printing body *{visibility:hidden!important}
+  html.qr-printing .qr-label,html.qr-printing .qr-label *{visibility:visible!important}
+  html.qr-printing .qr-label{position:fixed;left:0;top:0;width:3.5in;border:1px solid #000;border-radius:0;flex-direction:row;text-align:left}
+  html.qr-printing .qr-label .badge{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  html.qr-printing .qr-scrim{background:none!important;box-shadow:none!important}
+}

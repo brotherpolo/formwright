@@ -24,6 +24,8 @@ import {
 import { fmtMeasure, fmtShort, measureLabel, cellText, isNumRef } from './dashfmt.js';
 import { headerButton as dmHeader } from './dashmailui.js';
 import { spanName, axisName, yearOf } from './cal.js';
+import { shareUrl, decodeShare } from './sharelink.js';
+import { copyText } from './qrlabel.js';
 import { lfRefs, lfExtra, lfLabel, lfValues, lfChoices, lfMatches, lfThrough, dashForms, normalizeFilter, togglePick, fromOldFilters, refKeyOf, reachRef, lfAddable, isDateField, datePick, ME } from './lflogic.js';
 
 let H = { fmt: null, valOf: null, recTitle: null, go: null, openRecord: null, renderMain: null, openLink: null, linkEnv: () => ({}), starterForms: () => [] };
@@ -38,6 +40,7 @@ const D = {
   migrating: false, migrated: new Set(),
   lfEdit: null, lfPop: null, lfQ: {}, lfMoved: new Set(), // live filters: the one being set up, the open dropdown, searches, dashboards whose old filters were turned into live filters
   drill: null,                            // the records behind a clicked bar, slice, cell or number
+  cmode: null,                            // clicking a chart: 'records' (the default) or 'filter' (filters the dashboard)
   hintFor: null, hintOn: false,           // the touch tip under the filters
 };
 const DRAWN = new Map();                  // report body key -> { def, extra } it was last drawn from
@@ -146,7 +149,7 @@ function bodyHTML(c, def, extra, key) {
   if (def.type === 'bar') {
     const items = slicesOf(c, def, list);
     const max = Math.max(0, ...items.map((x) => x.value)) || 1;
-    return { caption, html: `<div class="rp-bars" role="list">${items.map((x, i) => { const t = fmtMeasure(c, def, x.value); return `<button type="button" class="rp-bar db-dr" role="listitem" data-d="drill" data-k="${esc(key)}" data-i="${i}" title="${esc(x.key + ': ' + t)}"><span class="rp-bl">${esc(x.key)}</span><span class="rp-bt"><span class="rp-bf" style="width:${Math.max(0.5, (x.value / max) * 100).toFixed(1)}%"></span></span><span class="rp-bv">${esc(t)}</span></button>`; }).join('')}</div>` };
+    return { caption, html: `<div class="rp-bars" role="list">${items.map((x, i) => { const t = fmtMeasure(c, def, x.value); return `<button type="button" class="rp-bar db-dr${selCls(extra, x.key)}" role="listitem" data-d="drill" data-k="${esc(key)}" data-i="${i}" title="${esc(x.key + ': ' + t)}"><span class="rp-bl">${esc(x.key)}</span><span class="rp-bt"><span class="rp-bf" style="width:${Math.max(0.5, (x.value / max) * 100).toFixed(1)}%"></span></span><span class="rp-bv">${esc(t)}</span></button>`; }).join('')}</div>` };
   }
   if (def.type === 'donut') {
     const items = slicesOf(c, def, list).filter((x) => x.value > 0);
@@ -154,7 +157,7 @@ function bodyHTML(c, def, extra, key) {
     let acc = 0;
     const segs = items.map((x, i) => { const a = acc, b = acc + (x.value / total) * 100; acc = b; const gap = items.length > 1 ? Math.min(0.6, (b - a) / 3) : 0; return `var(--dc${(i % COLORS) + 1}) ${a.toFixed(2)}% ${(b - gap).toFixed(2)}%` + (gap ? `, var(--surface) ${(b - gap).toFixed(2)}% ${b.toFixed(2)}%` : ''); }).join(', '); // one slice: a whole ring, no notch
     return { caption, html: `<div class="db-donut${items.length > 10 ? ' many' : ''}"><div class="db-rbox"><div class="db-ring db-dr" data-d="drillring" data-k="${esc(key)}" data-cuts="${esc(cutsOf(items))}" style="background:conic-gradient(${segs})" role="img" aria-label="${esc(items.map((x) => x.key + ' ' + Math.round((x.value / total) * 100) + '%').join(', '))}"><div class="db-ringc">${esc(fmtShort(c, def, total))}<small>total</small></div></div></div>
-      <div class="db-leg" role="list">${items.map((x, i) => `<button type="button" class="db-li db-dr" role="listitem" data-d="drill" data-k="${esc(key)}" data-i="${i}"><span class="db-sw" style="background:var(--dc${(i % COLORS) + 1})"></span><span class="db-lk">${esc(x.key)}</span><span class="db-lv">${esc(fmtMeasure(c, def, x.value))}</span><span class="db-lp">${Math.round((x.value / total) * 100)}%</span></button>`).join('')}</div></div>` };
+      <div class="db-leg" role="list">${items.map((x, i) => `<button type="button" class="db-li db-dr${selCls(extra, x.key)}" role="listitem" data-d="drill" data-k="${esc(key)}" data-i="${i}"><span class="db-sw" style="background:var(--dc${(i % COLORS) + 1})"></span><span class="db-lk">${esc(x.key)}</span><span class="db-lv">${esc(fmtMeasure(c, def, x.value))}</span><span class="db-lp">${Math.round((x.value / total) * 100)}%</span></button>`).join('')}</div></div>` };
   }
   if (time) {
     if (!fieldOf(c, def.time)) return { caption, html: `<p class="rp-empty">Choose a date field in the report’s settings.</p>` };
@@ -177,7 +180,7 @@ function bodyHTML(c, def, extra, key) {
     return { caption: caption + (note ? ' · ' + note : ''), html: `<div class="rp-ln"><div class="rp-plot">
       ${[0, 1, 2, 3, 4].map((k) => `<div class="rp-gl" style="bottom:${k * 25}%"><span>${esc(fmtShort(c, def, step * k))}</span></div>`).join('')}
       <svg class="rp-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${def.type === 'area' ? `<path class="rp-area" d="${full} L100 100 L0 100 Z"></path>` : ''}<path class="rp-path" d="${path}"></path>${tail ? `<path class="rp-path rp-part" d="${tail}"></path>` : ''}</svg>
-      ${b.map((x, i) => { const tip = bucketOf(x.start, iv).k + (x.partial ? ' (so far)' : '') + ' · ' + fmtMeasure(c, def, x.value); return `<button type="button" class="rp-pt${X(i) > 85 ? ' end' : X(i) < 15 ? ' start' : ''}${x.partial && part ? ' part' : ''}" data-d="drill" data-k="${esc(key)}" data-i="${i}" style="left:${X(i).toFixed(2)}%;bottom:${Y(x.value).toFixed(2)}%" aria-label="${esc(tip)}"><i></i><span class="rp-tip">${esc(tip)}</span></button>`; }).join('')}
+      ${b.map((x, i) => { const tip = bucketOf(x.start, iv).k + (x.partial ? ' (so far)' : '') + ' · ' + fmtMeasure(c, def, x.value); return `<button type="button" class="rp-pt${extra?.sel && extra.sel.filters.some((f) => f.from === x.start) ? ' db-on' : ''}${X(i) > 85 ? ' end' : X(i) < 15 ? ' start' : ''}${x.partial && part ? ' part' : ''}" data-d="drill" data-k="${esc(key)}" data-i="${i}" style="left:${X(i).toFixed(2)}%;bottom:${Y(x.value).toFixed(2)}%" aria-label="${esc(tip)}"><i></i><span class="rp-tip">${esc(tip)}</span></button>`; }).join('')}
       ${part ? `<span class="rp-sofar" style="right:0;bottom:calc(${Y(b[n - 1].value).toFixed(2)}% + 10px)">so far</span>` : ''}
     </div><div class="rp-xax">${b.map((x, i) => (true ? `<span style="left:${X(i).toFixed(2)}%${X(i) > 92 ? ';transform:translateX(-100%)' : X(i) < 8 ? ';transform:none' : ''}">${esc(axisName(x.start, iv, years))}</span>` : '')).join('')}</div></div>` };
   }
@@ -271,13 +274,14 @@ function drillPick(data) {
     if (!g) return null;
     filters.push({ ref: def.group, keys: [g.key], title: g.key });
   }
-  return { where: whereOfKey(key), def: clone(def), extra: clone(ex), filters, name: reportNameOf(key), q: '', sort: null, shown: DD_PAGE };
+  return { where: whereOfKey(key), key, def: clone(def), extra: clone(ex), filters, name: reportNameOf(key), q: '', sort: null, shown: DD_PAGE };
 }
 
 function openDrill(data) {
   if (D.edit && String(data.k).startsWith('t:')) return; // arranging the dashboard, not reading it
   const dd = drillPick(data);
   if (!dd) return;
+  if (clickMode() === 'filter' && dd.filters.length && String(dd.key).startsWith('t:')) { applyClick(dd); return; }
   D.drill = dd;
   repaint(() => document.querySelector('#db-dd .db-dd-x')?.focus());
 }
@@ -350,7 +354,7 @@ function drillHTML(where) {
       ${dd.filters.length || ctxChips.length ? `<div class="db-dd-chips">${dd.filters.map((f, i) => `<span class="db-dd-chip">${esc(drillLabel(c, f))}<button type="button" data-d="ddchip" data-v="${i}" aria-label="Remove ${esc(drillLabel(c, f))}">×</button></span>`).join('')}${ctxChips.map((t) => `<span class="db-dd-chip fixed">${esc(t)}</span>`).join('')}</div>` : ''}
       <div class="db-dd-sum"><span><b>${rows.length.toLocaleString()}</b> ${esc(rows.length === 1 ? one : items)}${rows.length !== all ? ` of ${all.toLocaleString()}` : ''}</span>${measure}</div>
     </div>
-    <div class="db-dd-tools"><input id="dd-q" class="in" type="search" placeholder="Search these ${esc(items)}" aria-label="Search these ${esc(items)}" value="${esc(dd.q)}"><span class="grow"></span><button type="button" class="btn" data-d="ddcsv"${rows.length ? '' : ' disabled'}>Export CSV</button></div>
+    <div class="db-dd-tools"><input id="dd-q" class="in" type="search" placeholder="Search these ${esc(items)}" aria-label="Search these ${esc(items)}" value="${esc(dd.q)}"><span class="grow"></span>${dd.filters.length && String(dd.key || '').startsWith('t:') ? `<button type="button" class="btn" data-d="ddfilter" title="Show only these on every report on the dashboard">${FUNNEL}Filter the dashboard</button>` : ''}<button type="button" class="btn" data-d="ddcsv"${rows.length ? '' : ' disabled'}>Export CSV</button></div>
     <div class="db-dd-body">${rows.length ? `<table class="tbl db-dd-tbl"><thead>${head}</thead><tbody>${body}</tbody>${sumCol.some(Boolean) ? `<tfoot><tr><td>Total · ${rows.length.toLocaleString()}</td>${totals.map((t, i) => `<td class="${numCol[i] ? 'num' : ''}">${esc(t)}</td>`).join('')}</tr></tfoot>` : ''}</table>
       ${rows.length > shown.length ? `<div class="db-dd-more"><button type="button" class="btn sm" data-d="ddmore">Show ${Math.min(DD_PAGE, rows.length - shown.length)} more</button><span class="help">${(rows.length - shown.length).toLocaleString()} more</span></div>` : ''}`
       : `<p class="db-dd-none">${dd.q ? 'Nothing matches your search.' : 'No records here.'}</p>`}</div>
@@ -775,6 +779,13 @@ export function viewDashboards() {
 
 export function dashName(id) { return (D.edit && D.did === id ? D.edit.name : dashById(id)?.name) || 'Dashboard'; }
 
+/** Open a dashboard with filters from a shared link (sharelink.js): this visit only. */
+export function applyShared(id, code) {
+  const s = decodeShare(code, PERIODS.map((q) => q[0]));
+  if (!s) { toast('That link’s filters couldn’t be read, so the dashboard opens as usual.'); return; }
+  D.fv[id] = { period: s.period, from: s.from, to: s.to, fields: {}, lf: s.lf, click: s.click }; // exactly what the sender saw
+}
+const linkBase = () => location.origin + location.pathname;
 function filterState(x) {
   const fv = D.fv[x.id] || (D.fv[x.id] = { period: x.filters?.period || 'all', from: x.filters?.from || '', to: x.filters?.to || '', fields: {}, lf: readPicks(x.id) });
   return fv;
@@ -786,9 +797,48 @@ function extraFor(x, fv) {
     periodKey: fv.period, custom,
     range: range ? { from: range.from, to: range.to } : null,
     fields: (x.filters?.fields || []).map((ref) => ({ ref, values: fv.fields[refKey(ref)] ? [fv.fields[refKey(ref)]] : [] }))
-      .concat(lfExtra(ctx(), (x.tiles || []).filter((t) => t.filter), fv.lf || {}, { name: myName() })),
+      .concat(lfExtra(ctx(), (x.tiles || []).filter((t) => t.filter), fv.lf || {}, { name: myName() }))
+      .concat(clickExtra(ctx(), x, fv)),
   };
 }
+
+/* ---------- clicking a chart to filter the dashboard ----------
+   With "Clicking a chart: Filters the dashboard" (or Filter the dashboard in a records window),
+   a bar, slice, point or cell filters every other report on the dashboard to the records it
+   stands for, for whoever is looking, until they clear it (not saved). The chart clicked stays
+   whole, with what was clicked picked out. Reaches other forms the way a live filter does:
+   forms below through their links, and fields of the same name. */
+const CM_KEY = 'fw.dbClick';
+const LINK = '<svg class="db-fun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+const FUNNEL = '<svg class="db-fun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>';
+function clickMode() { if (!D.cmode) { try { D.cmode = localStorage.getItem(CM_KEY) === 'filter' ? 'filter' : 'records'; } catch (e) { D.cmode = 'records'; } } return D.cmode; }
+function setClickMode(m) { D.cmode = m === 'filter' ? 'filter' : 'records'; try { localStorage.setItem(CM_KEY, D.cmode); } catch (e) { /* private mode */ } }
+function clickExtra(c, x, fv) {
+  const k = fv.click;
+  if (!k || !(k.filters || []).length) return [];
+  const forms = dashForms(c, reportTiles(c, x).map((r) => r.def));
+  return k.filters.filter((f) => fieldOf(c, f.ref)).map((f, i) => {
+    const refs = [f.ref, ...lfMatches(c, f.ref, forms).filter((m) => m.on).map((m) => m.ref)];
+    return { id: 'click' + i, click: true, ref: f.ref, refs, hit: f, values: f.keys || [f.title], ...(f.from != null ? { range: { from: f.from, to: f.to } } : {}), label: fieldOf(c, f.ref)?.label || 'Clicked', text: f.title };
+  });
+}
+/** Filter the dashboard by what a click stands for; clicking the same thing again clears it. */
+function applyClick(dd) {
+  const [, did, tid] = String(dd.key).split(':');
+  const fv = D.fv[did]; if (!fv) return;
+  const same = fv.click && fv.click.tid === tid && JSON.stringify(fv.click.filters) === JSON.stringify(dd.filters);
+  fv.click = same ? null : { tid, filters: clone(dd.filters), name: dd.name };
+  D.drill = null;
+  repaint(() => document.querySelector(same ? `[data-k="${CSS.escape(dd.key)}"]` : '.db-xf .btn')?.focus());
+}
+function clickBarHTML(c, fv) {
+  const k = fv.click;
+  if (!k) return '';
+  const what = k.filters.map((f) => drillLabel(c, f)).join(' and ');
+  return `<div class="db-xf" role="status">${FUNNEL}<span class="db-xft">Showing only <b>${esc(what)}</b><small> · from “${esc(k.name || 'a chart')}”</small></span><span class="grow"></span><button type="button" class="btn sm" data-d="xfclear">Clear</button></div>`;
+}
+/** ' db-dim' for what wasn't clicked on the chart that was. */
+const selCls = (extra, key) => (extra?.sel ? (extra.sel.filters || []).some((f) => f.title === key) ? ' db-on' : ' db-dim' : '');
 
 /**
  * Axis labels on charts over time: as many as fit without touching, evenly spaced and always
@@ -981,7 +1031,7 @@ export function viewDashboard(id) {
   }
   const home = homeId() === x.id, isDefault = (store.homeDefault || '') === x.id;
   const floatUp = !!x.filters?.floatUp;
-  const tiles = readingOrder(placed).map((t) => tileHTML(c, x, t, extra, edit)).join('');
+  const tiles = readingOrder(placed).map((t) => tileHTML(c, x, t, !edit && fv.click && fv.click.tid === t.id ? { ...extra, fields: extra.fields.filter((ff) => !ff.click), sel: fv.click } : extra, edit)).join('');
   const cvRows = Math.max(1, canvasHeight(placed) + (edit ? 6 : 0));
   const fieldFilters = (x.filters?.fields || []).map((ref) => {
     const f = fieldOf(c, ref);
@@ -1008,8 +1058,9 @@ export function viewDashboard(id) {
   <div class="db-filters" role="group" aria-label="Dashboard filters">
     <label class="db-lab" for="db-period">Period</label>${periodPicker(fv)}
     ${fieldFilters}
-    ${edit ? `<span class="help">The period you pick here is saved as the dashboard’s starting period.</span>` : ''}
+    ${edit ? `<span class="help">The period you pick here is saved as the dashboard’s starting period.</span>` : placed.some((t) => t.report) ? `<span class="db-cmode"><span class="db-lab" id="db-cm-l">Clicking a chart</span><span class="db-seg" role="group" aria-labelledby="db-cm-l"><button type="button" data-d="cmode" data-v="records" aria-pressed="${clickMode() === 'records'}" class="${clickMode() === 'records' ? 'on' : ''}">Shows records</button><button type="button" data-d="cmode" data-v="filter" aria-pressed="${clickMode() === 'filter'}" class="${clickMode() === 'filter' ? 'on' : ''}">${FUNNEL}Filters the dashboard</button></span></span><button type="button" class="btn db-share" data-d="sharelink" title="A link to this dashboard as you see it now: the period, live filter picks and any chart click">${LINK}Copy link</button>` : ''}
   </div>
+  ${edit ? '' : clickBarHTML(c, fv)}
   ${edit ? `<div class="db-cvbar"><label class="switch db-float"><input type="checkbox" data-dv="float"${floatUp ? ' checked' : ''}><span class="tr"></span><span>Float items up</span></label><p class="help db-cvhelp">Drag an item by its handle to move it, or drag its bottom-right corner to resize it. Each dot is one step; 24 across. Items in the way move down. With a handle focused, arrow keys move the item and Shift + arrow keys resize it.</p></div>` : ''}
   ${!edit && placed.length ? holdHint(x.id) : ''}
   ${placed.length ? `<div class="db-cv${edit ? ' edit' : ''}${edit ? '' : ' can-drill'}" id="db-cv" data-view="${edit ? '' : esc(x.id + '|' + JSON.stringify(fv))}" style="--rows:${cvRows}"><div class="db-ghost" id="db-ghost" hidden></div>${tiles}</div>` : `<div class="panel empty"><h2>Nothing here yet</h2><p>${may ? 'Add saved reports, shortcuts or a text block.' : 'The owner hasn’t added anything yet.'}</p>${may && !edit ? '<button class="btn primary" data-d="editdash">Add reports</button>' : ''}</div>`}
@@ -1167,6 +1218,10 @@ document.addEventListener('click', async (e) => {
     case 'drill': openDrill(el.dataset); break;
     case 'drillring': { const i = ringSlice(el, e); if (i >= 0) openDrill({ k: el.dataset.k, i }); break; }
     case 'ddclose': if (el.classList.contains('db-dd-scrim') && e.target !== el) return; D.drill = null; repaint(); break;
+    case 'cmode': setClickMode(v); repaint(() => document.querySelector(`[data-d="cmode"][data-v="${v}"]`)?.focus()); break;
+    case 'ddfilter': if (D.drill) applyClick(D.drill); break;
+    case 'sharelink': { const x = D.edit && D.did ? D.edit : dashById(D.did); if (!x) break; const fv = filterState(x); const set = !!(fv.period !== 'all' || Object.values(fv.lf || {}).some((q) => (Array.isArray(q) ? q.length : q && q.period)) || fv.click); copyText(shareUrl(linkBase(), x.id, fv), set ? 'Link copied, with your filters. Whoever opens it needs access to this dashboard.' : 'Link copied. Whoever opens it needs access to this dashboard.'); break; }
+    case 'xfclear': { const fv = D.fv[D.did]; if (fv) fv.click = null; repaint(); break; }
     case 'ddchip': if (D.drill) { D.drill.filters.splice(+v, 1); D.drill.shown = DD_PAGE; repaint(); } break;
     case 'ddsort': if (D.drill) { const i = +v, s0 = D.drill.sort; D.drill.sort = { i, dir: s0 && s0.i === i ? -s0.dir : 1 }; repaint(() => document.querySelector(`#db-dd [data-d="ddsort"][data-v="${i}"]`)?.focus()); } break;
     case 'ddmore': if (D.drill) { D.drill.shown += DD_PAGE; repaint(); } break;

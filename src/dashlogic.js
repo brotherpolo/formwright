@@ -108,6 +108,10 @@ export function rowsFor(ctx, def, extra = {}) {
     if (!ff || !((ff.values && ff.values.length) || ff.range)) return;
     const ref = ffReach(ctx, def, ff);
     if (!ref) return;
+    if (ff.hit) { // clicked on a chart: the same records the click stands for
+      list = list.filter((r) => drillHit(ctx, r, { ...ff.hit, ref }));
+      return;
+    }
     if (ff.range) { // a date live filter: [from, to)
       list = list.filter((r) => { const t = timeOf(valueOf(ctx, r, ref)); return t != null && t >= ff.range.from && t < ff.range.to; });
       return;

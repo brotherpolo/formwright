@@ -522,3 +522,19 @@ button.db-li:hover{background:var(--accent-soft)}
 .lf-date .lf-dsel{width:100%}
 .lf-date .db-prange .in{flex:1 1 120px}
 .lf-date .db-pspan{font-size:12px}
+
+/* clicking a chart to filter the dashboard */
+.db-cmode{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.db-cmode .db-seg button{display:inline-flex;align-items:center;gap:6px}
+.db-fun{flex:none;vertical-align:-2px}
+.btn .db-fun{margin-right:6px}
+.db-xf{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:8px 10px 8px 14px;border-radius:10px;background:var(--accent-soft);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)}
+.db-xft{min-width:0;color:var(--fg);font-size:14px}.db-xft b{color:var(--accent)}.db-xft small{color:var(--muted);font-size:12.5px}
+.db-xf .btn{flex:none}
+.rp-bar.db-dim,.db-li.db-dim{opacity:.38}
+.rp-bar.db-dim:hover,.db-li.db-dim:hover,.rp-bar.db-dim:focus-visible,.db-li.db-dim:focus-visible{opacity:.75}
+.rp-bar.db-on .rp-bl,.db-li.db-on .db-lk{font-weight:700;color:var(--fg)}
+.rp-pt.db-on i{opacity:1;transform:scale(1.5);box-shadow:0 0 0 3px var(--accent-soft)}
+@media (max-width:700px){.db-cmode{width:100%}.db-cmode .db-lab{width:100%}.db-cmode .db-seg{flex:1}.db-cmode .db-seg button{flex:1 1 auto;justify-content:center;padding:0 10px;white-space:nowrap}}
+.db-filters .db-share{margin-left:auto}
+@media (max-width:700px){.db-filters .db-share{margin-left:0;width:100%;justify-content:center}}

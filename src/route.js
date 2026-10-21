@@ -7,9 +7,10 @@
 //   #/dashboards          the Dashboards list
 //   #/calendar            the Calendar
 //   #/dashboard/<id>      one dashboard
+//   #/dashboard/<id>?f=…  one dashboard with filters set (Copy link; sharelink.js)
 // Pure functions: no DOM, no Firebase.
 
-const RE = /^#\/(record|form|report|dashboard)\/([^/?#]+)\/?$/;
+const RE = /^#\/(record|form|report|dashboard)\/([^/?#]+)\/?(?:\?f=([A-Za-z0-9_-]{1,4000}))?$/;
 
 /** '#/record/abc' -> { kind: 'record', id: 'abc' }; '#/reports' -> { kind: 'reports' }; anything else -> null */
 export function parseRoute(hash) {
@@ -24,7 +25,8 @@ export function parseRoute(hash) {
   } catch (e) {
     return null;
   }
-  return id ? { kind: m[1], id } : null;
+  if (!id) return null;
+  return m[3] && m[1] === 'dashboard' ? { kind: m[1], id, f: m[3] } : m[3] ? null : { kind: m[1], id };
 }
 
 /** The address for a view, or '' for screens that don't get one (designer, admin, new records). */
