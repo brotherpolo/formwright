@@ -107,6 +107,7 @@ src/
   pdfdraw.js               Export PDF: draws the document with pdf-lib (unit-tested)
   pdfexport.js             Export PDF: fetches photos, loads pdf-lib on first use, downloads the file
   exportset.js             Settings → PDF exports: company name and logo
+  icons.js, iconset.js     Form badges with an icon: drawing and search (unit-tested); the Lucide set, loaded by the picker only
   lflogic.js               Live filters on dashboards: what they reach, fields filtered together, values and counts (pure, unit-tested)
   callogic.js, calendar.js Workspace → Calendar: what's on each day (pure, unit-tested), and the screen
   cal.js                   The company calendar: time zone, week start, fiscal year; days, weeks, quarters, names (pure, unit-tested)
@@ -148,7 +149,7 @@ Security rules, Storage rules, indexes and their tests live in the Cadence folde
 
 | Collection | Document | Written by |
 |---|---|---|
-| `forms/{formId}` | `name, itemName, description, color, showInSidebar, order, titleField, fields[] (a date field's `calendar: true` puts it on the Calendar), children[]` | admins |
+| `forms/{formId}` | `name, itemName, description, color, badge ('letter'|'icon'), icon { set, name, shapes }, showInSidebar, order, titleField, fields[] (a date field's `calendar: true` puts it on the Calendar), children[]` | admins |
 | `records/{id}` | `formId, values{fieldId: value}, parentId, parentFormId, ownerId, createdBy, createdAt, updatedAt, updatedBy`; `nums{fieldId: number}` and `autoLog[]` from the server; `stage, assignee, assigneeGroup, stageAt` with a workflow | per access; at a workflow stage only its assignee or admins (`nums`, `autoLog`: server only) |
 | `records/{id}/comments/{id}` | `by, byName, at, text, mentions[{uid, name}], parent, task, editedAt`; `notified{uid: sent, no-access, gone}` from the server | anyone who can see the record, as themselves; edit your own, delete your own (admins any) |
 | `mentions/{id}` | `to, by, byName, recordId, formId, recordTitle, formName, commentId, snippet, at, read` | server only; the person mentioned reads it and marks it read |
@@ -356,6 +357,10 @@ A view only decides how the list looks. It never shows anyone records they could
 - **Server code from Formwright:** the functions use `fwkit.cjs`, a bundle of `src/server/`, `formulas.js`, `rules.js`, `pdfdoc.js`/`pdfdraw.js` and `emaillogic.js`, plus `functions/vendor/pdf-lib.min.js`. After changing those, run `node scripts/build-fwkit.mjs ../cadence/functions/fwkit.cjs` and deploy the functions.
 
 **Email PDF** also has an **Attach the PDF** switch (on by default); off sends just the message.
+
+## Form badges: letter or icon (Form designer → Settings)
+
+Each form has a small square badge in its colour, shown in the sidebar, form lists, Ctrl K, the Calendar, dashboard shortcuts and record pages. **Badge** in a form's **Settings** chooses **Letter** (its first letter, the default) or **Icon**. Icon opens a picker of about 70 suggestions for business forms; its search covers all 1,541 Lucide icons and knows everyday words ("invoice" finds receipts and documents, "safety" shields and hard hats). The chosen icon's shapes are saved with the form (`form.badge: 'icon'`, `form.icon: { set, name, shapes }`), so only the picker ever loads the icon set (`src/iconset.js`, a separate download); switching back to Letter keeps the icon for later. Icons are drawn from plain shapes only (`src/icons.js`, unit-tested), so a saved form can't carry anything else. Cadence shows the icon too, beside tasks linked to that form's records, in place of the coloured square. Icons: Lucide (lucide.dev), ISC licence.
 
 ## Settings (administrators)
 

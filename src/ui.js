@@ -1,5 +1,6 @@
 // DOM helpers and small presentational pieces shared by the app and admin screens.
 import './pickers.js'; // date and time boxes open their picker on any click
+import { showsIcon, iconSvg } from './icons.js';
 import { esc } from './util.js';
 
 export { esc, uid, clone, isEmpty } from './util.js';
@@ -13,8 +14,9 @@ export const colorOf = (f) => COLORS[(f.color ?? 0) % COLORS.length];
 export const itemName = (f) =>
   (f.itemName || '').trim() || (f.name || 'Record').replace(/s$/i, '') || 'Record';
 
+/** A form's badge: its icon (if it shows one) or its first letter, on its colour. */
 export const badge = (f, lg) =>
-  `<span class="badge${lg ? ' lg' : ''}" style="background:${colorOf(f)}">${esc(
+  `<span class="badge${lg ? ' lg' : ''}${showsIcon(f) ? ' ic' : ''}" style="background:${colorOf(f)}">${showsIcon(f) ? iconSvg(f.icon, lg ? 20 : 16) : esc(
     (f.name || '?').trim().charAt(0).toUpperCase() || '?'
   )}</span>`;
 

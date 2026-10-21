@@ -37,6 +37,7 @@ import { fieldItem, fileName as pdfFileName } from './pdfdoc.js';
 import { copyValues, relinkRow } from './duplogic.js';
 import { shrinkPhoto } from './photo.js';
 import { evaluate as evalRules, toClear, withoutCleared, NO_RULES, holdsValue, pruneRules, impactOf, sameRules, changedRuleLabels } from './rules.js';
+import { searchIcons, iconSvg, iconFor, showsIcon } from './icons.js';
 import { initAutos, pendingBanner, openAutomation } from './autos.js';
 import * as calview from './calendar.js';
 import { personAv } from './avatar.js';
@@ -204,7 +205,7 @@ export function go(v,push=true){ui.subPop=null;ui.recMore=false;if(v.name==='rec
   if(pushed){hist.push(view);fwd=[];}
   view=v;closeMenu();syncHash(pushed);
   if(v.name==='records'){ui.search='';}
-  if(v.name==='formEdit'){ui.tab=v.tab||'fields';ui.openField=null;ui.palette=false;ui.dzq='';}
+  if(v.name==='formEdit'){ui.tab=v.tab||'fields';ui.openField=null;ui.palette=false;ui.dzq='';ui.iconPick=false;ui.iconQ='';}
   render();window.scrollTo(0,0);return true;
 }
 // The in-app Back button goes through the browser's history, so it and the phone's back button always agree
@@ -569,6 +570,30 @@ function renderMain(){
   afterDashRender(); // a dashboard that's new on screen plays its entrance
   thinAxes(m); // chart axis labels: as many as fit
   syncTaskWatch();syncEmailWatch();syncStageWatch();cmt.sync();cmt.afterRender();wordui.sync();calview.sync(view.name==='calendar');
+}
+
+/* ---------- Form badge: letter or icon (Form designer → Settings) ---------- */
+// The icon set (iconset.js, Lucide) loads only when the picker opens; a chosen icon is copied onto the form.
+let iconSet=null,iconLoading=false;
+function loadIcons(){if(iconSet||iconLoading)return;iconLoading=true;import('./iconset.js').then(m=>{iconSet=m.default;iconLoading=false;const typing=document.activeElement===document.body||!document.activeElement||document.activeElement.dataset?.act==='badge-style'||document.activeElement.dataset?.act==='icon-open';renderMain();if(ui.iconPick&&typing)$('.ip-q')?.focus();}).catch(e=>{console.error(e);iconLoading=false;toast('The icons couldn’t load. Check your connection.');});}
+function badgeProp(f){
+  const isIcon=f.badge==='icon';
+  const seg=(v,l)=>`<button type="button" class="${(v==='icon')===isIcon?'on':''}" aria-pressed="${(v==='icon')===isIcon}" data-act="badge-style" data-v="${v}">${l}</button>`;
+  const letter={...f,badge:'letter'},withIcon={...f,badge:'icon'};
+  let picker='';
+  if(ui.iconPick){
+    if(!iconSet){loadIcons();picker=`<div class="ip"><p class="help">Loading icons…</p></div>`;}
+    else{
+      const names=Object.keys(iconSet),list=searchIcons(names,ui.iconQ||'',ui.iconQ?150:90);
+      picker=`<div class="ip" role="group" aria-label="Choose an icon"><input type="search" class="in ip-q" data-iq="1" placeholder="Search ${names.length.toLocaleString()} icons: invoice, truck, safety…" value="${esc(ui.iconQ||'')}" aria-label="Search icons">
+        <div class="ip-grid">${list.map(n=>`<button type="button" class="ip-i${f.icon?.name===n?' on':''}" data-act="pick-icon" data-v="${esc(n)}" title="${esc(n.replace(/-/g,' '))}" aria-label="${esc(n.replace(/-/g,' '))}"${f.icon?.name===n?' aria-pressed="true"':''}>${iconSvg({shapes:iconSet[n]},20)}</button>`).join('')||'<p class="help">No icons match. Try another word.</p>'}</div>
+        <p class="help ip-foot"><span>${ui.iconQ?`${list.length} found`:`Suggestions for business forms. Type to search all ${names.length.toLocaleString()}.`} Icons by Lucide.</span><button type="button" class="au-link" data-act="icon-close">Done</button></p></div>`;
+    }
+  }
+  return `<div class="prop full"><span>Badge</span><div class="bp-row"><div class="segs" role="group" aria-label="Badge shows">${seg('letter','Letter')}${seg('icon','Icon')}</div>
+    <span class="bp-prev" aria-hidden="true">${badge(letter,1)}${showsIcon(withIcon)?badge(withIcon,1):''}</span>
+    ${isIcon?`<button type="button" class="btn sm" data-act="icon-open" aria-expanded="${!!ui.iconPick}">${f.icon?'Change icon…':'Choose an icon…'}</button>`:''}</div>
+    <small class="help">Shown in the sidebar, lists, searches, the Calendar and dashboards, on the colour above.${isIcon&&!f.icon?' Until you choose one, the letter shows.':''}</small>${isIcon?picker:''}</div>`;
 }
 
 /* ---------- Cadence tasks linked to the open record ---------- */
@@ -1934,6 +1959,7 @@ function viewFormEdit(){
       <label class="prop"><span>Record title comes from</span><select class="in" data-fprop="titleField"><option value="">First text field</option>${tfs.map(x=>`<option value="${x.id}"${x.id===f.titleField?' selected':''}>${esc(x.label)}</option>`).join('')}</select></label>
       <label class="prop full"><span>Description</span><textarea class="in" data-fprop="description" rows="2" placeholder="What this form collects">${esc(f.description||'')}</textarea></label>
       <div class="prop"><span>Color</span><div class="swatches">${COLORS.map((c,i)=>`<button class="sw${(f.color??0)===i?' on':''}" style="background:${c}" data-act="set-color" data-i="${i}" aria-label="Color ${i+1}"></button>`).join('')}</div></div>
+      ${badgeProp(f)}
       <label class="prop full"><span>Email PDF: subject</span><input class="in" data-fprop="emailSubject" value="${esc(f.emailSubject||'')}" maxlength="200" placeholder="${esc(DEFAULT_SUBJECT)}"></label>
       <label class="prop full"><span>Email PDF: message</span><textarea class="in" data-fprop="emailMessage" rows="6" maxlength="10000" placeholder="${esc(DEFAULT_MESSAGE)}">${esc(f.emailMessage||'')}</textarea><small class="help">What <b>Email PDF</b> fills in; it can be changed before sending. Use {Field name} for any field on this form (for example {${esc((f.fields||[]).find(x=>x.type!=='heading')?.label||'Invoice #')}}), plus {Title}, {Item}, {Company}, {Sender} and {Date}. Leave empty for the standard wording shown.</small></label>
       <div class="prop full"><span>Word templates</span><div class="xw-links"><button type="button" class="btn sm" data-act="wd-placeholders">Placeholders for this form (.docx)</button><a class="btn sm ghost" href="/word-template-sample.docx" download="Formwright quote template.docx">Sample template</a></div><small class="help">Every placeholder a Word template for this form can use, to copy into your own document${f.dirty?' (made from the form as it is on screen, so save it before using new fields)':''}. People add templates from <b>Export ▾ → Word templates…</b> on a record.</small></div>
@@ -2180,6 +2206,7 @@ function editForm(id){
 document.addEventListener('click',e=>{const el=e.target.closest?.('[data-rl]');if(!el||el.dataset.rl==='toggle'||view.name!=='formEdit'||!fdraft)return;rulesClick(fdraft,el);});
 document.addEventListener('click',e=>{const el=e.target.closest?.('[data-fv]');if(!el||view.name!=='formEdit'||!fdraft)return;fv.onClick(el);});
 document.addEventListener('input',e=>{if(view.name==='formEdit'&&fdraft)fv.onInput(e.target);});
+document.addEventListener('input',e=>{const el=e.target;if(view.name!=='formEdit'||!fdraft||!el.dataset?.iq)return;ui.iconQ=el.value;const at=el.selectionStart;renderMain();const q=$('.ip-q');if(q){q.focus({preventScroll:true});try{q.setSelectionRange(at,at);}catch(err){}}});
 document.addEventListener('input',e=>{if(view.name==='formEdit'&&fdraft&&ui.tab==='rules')rulesInput(fdraft,e.target);});
 document.addEventListener('change',e=>{if(view.name==='formEdit'&&fdraft)fv.onChange(e.target);});
 document.addEventListener('click',e=>{const el=e.target.closest?.('[data-wfa]');if(!el||view.name!=='formEdit'||!fdraft)return;wfClick(fdraft,el);});
@@ -2400,6 +2427,10 @@ document.addEventListener('click',async e=>{
       }
       c.display=el.dataset.v;setFdirty();renderMain();break;}
     case 'set-color':fdraft.color=+el.dataset.i;setFdirty();renderMain();break;
+    case 'badge-style':fdraft.badge=el.dataset.v==='icon'?'icon':'letter';if(fdraft.badge==='icon'&&!fdraft.icon){ui.iconPick=true;ui.iconQ='';}setFdirty();renderMain();if(ui.iconPick)setTimeout(()=>$('.ip-q')?.focus(),0);break;
+    case 'icon-open':ui.iconPick=!ui.iconPick;ui.iconQ='';renderMain();if(ui.iconPick)setTimeout(()=>$('.ip-q')?.focus(),0);break;
+    case 'icon-close':ui.iconPick=false;renderMain();$('[data-act="icon-open"]')?.focus();break;
+    case 'pick-icon':{const ic=iconFor(el.dataset.v,iconSet);if(!ic)break;fdraft.icon=ic;fdraft.badge='icon';setFdirty();renderMain();$(`[data-act="pick-icon"][data-v="${CSS.escape(ic.name)}"]`)?.focus();break;}
     case 'save-form':ui.ruleApply=null;ui.saveMeta=null;saveForm();break;
     case 'save-draft':fv.saveAsDraft();break;
     case 'wf-move':wfMove(el.dataset.id);break;
