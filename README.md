@@ -284,7 +284,7 @@ Under a record's fields come its sub-form grids, Tasks and child forms. Their or
 
 In the designer, fields and section cards move by dragging their handle (⠿), with a mouse or a finger; only the handle starts a drag, so scrolling never moves anything. With a handle focused, the up and down arrow keys move it one place. Field types are added by tapping them, or by dragging them onto the form with a mouse.
 
-In the Form designer, **Search forms by name** above the list narrows it as you type (names only, any case, child and sub-forms included); the reorder arrows hide while it's in use, and Esc clears it.
+In the Form designer, **Search forms by name** above the list narrows it as you type (names only, any case, child and sub-forms included); the reorder arrows hide while it's in use, and Esc clears it. On a phone each form's card is compact: **Edit** sits beside its name, its tags below, then one row with the **Sidebar** switch, the arrows, **+ Add** and **Records** (the Hidden tag is left out there, since the switch shows it).
 
 In the form editor, **Search field types** at the top of the field types filters as you type (other words work too: "money" finds Currency, "lookup" finds Link to record); **Enter** adds the first match.
 

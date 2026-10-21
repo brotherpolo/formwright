@@ -218,14 +218,25 @@ textarea.in{min-height:96px;resize:vertical;line-height:1.45}
 
 /* Designer */
 .flist{display:flex;flex-direction:column}
-.fcard{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.fcard{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
 .fcard:last-child{border-bottom:0}
 .fcard .info{min-width:0;display:flex;flex-direction:column;gap:4px}
 .fcard .info b{font-family:var(--display);font-size:1.05rem}
 .fcard .tags{display:flex;flex-wrap:wrap;gap:6px}
 .fcard .ctl{display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end}
 .fcard .vis{font-size:13px;color:var(--muted);margin-right:6px}
-@media (max-width:640px){.fcard{grid-template-columns:auto minmax(0,1fr)}.fcard .ctl{grid-column:1/-1;justify-content:flex-start}}
+/* phones: name and Edit on top, tags under the name, then one row of controls */
+@media (max-width:640px){
+  .fcard{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"b i e" "c c c";gap:8px 12px;align-items:start;padding:12px}
+  .fcard>.badge{grid-area:b}.fcard .info{grid-area:i;gap:5px;padding-top:1px}.fcard .fc-edit{grid-area:e;min-width:56px}
+  .fcard .info b{font-size:1rem;line-height:1.25;overflow-wrap:anywhere}
+  .fcard .tags{gap:4px}.fcard .chip{font-size:11.5px;padding:1px 7px;white-space:normal;border-radius:6px}
+  .fcard .fc-hid{display:none}
+  .fcard .ctl{grid-area:c;flex-wrap:nowrap;justify-content:flex-start;gap:2px;padding-top:8px;border-top:1px dashed var(--line)}
+  .fcard .vis{margin-right:auto;white-space:nowrap}
+  .fcard .ctl .ibtn{width:32px;height:32px}
+  .fcard .ctl .btn.sm{padding:4px 9px;margin-left:4px}
+}
 
 .title-in{font:700 clamp(1.4rem,1.15rem + 1vw,1.85rem)/1.15 var(--display);border:0;border-bottom:2px dashed var(--line-strong);background:none;padding:2px 0;width:100%;min-width:0;color:var(--fg)}
 .title-in:focus{outline:none;border-bottom-color:var(--accent)}
@@ -1016,6 +1027,7 @@ tr.wf-over td.title{color:var(--danger)}
 .side .btn.ghost,.side .ibtn{color:var(--side-fg)}
 .side .btn.ghost:hover,.side .ibtn:hover{background:var(--side-hover)}
 :root[data-density="compact"] .fsearch .in{padding-left:34px;padding-right:64px}
+:root[data-density="compact"] .dsearch .in{padding-left:34px}
 :root[data-density="compact"] .fset.reading .rte-view{padding:0;min-height:0}
 /* the sidebar's pop-ups (Search forms list, Appearance) float over the page beside it */
 @media (min-width:821px){.side{z-index:25}}
