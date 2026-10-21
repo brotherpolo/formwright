@@ -518,3 +518,7 @@ button.db-li:hover{background:var(--accent-soft)}
 .lf-act{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
 .db-lf .rp-wh .btn.sm{margin-left:auto}
 @media (max-width:760px){.db-lf .lf-list{max-height:260px}.db-tile.db-lf{min-height:0}.lf-ed{left:16px;right:16px;top:auto;bottom:16px;width:auto}}
+.lf-date{gap:6px}
+.lf-date .lf-dsel{width:100%}
+.lf-date .db-prange .in{flex:1 1 120px}
+.lf-date .db-pspan{font-size:12px}

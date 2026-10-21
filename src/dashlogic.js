@@ -105,9 +105,13 @@ export function rowsFor(ctx, def, extra = {}) {
     list = list.filter((r) => (def.join === 'or' ? conds.some((c) => condHit(ctx, r, c)) : conds.every((c) => condHit(ctx, r, c))));
   }
   (extra.fields || []).forEach((ff) => {
-    if (!ff || !ff.values || !ff.values.length) return;
+    if (!ff || !((ff.values && ff.values.length) || ff.range)) return;
     const ref = ffReach(ctx, def, ff);
     if (!ref) return;
+    if (ff.range) { // a date live filter: [from, to)
+      list = list.filter((r) => { const t = timeOf(valueOf(ctx, r, ref)); return t != null && t >= ff.range.from && t < ff.range.to; });
+      return;
+    }
     list = list.filter((r) => ff.values.some((v) => condHit(ctx, r, { ref, op: 'is', value: v })));
   });
   if (extra.range) {

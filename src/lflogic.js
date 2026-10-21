@@ -8,9 +8,16 @@
 // (an Invoices report is reached by Customer › Name, since every invoice belongs to a customer).
 // Values compare as the text people see, so "Acme" on Customers and an Invoice's Client link
 // to Acme match.
+//
+// A date field makes a date live filter: its pick is a period ({ period: 'lastmonth' }) or a
+// range ({ period: 'custom', from, to }), counted with the company calendar, alongside the
+// dashboard's own Period. People fields (Created by, Person responsible) offer "Me": each viewer
+// sees their own records (the pick is stored as ME and read as whoever is looking).
 
 import { fieldOf, valueOf, chainOf, titleFieldOf } from './reportlogic.js';
-import { keysOf, chainFields, rowsFor, ffReach } from './dashlogic.js';
+import { keysOf, chainFields, rowsFor, ffReach, periodRange, periodName } from './dashlogic.js';
+
+export const ME = '@me';
 
 export const lfRefs = (flt) => (flt && flt.ref ? [flt.ref, ...(flt.also || [])] : []);
 const same = (a, b) => !!a && !!b && a.form === b.form && a.id === b.id;
@@ -19,8 +26,12 @@ export const refKeyOf = (r) => (r ? r.form + '.' + r.id : '');
 /** The field (of refs) that reaches a report, or null. */
 export function reachRef(ctx, def, refs) { return ffReach(ctx, def, { refs }); }
 
-/** Can a live filter use this field? Choices, text, links, people, yes/no, numbers; not dates or colours. */
-const usable = (x) => ['group', 'key', 'num'].includes(x.kind) && x.f.type !== 'color' && !x.f.system;
+/** Can a live filter use this field? Choices, text, links, people, yes/no, numbers and dates; not colours. */
+const usable = (x) => ['group', 'key', 'num', 'date'].includes(x.kind) && x.f.type !== 'color';
+export const isDateField = (f) => !!f && (f.type === 'date' || f.type === 'datetime');
+export const isPerson = (f) => !!f && f.type === 'owner';
+/** Fields that can be filtered together: dates with dates, everything else with everything else. */
+const family = (f) => (isDateField(f) ? 'date' : 'value');
 
 /** The forms a dashboard's reports use, and the forms above them. */
 export function dashForms(ctx, defs) {
@@ -51,9 +62,13 @@ export function lfMatches(ctx, ref, formIds) {
   (formIds || []).forEach((fid) => {
     if (fid === ref.form || chainOf(ctx, fid).includes(ref.form)) return;
     const form = ctx.formById(fid);
-    (form?.fields || []).forEach((x) => {
-      if (x.system || x.type === 'heading') return;
+    (form ? fieldsOf(form) : []).forEach((x) => {
+      if (x.type === 'heading') return;
       const r = { form: fid, id: x.id };
+      if (isDateField(f)) { // dates: the same name is ticked; other dates are offered
+        if (isDateField(x)) out.push({ ref: r, f: x, form, why: String(x.label || '').trim().toLowerCase() === name ? 'name' : 'kind', on: String(x.label || '').trim().toLowerCase() === name });
+        return;
+      }
       if (x.type === 'relation' && x.relForm === ref.form && isTitle) out.push({ ref: r, f: x, form, why: 'link', on: true });
       else if (x.type === f.type && String(x.label || '').trim().toLowerCase() === name) out.push({ ref: r, f: x, form, why: 'name', on: true });
       else if (x.type === f.type && ['select', 'radio', 'multiselect', 'relation', 'owner'].includes(x.type) && (x.type !== 'relation' || x.relForm === f.relForm)) out.push({ ref: r, f: x, form, why: 'kind', on: false });
@@ -63,16 +78,33 @@ export function lfMatches(ctx, ref, formIds) {
   return out.sort((a, b) => rank[a.why] - rank[b.why]).slice(0, 12);
 }
 
+const fieldsOf = (form) => chainFieldsOwn(form);
+function chainFieldsOwn(form) { return (form.fields || []).concat([{ id: '_created', label: 'Created on', type: 'date', system: true }, { id: '_updated', label: 'Last edited', type: 'date', system: true }, { id: '_owner', label: 'Created by', type: 'owner', system: true }]).concat(form.workflow?.on && (form.workflow.stages || []).length ? [{ id: '_assignee', label: 'Person responsible', type: 'owner', system: true }] : []); }
+
+/** Any other field to add by hand (same family: dates with dates), not already in the filter: [{ ref, f, form }]. */
+export function lfAddable(ctx, flt, formIds) {
+  const f0 = fieldOf(ctx, flt?.ref); if (!f0) return [];
+  const have = new Set(lfRefs(flt).map(refKeyOf));
+  return lfChoices(ctx, formIds).filter((x) => x.ref.form !== flt.ref.form && !have.has(refKeyOf(x.ref)) && family(x.f) === family(f0));
+}
+
 /** The forms reached through links (below the filter's form), for "Also filters … through their link". */
 export function lfThrough(ctx, ref, formIds) {
   return (formIds || []).filter((fid) => fid !== ref?.form && chainOf(ctx, fid).includes(ref?.form));
 }
 
 /** What the dashboard's reports get: [{ ref, refs, values, label, id }] for each live filter tile. */
-export function lfExtra(ctx, tiles, picks) {
-  return (tiles || []).filter((t) => t.filter && t.filter.ref && fieldOf(ctx, t.filter.ref)).map((t) => ({
-    id: t.id, ref: t.filter.ref, refs: lfRefs(t.filter).filter((r) => fieldOf(ctx, r)), values: (picks && picks[t.id]) || [], label: lfLabel(ctx, t.filter),
-  }));
+export function lfExtra(ctx, tiles, picks, me = {}, now = Date.now()) {
+  return (tiles || []).filter((t) => t.filter && t.filter.ref && fieldOf(ctx, t.filter.ref)).map((t) => {
+    const base = { id: t.id, ref: t.filter.ref, refs: lfRefs(t.filter).filter((r) => fieldOf(ctx, r)), label: lfLabel(ctx, t.filter) };
+    const p = picks && picks[t.id];
+    if (isDateField(fieldOf(ctx, t.filter.ref))) {
+      const r = p && p.period ? periodRange(p.period, now, p.period === 'custom' ? p : null) : null;
+      return { ...base, values: [], range: r ? { from: r.from, to: r.to } : null, text: r ? periodName(p.period, p.period === 'custom' ? p : null) : '' };
+    }
+    const vals = Array.isArray(p) ? p : [];
+    return { ...base, values: vals.map((v) => (v === ME ? me.name || '\u0000' : v)), text: vals.map((v) => (v === ME ? 'Me' : v)).join(', ') };
+  });
 }
 export const lfLabel = (ctx, flt) => (flt?.label || fieldOf(ctx, flt?.ref)?.label || 'Filter');
 
@@ -93,7 +125,7 @@ export function lfValues(ctx, flt, opts = {}) {
     const f = fieldOf(ctx, r);
     ctx.records.filter((x) => x.formId === r.form).forEach((rec) => keysOf(ctx, f, valueOf(ctx, rec, r)).forEach((k) => { if (k !== '(blank)') set.add(k); }));
   });
-  (opts.picked || []).forEach((v) => set.add(String(v)));
+  (opts.picked || []).filter((v) => v !== ME).forEach((v) => set.add(String(v)));
   const counts = new Map();
   const def = opts.countDef;
   const via = def ? reachRef(ctx, def, refs) : null;
@@ -105,7 +137,10 @@ export function lfValues(ctx, flt, opts = {}) {
   const list = [...set];
   const pos = (v) => { const i = opt.indexOf(v); return i < 0 ? 1e6 : i; };
   list.sort((a, b) => pos(a) - pos(b) || a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-  return list.map((v) => ({ v, n: def && via ? counts.get(v) || 0 : null }));
+  const out = list.map((v) => ({ v, n: def && via ? counts.get(v) || 0 : null }));
+  // people: "Me" first, standing for whoever is looking
+  if (isPerson(f0) && opts.me && opts.me.name) out.unshift({ v: ME, label: 'Me', n: def && via ? counts.get(opts.me.name) || 0 : null });
+  return out;
 }
 
 /** Tidy a tile's filter settings. */
@@ -130,4 +165,11 @@ export function togglePick(list, v, pick) {
 /** The old "+ Filter by…" dropdowns as live filter tiles (dropdown, one value), across the top. */
 export function fromOldFilters(fields, startX = 0) {
   return (fields || []).filter((r) => r && r.form && r.id).slice(0, 4).map((ref, i) => ({ id: 'lf-' + ref.form + '-' + ref.id, filter: { ref: { form: ref.form, id: ref.id }, also: [], show: 'dropdown', pick: 'one' }, x: startX + i * 6, y: 0, w: 6, h: 2 }));
+}
+
+/** A date live filter's pick, tidied: { period } or { period: 'custom', from, to }, or null. */
+export function datePick(p) {
+  if (!p || typeof p !== 'object' || !p.period) return null;
+  if (p.period === 'custom') { const ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : ''; const from = ok(p.from), to = ok(p.to); return from || to ? { period: 'custom', from, to } : { period: 'custom', from: '', to: '' }; }
+  return { period: String(p.period) };
 }

@@ -24,7 +24,7 @@ import {
 import { fmtMeasure, fmtShort, measureLabel, cellText, isNumRef } from './dashfmt.js';
 import { headerButton as dmHeader } from './dashmailui.js';
 import { spanName, axisName, yearOf } from './cal.js';
-import { lfRefs, lfExtra, lfLabel, lfValues, lfChoices, lfMatches, lfThrough, dashForms, normalizeFilter, togglePick, fromOldFilters, refKeyOf, reachRef } from './lflogic.js';
+import { lfRefs, lfExtra, lfLabel, lfValues, lfChoices, lfMatches, lfThrough, dashForms, normalizeFilter, togglePick, fromOldFilters, refKeyOf, reachRef, lfAddable, isDateField, datePick, ME } from './lflogic.js';
 
 let H = { fmt: null, valOf: null, recTitle: null, go: null, openRecord: null, renderMain: null, openLink: null, linkEnv: () => ({}), starterForms: () => [] };
 export function initReports(helpers) { H = { ...H, ...helpers }; }
@@ -119,7 +119,7 @@ function captionOf(c, def, n, extra) {
   const parts = [n.toLocaleString() + ' ' + nounOf(form, n)];
   const conds = (def.conditions || []).filter((x) => x.ref && fieldOf(c, x.ref) && x.value !== '');
   if (conds.length) parts.push(conds.map((x) => refLabel(c, x.ref, def.form) + (x.op === 'not' ? ' is not ' : ' is ') + x.value).join(def.join === 'or' ? ' or ' : ' and '));
-  const blocked = (extra?.fields || []).filter((ff) => ff.values?.length && !ffReach(c, def, ff));
+  const blocked = (extra?.fields || []).filter((ff) => (ff.values?.length || ff.range) && !ffReach(c, def, ff));
   if (blocked.length) parts.push(blocked.map((ff) => (ff.label || fieldOf(c, ff.ref)?.label || 'filter')).join(', ') + ' filter doesn’t reach this report');
   return parts.join(' · ');
 }
@@ -335,7 +335,7 @@ function drillHTML(where) {
   const ctxChips = [];
   if (dd.extra?.range && dd.extra.periodKey) ctxChips.push('Dashboard: ' + periodName(dd.extra.periodKey, dd.extra.custom));
   else if (def.type === 'kpi' && def.compare) ctxChips.push('This month');
-  (dd.extra?.fields || []).forEach((ff) => { if (ff.values?.length && ffReach(c, def, ff)) ctxChips.push(`Dashboard: ${ff.label || fieldOf(c, ff.ref)?.label || 'filter'} is ${ff.values.join(' or ')}`); });
+  (dd.extra?.fields || []).forEach((ff) => { if ((ff.values?.length || ff.range) && ffReach(c, def, ff)) ctxChips.push(ff.range ? `Dashboard: ${ff.label} ${ff.text}` : `Dashboard: ${ff.label || fieldOf(c, ff.ref)?.label || 'filter'} is ${(ff.text || ff.values.join(', ')).replace(/, /g, ' or ')}`); });
   const conds = (def.conditions || []).filter((x) => x.ref && fieldOf(c, x.ref) && x.value !== '' && x.value != null);
   if (conds.length) ctxChips.push('Report: ' + conds.map((x) => refLabel(c, x.ref, def.form) + (x.op === 'not' ? ' is not ' : ' is ') + x.value).join(def.join === 'or' ? ' or ' : ' and '));
   const m = def.measure || { fn: 'count' };
@@ -786,7 +786,7 @@ function extraFor(x, fv) {
     periodKey: fv.period, custom,
     range: range ? { from: range.from, to: range.to } : null,
     fields: (x.filters?.fields || []).map((ref) => ({ ref, values: fv.fields[refKey(ref)] ? [fv.fields[refKey(ref)]] : [] }))
-      .concat(lfExtra(ctx(), (x.tiles || []).filter((t) => t.filter), fv.lf || {})),
+      .concat(lfExtra(ctx(), (x.tiles || []).filter((t) => t.filter), fv.lf || {}, { name: myName() })),
   };
 }
 
@@ -816,19 +816,21 @@ if (typeof window !== 'undefined') window.addEventListener('resize', () => { cle
    A tile that filters the reports on the dashboard by a field, for whoever is looking (their
    picks are kept on this device). lflogic.js works out what reaches what. */
 const LF_KEY = (id) => 'fw.lf.' + id;
+const myName = () => store.profiles?.[store.user?.uid]?.displayName || store.user?.displayName || '';
 function readPicks(id) { try { const v = JSON.parse(localStorage.getItem(LF_KEY(id)) || '{}'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } }
 function savePicks(id, picks) { try { localStorage.setItem(LF_KEY(id), JSON.stringify(picks || {})); } catch (e) { /* private mode */ } }
 /** The reports on a dashboard, as tiles with their definitions, in reading order. */
 function reportTiles(c, x) { return readingOrder(canvasTiles(x.tiles || [])).filter((t) => t.report && reportById(t.report)).map((t) => ({ t, def: normalizeDef(c, reportById(t.report).def), name: reportById(t.report).name })); }
-const lfRow = (tid, o, on, pick) => `<button type="button" class="lf-o${on ? ' on' : ''}${o.n === 0 && !on ? ' zero' : ''}" role="${pick === 'one' ? 'radio' : 'checkbox'}" aria-checked="${on}" data-d="lfpick" data-v="${esc(tid)}" data-x="${esc(o.v)}"><span class="bx" aria-hidden="true">${on ? '✓' : ''}</span><span class="t">${esc(o.v)}</span>${o.n != null ? `<span class="n">${o.n.toLocaleString()}</span>` : ''}</button>`;
+const lfRow = (tid, o, on, pick) => `<button type="button" class="lf-o${on ? ' on' : ''}${o.n === 0 && !on ? ' zero' : ''}" role="${pick === 'one' ? 'radio' : 'checkbox'}" aria-checked="${on}" data-d="lfpick" data-v="${esc(tid)}" data-x="${esc(o.v)}"><span class="bx" aria-hidden="true">${on ? '✓' : ''}</span><span class="t">${esc(o.label || o.v)}</span>${o.n != null ? `<span class="n">${o.n.toLocaleString()}</span>` : ''}</button>`;
 /** The values for one live filter tile, with counts, and what it reaches. */
 function lfState(c, x, t, extra) {
-  const flt = normalizeFilter(t.filter), fv = filterState(x), picked = (fv.lf || {})[t.id] || [];
+  const flt = normalizeFilter(t.filter), fv = filterState(x), raw = (fv.lf || {})[t.id], picked = Array.isArray(raw) ? raw : [];
   const reps = reportTiles(c, x), refs = lfRefs(flt);
   const reached = reps.filter((r) => reachRef(c, r.def, refs));
   const others = (extra.fields || []).filter((ff) => ff.id !== t.id);
-  const vals = flt.ref && fieldOf(c, flt.ref) ? lfValues(c, flt, { countDef: reached[0]?.def || null, others, range: extra.range, picked }) : [];
-  return { flt, picked, reps, reached, vals, label: lfLabel(c, flt), noun: reached[0] ? (c.formById(reached[0].def.form)?.name || '').toLowerCase() : '' };
+  const isDate = isDateField(fieldOf(c, flt.ref));
+  const vals = flt.ref && fieldOf(c, flt.ref) && !isDate ? lfValues(c, flt, { countDef: reached[0]?.def || null, others, range: extra.range, picked, me: { name: myName() } }) : [];
+  return { flt, picked, isDate, dpick: isDate ? datePick(raw) : null, reps, reached, vals, label: lfLabel(c, flt), noun: reached[0] ? (c.formById(reached[0].def.form)?.name || '').toLowerCase() : '' };
 }
 function lfListHTML(tid, st, q) {
   const t = String(q || '').trim().toLowerCase();
@@ -848,8 +850,18 @@ function lfTileHTML(c, x, t, extra, edit) {
   else {
     const clear = st.picked.length ? `<button type="button" class="lf-clear" data-d="lfclear" data-v="${esc(t.id)}">Clear</button>` : '';
     const foot = st.reps.length ? `<div class="lf-f">Filters ${st.reached.length === st.reps.length ? (st.reps.length === 1 ? 'the report' : `all ${st.reps.length} reports`) : `${st.reached.length} of ${st.reps.length} reports`}${st.noun ? ` · counts are ${esc(st.noun)}` : ''}</div>` : '';
-    if (st.flt.show === 'dropdown') {
-      const txt = st.picked.length ? st.picked.map((v) => `<span class="ch">${esc(v)}</span>`).join('') : `<span class="ph">All</span>`;
+    if (st.isDate) {
+      const dp = st.dpick || {}, k = dp.period || '';
+      const o = (key) => { const l = (PERIODS.find((q) => q[0] === key) || [key, key])[1]; return `<option value="${key}"${k === key ? ' selected' : ''}>${esc(key === 'custom' ? l + '…' : l)}</option>`; };
+      const list = `<option value=""${k ? '' : ' selected'}>Any date</option>` + PERIOD_GROUPS.map(([g, ks]) => (g ? `<optgroup label="${esc(g)}">${ks.map(o).join('')}</optgroup>` : ks.filter((y) => y !== 'all').map(o).join(''))).join('');
+      const r = k ? periodRange(k, Date.now(), k === 'custom' ? dp : null) : null;
+      const clearD = k ? `<button type="button" class="lf-clear" data-d="lfclear" data-v="${esc(t.id)}">Clear</button>` : '';
+      body = `<div class="lf lf-ddw lf-date"><div class="lf-h"><b id="lf-h-${esc(t.id)}">${esc(st.label)}</b><span class="grow"></span>${clearD}</div>
+        <select class="in lf-dsel" data-dv="lf-date" data-v="${esc(t.id)}" aria-labelledby="lf-h-${esc(t.id)}">${list}</select>
+        ${k === 'custom' ? `<span class="db-prange"><input class="in" type="date" data-dv="lf-dfrom" data-v="${esc(t.id)}" value="${esc(dp.from || '')}" aria-label="From"><span aria-hidden="true">to</span><input class="in" type="date" data-dv="lf-dto" data-v="${esc(t.id)}" value="${esc(dp.to || '')}" aria-label="To"></span>` : ''}
+        ${r && r.from > -8e15 && r.to < 8e15 && k !== 'custom' ? `<span class="db-pspan">${esc(spanName(r.from, r.to))}</span>` : ''}${st.reps.length && t.h > 2 ? `<div class="lf-f">Filters ${st.reached.length} of ${st.reps.length} reports</div>` : ''}</div>`;
+    } else if (st.flt.show === 'dropdown') {
+      const txt = st.picked.length ? st.picked.map((v) => `<span class="ch">${esc(v === ME ? 'Me' : v)}</span>`).join('') : `<span class="ph">All</span>`;
       body = `<div class="lf lf-ddw"><div class="lf-h"><b id="lf-h-${esc(t.id)}">${esc(st.label)}</b><span class="grow"></span>${clear}</div><button type="button" class="lf-dd" data-d="lfpop" data-v="${esc(t.id)}" aria-haspopup="true" aria-expanded="${D.lfPop === t.id}" aria-labelledby="lf-h-${esc(t.id)}"><span class="vals">${txt}</span><span class="car" aria-hidden="true">▾</span></button></div>`;
     } else {
       const q = D.lfQ[t.id] || '';
@@ -898,7 +910,7 @@ function lfEditHTML(c, x) {
   const matches = flt.ref ? lfMatches(c, flt.ref, forms) : [];
   const also = new Set(flt.also.map(refKeyOf));
   const through = flt.ref ? lfThrough(c, flt.ref, forms).map((fid) => c.formById(fid)?.name).filter(Boolean) : [];
-  const why = { link: 'Links to the same records.', name: 'Same name and type on another form.', kind: 'Same kind of field, another name. Tick to filter it too.' };
+  const why = { link: 'Links to the same records.', name: 'Same name and type on another form.', kind: 'Same kind of field, another name. Tick to filter it too.', hand: 'Added by hand.' };
   const seg = (d, v, l, on) => `<button type="button" class="${on ? 'on' : ''}" aria-pressed="${on}" data-d="${d}" data-v="${v}">${l}</button>`;
   return `<aside class="lf-ed" role="dialog" aria-label="Live filter settings">
     <h3>Live filter</h3>
@@ -906,15 +918,17 @@ function lfEditHTML(c, x) {
     <select class="in" id="lf-ref" data-dv="lf-ref"><option value="">Choose a field…</option>${groups.map(([f, l]) => `<optgroup label="${esc(f.name)}">${l.map((y) => `<option value="${esc(refKeyOf(y.ref))}"${refKeyOf(y.ref) === cur ? ' selected' : ''}>${esc(y.f.label || 'Untitled field')}</option>`).join('')}</optgroup>`).join('')}</select>
     ${flt.ref ? `<label class="db-lab" for="lf-label">Name</label><input class="in" id="lf-label" data-dv="lf-label" maxlength="60" placeholder="${esc(fieldOf(c, flt.ref)?.label || '')}" value="${esc(t.filter.label || '')}">
     ${through.length ? `<p class="help">Also filters reports on ${esc(through.join(', '))}, through their link to ${esc(c.formById(flt.ref.form)?.name || '')}.</p>` : ''}
+    ${(() => { const extraAlso = flt.also.filter((r) => !matches.some((m) => refKeyOf(m.ref) === refKeyOf(r))).map((r) => ({ ref: r, f: fieldOf(c, r) || { label: '(removed field)' }, form: c.formById(r.form) || { name: '?' }, why: 'hand' })); matches.push(...extraAlso); return ''; })()}
     ${matches.length ? `<div class="db-lab">Also filter</div><div class="lf-also">${matches.map((m) => `<label class="lf-arow"><input type="checkbox" data-dv="lf-also" value="${esc(refKeyOf(m.ref))}"${also.has(refKeyOf(m.ref)) ? ' checked' : ''}><span><b>${esc(m.form.name)} › ${esc(m.f.label || 'Untitled field')}</b><small>${why[m.why]}</small></span></label>`).join('')}</div>` : ''}
-    <div class="lf-segs"><div><div class="db-lab">Show as</div><div class="db-seg">${seg('lfshow', 'list', 'List', flt.show === 'list')}${seg('lfshow', 'dropdown', 'Dropdown', flt.show === 'dropdown')}</div></div>
-    <div><div class="db-lab">Pick</div><div class="db-seg">${seg('lfmode', 'one', 'One', flt.pick === 'one')}${seg('lfmode', 'many', 'Several', flt.pick === 'many')}</div></div></div>` : ''}
+    ${(() => { const add = lfAddable(c, flt, forms); return add.length ? `<label class="db-lab" for="lf-add">Add a field</label><select class="in" id="lf-add" data-dv="lf-add"><option value="">+ Filter another field with it…</option>${forms.map((fid) => { const l = add.filter((y) => y.ref.form === fid); return l.length ? `<optgroup label="${esc(c.formById(fid)?.name || '')}">${l.map((y) => `<option value="${esc(refKeyOf(y.ref))}">${esc(y.f.label || 'Untitled field')}</option>`).join('')}</optgroup>` : ''; }).join('')}</select><p class="help">Values are matched by what they say, so “Acme” on one form finds “Acme” on the other.</p>` : ''; })()}
+    ${isDateField(fieldOf(c, flt.ref)) ? '<p class="help">A date filter: people pick a period (This month, Last quarter…) or dates, alongside the dashboard’s Period.</p>' : `<div class="lf-segs"><div><div class="db-lab">Show as</div><div class="db-seg">${seg('lfshow', 'list', 'List', flt.show === 'list')}${seg('lfshow', 'dropdown', 'Dropdown', flt.show === 'dropdown')}</div></div>
+    <div><div class="db-lab">Pick</div><div class="db-seg">${seg('lfmode', 'one', 'One', flt.pick === 'one')}${seg('lfmode', 'many', 'Several', flt.pick === 'many')}</div></div></div>`}` : ''}
     <div class="lf-act"><button type="button" class="btn ghost" data-d="tdel" data-v="${esc(t.id)}">Remove</button><button type="button" class="btn primary" data-d="lfdone">Done</button></div>
   </aside>`;
 }
 /** "Customer: Acme" on each report a live filter reaches with something picked. */
 function lfTags(c, def, extra) {
-  return (extra?.fields || []).filter((ff) => ff.id && ff.values?.length && ffReach(c, def, ff)).map((ff) => `<span class="lf-tag">${esc(ff.label)}: ${esc(ff.values.length > 2 ? ff.values.slice(0, 2).join(', ') + ' +' + (ff.values.length - 2) : ff.values.join(', '))}</span>`).join('');
+  return (extra?.fields || []).filter((ff) => ff.id && (ff.values?.length || ff.range) && ffReach(c, def, ff)).map((ff) => { const parts = String(ff.text || ff.values.join(', ')).split(', '); return `<span class="lf-tag">${esc(ff.label)}: ${esc(ff.range ? ff.text : parts.length > 2 ? parts.slice(0, 2).join(', ') + ' +' + (parts.length - 2) : parts.join(', '))}</span>`; }).join('');
 }
 /** Dashboards with the old "+ Filter by…" dropdowns: turn them into live filter tiles, once, keeping picks. */
 function moveOldFilters(x) {
@@ -1289,7 +1303,18 @@ document.addEventListener('change', (e) => {
       repaint(() => { if (k === 'period' && t.value === 'custom' && !fv.from) document.querySelector('[data-dv="pfrom"]')?.focus(); });
       break;
     }
-    case 'lf-ref': lfChange((f, tile) => { const r = t.value ? { form: t.value.split('.')[0], id: t.value.split('.').slice(1).join('.') } : null; f.ref = r; delete f.label; const c = ctx(); const reps = reportTiles(c, D.edit); f.also = r ? lfMatches(c, r, reps.length ? dashForms(c, reps.map((y) => y.def)) : c.forms.map((y) => y.id)).filter((m) => m.on).map((m) => m.ref) : []; const fv = filterState(D.edit); if (fv.lf) { delete fv.lf[tile.id]; savePicks(D.edit.id, fv.lf); } }); break;
+    case 'lf-ref': lfChange((f, tile) => { const r = t.value ? { form: t.value.split('.')[0], id: t.value.split('.').slice(1).join('.') } : null; f.ref = r; delete f.label; const c = ctx(); const reps = reportTiles(c, D.edit); f.also = r ? lfMatches(c, r, reps.length ? dashForms(c, reps.map((y) => y.def)) : c.forms.map((y) => y.id)).filter((m) => m.on).map((m) => m.ref) : []; if (r && isDateField(fieldOf(c, r))) tile.h = 3; else if (r && f.show === 'list') tile.h = Math.max(tile.h, 6); const fv = filterState(D.edit); if (fv.lf) { delete fv.lf[tile.id]; savePicks(D.edit.id, fv.lf); } }); if (D.edit) D.edit.tiles = resolveCanvas(canvasTiles(D.edit.tiles), D.lfEdit, !!D.edit.filters?.floatUp); break;
+    case 'lf-add': if (t.value) { const k = t.value; lfChange((f) => { const r = { form: k.split('.')[0], id: k.split('.').slice(1).join('.') }; if (!(f.also || []).some((y) => refKeyOf(y) === k)) f.also = [...(f.also || []), r]; }); } break;
+    case 'lf-date': case 'lf-dfrom': case 'lf-dto': {
+      const x = D.edit && D.did ? D.edit : dashById(D.did); if (!x) return;
+      const id = t.dataset.v, fv = filterState(x); fv.lf = { ...(fv.lf || {}) };
+      const cur = datePick(fv.lf[id]) || {};
+      if (k === 'lf-date') { if (t.value) fv.lf[id] = t.value === 'custom' ? { period: 'custom', from: cur.from || '', to: cur.to || '' } : { period: t.value }; else delete fv.lf[id]; }
+      else fv.lf[id] = { period: 'custom', from: cur.from || '', to: cur.to || '', [k === 'lf-dfrom' ? 'from' : 'to']: /^\d{4}-\d{2}-\d{2}$/.test(t.value) ? t.value : '' };
+      savePicks(x.id, fv.lf);
+      repaint(() => { if (k === 'lf-date' && t.value === 'custom') document.querySelector(`[data-dv="lf-dfrom"][data-v="${CSS.escape(id)}"]`)?.focus(); });
+      break;
+    }
     case 'lf-label': lfChange((f) => { const l = t.value.trim().slice(0, 60); if (l) f.label = l; else delete f.label; }); break;
     case 'lf-also': lfChange((f) => { const k = t.value, r = { form: k.split('.')[0], id: k.split('.').slice(1).join('.') }; const has = (f.also || []).some((y) => refKeyOf(y) === k); f.also = t.checked ? (has ? f.also : [...(f.also || []), r]) : (f.also || []).filter((y) => refKeyOf(y) !== k); }); break;
     case 'addfilter': if (D.edit && t.value) { D.edit.filters = { ...(D.edit.filters || { period: 'all' }), fields: (D.edit.filters?.fields || []).concat(refOf(t.value)) }; D.edit.dirty = true; repaint(); } break;

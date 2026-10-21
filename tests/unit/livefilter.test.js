@@ -40,12 +40,12 @@ test('picking values filters every report it reaches; one field per report', () 
   assert.equal(ids(rowsFor(ctx, { form: 'projects' }, { fields: [{ ref: NAME, refs: [NAME], values: [] }] })), 'p1,p2,p3', 'nothing picked: everything');
 });
 
-test('fields to choose: the dashboard’s forms and the ones above them; no dates', () => {
+test('fields to choose: the dashboard’s forms and the ones above them, dates and Created by too', () => {
   const fs = dashForms(ctx, [{ form: 'projects' }, { form: 'invoices' }]);
   assert.deepEqual(fs, ['projects', 'clients', 'invoices']);
   const ch = lfChoices(ctx, fs).map((x) => x.ref.form + '.' + x.ref.id);
   assert.ok(ch.includes('clients.name') && ch.includes('projects.stage') && ch.includes('invoices.client') && ch.includes('projects.budget'));
-  assert.ok(!ch.includes('clients.since'), 'dates are the Period’s job');
+  assert.ok(ch.includes('clients.since') && ch.includes('clients._created') && ch.includes('projects._owner'), 'dates (a date live filter) and Created by');
 });
 
 test('filtered together: a link to the same records and the same name are ticked; same kind offered unticked', () => {
@@ -68,7 +68,7 @@ test('values with counts of the first report it reaches, under the other filters
 
 test('the dashboard gets one entry per live filter tile; settings tidied; picking', () => {
   const tiles = [{ id: 'a', filter: { ref: NAME, also: [{ form: 'invoices', id: 'client' }], label: 'Client' } }, { id: 'b', report: 'r1' }, { id: 'c', filter: { ref: { form: 'gone', id: 'x' } } }];
-  assert.deepEqual(lfExtra(ctx, tiles, { a: ['Acme'] }), [{ id: 'a', ref: NAME, refs: [NAME, { form: 'invoices', id: 'client' }], values: ['Acme'], label: 'Client' }]);
+  assert.deepEqual(lfExtra(ctx, tiles, { a: ['Acme'] }), [{ id: 'a', ref: NAME, refs: [NAME, { form: 'invoices', id: 'client' }], values: ['Acme'], label: 'Client', text: 'Acme' }]);
   assert.deepEqual(normalizeFilter({ ref: NAME, also: [NAME, { form: 'invoices', id: 'client' }], show: 'x', pick: 'one' }), { ref: NAME, also: [{ form: 'invoices', id: 'client' }], show: 'list', pick: 'one' });
   assert.deepEqual(lfRefs({ ref: NAME }), [NAME]);
   assert.deepEqual(togglePick(['a'], 'b', 'many'), ['a', 'b']);
@@ -81,4 +81,69 @@ test('the old "+ Filter by…" dropdowns become dropdown live filters across the
   assert.deepEqual(fromOldFilters([NAME, { form: 'projects', id: 'stage' }]), [
     { id: 'lf-clients-name', filter: { ref: NAME, also: [], show: 'dropdown', pick: 'one' }, x: 0, y: 0, w: 6, h: 2 },
     { id: 'lf-projects-stage', filter: { ref: { form: 'projects', id: 'stage' }, also: [], show: 'dropdown', pick: 'one' }, x: 6, y: 0, w: 6, h: 2 }]);
+});
+
+import { lfAddable, ME, datePick } from '../../src/lflogic.js';
+import { setCalendar, parseLocal, dayKeyOf } from '../../src/cal.js';
+
+const dforms = [
+  { id: 'inv', name: 'Invoices', titleField: 'no', children: [{ formId: 'lines' }], workflow: { on: true, stages: [{ id: 's1', name: 'Approve' }] }, fields: [
+    { id: 'no', type: 'text', label: 'Invoice #' }, { id: 'date', type: 'date', label: 'Invoice date' }, { id: 'due', type: 'date', label: 'Due date' }, { id: 'cust', type: 'text', label: 'Customer' }] },
+  { id: 'lines', name: 'Line items', titleField: 'desc', children: [], fields: [{ id: 'desc', type: 'text', label: 'Description' }, { id: 'svc', type: 'date', label: 'Service date' }] },
+  { id: 'jobs', name: 'Jobs', titleField: 'job', children: [], fields: [{ id: 'job', type: 'text', label: 'Job' }, { id: 'due', type: 'date', label: 'Due date' }, { id: 'client', type: 'text', label: 'Client name' }] },
+];
+const drecs = [
+  { id: 'i1', formId: 'inv', values: { no: 'INV-1', date: '2026-09-10', due: '2026-10-10', cust: 'Acme' }, ownerId: 'u_amy', assignee: 'u_me', createdAt: 1 },
+  { id: 'i2', formId: 'inv', values: { no: 'INV-2', date: '2026-10-05', due: '2026-11-05', cust: 'Globex' }, ownerId: 'u_me', assignee: 'u_amy', createdAt: 1 },
+  { id: 'l1', formId: 'lines', parentId: 'i1', values: { desc: 'Design', svc: '2026-09-02' }, ownerId: 'u_me', createdAt: 1 },
+  { id: 'j1', formId: 'jobs', values: { job: 'Roof', due: '2026-10-20', client: 'Acme' }, ownerId: 'u_me', createdAt: 1 },
+  { id: 'j2', formId: 'jobs', values: { job: 'Yard', due: '2026-12-01', client: 'Globex' }, ownerId: 'u_amy', createdAt: 1 },
+];
+const dF = new Map(dforms.map((f) => [f.id, f])), dR = new Map(drecs.map((r) => [r.id, r]));
+const dctx = { forms: dforms, records: drecs, profiles: { u_me: { displayName: 'Adam' }, u_amy: { displayName: 'Amy' } }, formById: (id) => dF.get(id) || null, recById: (id) => dR.get(id) || null, fmt: (f, v) => String(v), recTitle: (r) => r.id };
+const NOWD = parseLocal('2026-10-21T12:00');
+
+test('a date live filter: a period on a date field, on several forms at once', () => {
+  setCalendar({});
+  const DUE = { form: 'inv', id: 'due' };
+  const fs = ['inv', 'lines', 'jobs'];
+  assert.deepEqual(lfMatches(dctx, DUE, fs).map((m) => [m.ref.form + '.' + m.ref.id, m.on]), [['jobs.due', true], ['jobs._created', false], ['jobs._updated', false]], 'the same name on Jobs is ticked; other dates are offered');
+  const tiles = [{ id: 'd', filter: { ref: DUE, also: [{ form: 'jobs', id: 'due' }], label: 'Due' } }];
+  const [ff] = lfExtra(dctx, tiles, { d: { period: 'month' } }, {}, NOWD);
+  assert.equal(ff.text, 'This month');
+  assert.deepEqual([dayKeyOf(ff.range.from), dayKeyOf(ff.range.to)], ['2026-10-01', '2026-11-01']);
+  assert.equal(ids(rowsFor(dctx, { form: 'inv' }, { fields: [ff] })), 'i1');
+  assert.equal(ids(rowsFor(dctx, { form: 'jobs' }, { fields: [ff] })), 'j1');
+  assert.equal(ids(rowsFor(dctx, { form: 'lines' }, { fields: [ff] })), 'l1', 'a line item follows its invoice’s due date');
+  const [cu] = lfExtra(dctx, tiles, { d: { period: 'custom', from: '2026-11-01', to: '2026-12-31' } }, {}, NOWD);
+  assert.equal(ids(rowsFor(dctx, { form: 'jobs' }, { fields: [cu] })), 'j2');
+  assert.equal(cu.text, 'Nov 1 – Dec 31, 2026');
+  const [none] = lfExtra(dctx, tiles, {}, {}, NOWD);
+  assert.equal(none.range, null);
+  assert.equal(ids(rowsFor(dctx, { form: 'jobs' }, { fields: [none] })), 'j1,j2', 'nothing picked: everything');
+  assert.deepEqual(datePick({ period: 'custom', from: 'x', to: '2026-01-02' }), { period: 'custom', from: '', to: '2026-01-02' });
+  assert.equal(datePick(['a']), null);
+});
+
+test('add any field by hand: same family (dates with dates), not already in it', () => {
+  const add = lfAddable(dctx, { ref: { form: 'inv', id: 'cust' }, also: [] }, ['inv', 'jobs']).map((x) => x.ref.form + '.' + x.ref.id);
+  assert.ok(add.includes('jobs.client') && add.includes('jobs.job') && !add.includes('jobs.due') && !add.includes('inv.no'), add.join(','));
+  const two = lfAddable(dctx, { ref: { form: 'inv', id: 'cust' }, also: [{ form: 'jobs', id: 'client' }] }, ['inv', 'jobs']).map((x) => x.ref.id);
+  assert.ok(!two.includes('client'));
+  const fields = [{ ref: { form: 'inv', id: 'cust' }, refs: [{ form: 'inv', id: 'cust' }, { form: 'jobs', id: 'client' }], values: ['Acme'] }];
+  assert.equal(ids(rowsFor(dctx, { form: 'jobs' }, { fields })), 'j1', '“Customer” and “Client name” filtered together');
+});
+
+test('“Me”: people fields offer it first; it means whoever is looking', () => {
+  const OWN = { form: 'inv', id: '_owner' }, WHO = { form: 'inv', id: '_assignee' };
+  const vals = lfValues(dctx, { ref: OWN }, { countDef: { form: 'inv' }, me: { name: 'Adam' } });
+  assert.deepEqual(vals[0], { v: ME, label: 'Me', n: 1 });
+  const [mine] = lfExtra(dctx, [{ id: 'o', filter: { ref: OWN } }], { o: [ME] }, { name: 'Adam' });
+  assert.equal(mine.text, 'Me');
+  assert.equal(ids(rowsFor(dctx, { form: 'inv' }, { fields: [mine] })), 'i2');
+  const [amy] = lfExtra(dctx, [{ id: 'o', filter: { ref: OWN } }], { o: [ME] }, { name: 'Amy' });
+  assert.equal(ids(rowsFor(dctx, { form: 'inv' }, { fields: [amy] })), 'i1', 'the same pick, someone else looking: theirs');
+  const [resp] = lfExtra(dctx, [{ id: 'w', filter: { ref: WHO } }], { w: [ME] }, { name: 'Adam' });
+  assert.equal(ids(rowsFor(dctx, { form: 'inv' }, { fields: [resp] })), 'i1', 'Person responsible (forms with a workflow)');
+  assert.ok(!lfChoices(dctx, ['jobs']).some((x) => x.ref.id === '_assignee'), 'no workflow: no Person responsible');
 });

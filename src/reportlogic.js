@@ -36,9 +36,11 @@ export function titleFieldOf(form) {
 }
 
 /** Fields a report can use: the form's own (minus layout-only ones) plus Created on / Last edited / Created by. */
+/** Who has a record at its workflow stage (forms with a workflow): a person, for "Me" filters and columns. */
+const ASSIGNEE = { id: '_assignee', label: 'Person responsible', type: 'owner', system: true };
 export function reportFields(form) {
   const own = (form.fields || []).filter((f) => !['heading', 'signature'].includes(f.type));
-  return own.concat(SYSTEM);
+  return own.concat(SYSTEM, form.workflow?.on && (form.workflow.stages || []).length ? [ASSIGNEE] : []);
 }
 
 export function fieldOf(ctx, ref) {
@@ -90,6 +92,7 @@ export function valueOf(ctx, rec, ref) {
   if (ref.id === '_created') return r.createdAt;
   if (ref.id === '_updated') return r.updatedAt || r.createdAt;
   if (ref.id === '_owner') return r.ownerId;
+  if (ref.id === '_assignee') return r.assignee || null;
   const form = ctx.formById(ref.form);
   const f = form && (form.fields || []).find((x) => x.id === ref.id);
   if (!f) return undefined;
