@@ -46,11 +46,12 @@ export function pushRecent(list, id, max = 8) {
 }
 
 /**
- * The sidebar's Forms list: up to n forms — the ones you opened recently, topped up with the rest
- * in their own order — shown in the forms' own order so the list doesn't jump around.
+ * The sidebar's Forms list: only forms whose Sidebar switch is on (Form designer), any form,
+ * parent or child. Up to n: the ones you opened recently, topped up with the rest in their own
+ * order, shown in the forms' own order so the list doesn't jump around. The rest are a search away.
  */
 export function sidebarFormList(forms, canView, recentIds, n = 6) {
-  const can = searchableForms(forms, canView);
+  const can = (forms || []).filter((f) => canView(f) && f.showInSidebar);
   const ord = (a, b) => (a.order ?? 0) - (b.order ?? 0) || can.indexOf(a) - can.indexOf(b);
   const byId = new Map(can.map((f) => [f.id, f]));
   const pick = (recentIds || []).map((id) => byId.get(id)).filter(Boolean).slice(0, n);

@@ -15,10 +15,12 @@ test('recent forms: newest first, no repeats, capped', () => {
   assert.deepEqual(pushRecent(['a', 'b', 'c'], 'd', 3), ['d', 'a', 'b']);
 });
 
-test('sidebar Forms: recent ones topped up, shown in the forms’ own order, children left out', () => {
-  assert.deepEqual(sidebarFormList(forms, all, ['d', 'c'], 3).map((f) => f.id), ['a', 'c', 'd']);
-  assert.deepEqual(sidebarFormList(forms, all, [], 6).map((f) => f.id), ['a', 'b', 'c', 'd']);
-  assert.deepEqual(sidebarFormList(forms, (f) => f.id !== 'a', ['a'], 2).map((f) => f.id), ['b', 'c']);
+test('sidebar Forms: only forms switched on (parent or child), recent ones first, in the forms’ own order', () => {
+  const on = forms.map((f) => ({ ...f, showInSidebar: f.id !== 'b' }));
+  assert.deepEqual(sidebarFormList(on, all, ['d', 'c'], 3).map((f) => f.id), ['a', 'c', 'd'], 'recent c and d, topped up with a');
+  assert.deepEqual(sidebarFormList(on, all, [], 6).map((f) => f.id), ['a', 'c', 'd', 'k'], 'a child switched on shows; b, switched off, doesn’t');
+  assert.deepEqual(sidebarFormList(on, (f) => f.id !== 'a', ['a'], 2).map((f) => f.id), ['c', 'd']);
+  assert.deepEqual(sidebarFormList(forms, all, ['a', 'b'], 6).map((f) => f.id), [], 'nothing switched on: nothing listed, even ones opened recently');
 });
 
 test('Ctrl K matching: every word, name starts beat word starts beat anywhere', () => {

@@ -37,7 +37,8 @@ import { fieldItem, fileName as pdfFileName } from './pdfdoc.js';
 import { copyValues, relinkRow } from './duplogic.js';
 import { shrinkPhoto } from './photo.js';
 import { evaluate as evalRules, toClear, withoutCleared, NO_RULES, holdsValue, pruneRules, impactOf, sameRules, changedRuleLabels } from './rules.js';
-import { initAutos, pendingBanner } from './autos.js';
+import { initAutos, pendingBanner, openAutomation } from './autos.js';
+import * as calview from './calendar.js';
 import { personAv } from './avatar.js';
 import { initSchedules, scheduleCount } from './schedules.js';
 import { initDashMail } from './dashmailui.js';
@@ -60,7 +61,7 @@ import { signOutUser } from './auth.js';
 import { $, esc, uid, clone, isEmpty, toast, COLORS, colorOf, itemName, badge, lazy } from './ui.js';
 import examples from './examples.json';
 
-const ADMIN_VIEWS = new Set(['settings', 'calendar', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
+const ADMIN_VIEWS = new Set(['settings', 'dates', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 
 // other words people search field types by
 const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold'};
@@ -220,7 +221,7 @@ function openLink(g){
   if(g.name==='new'){const f=formById(g.formId);if(f&&canCreate(store.me,f.id))goRec(newRecordDraft(f,null),{name:'record',formId:f.id,recordId:null});return;}
   if(g.name==='home'){goHome();return;}
   if(g.name==='exports'&&view.name!=='exports')exportLeave();
-  if(g.name==='calendar'&&view.name!=='calendar')calLeave();
+  if(g.name==='dates'&&view.name!=='dates')calLeave();
   go({name:g.name});
 }
 /** What dashboard shortcuts need to know about this person. */
@@ -301,6 +302,7 @@ window.addEventListener('popstate',e=>{
 function openRoute(r){
   if(!r)return true;
   if(r.kind==='reports'){go({name:'reports'},false);return true;}
+  if(r.kind==='calendar'){go({name:'calendar'},false);return true;}
   if(r.kind==='dashboards'){go({name:'dashboards'},false);return true;}
   if(r.kind==='dashboard'){
     if(!store.dashboards.some(x=>x.id===r.id)){
@@ -478,10 +480,11 @@ function renderSide(){
     <div class="navlabel">Workspace</div>
     ${navBtn('nav-home',onHome(),'Home','⌂')}
     <button class="nav${view.name==='mywork'?' on':''}" data-act="nav-mywork"${view.name==='mywork'?' aria-current="page"':''}${tip('My work')}><span class="glyph navg">☰</span><span class="t">My work</span>${cmt.unreadCount()?`<span class="nb" title="${cmt.unreadCount()} unread mention${cmt.unreadCount()===1?'':'s'}"><span class="sr">, </span>${cmt.unreadCount()}<span class="sr"> unread</span></span>`:''}<span class="n">${myWorkCount()||''}</span></button>
+    ${navBtn('nav-cal',view.name==='calendar','Calendar','▣')}
     ${navBtn('nav-dashboards',(view.name==='dashboards'||view.name==='dashboard')&&!onHome(),'Dashboards','▦',`<span class="n">${counts().dashboards}</span>`)}
     ${navBtn('nav-reports',view.name==='reports'||view.name==='report','Reports','▤',`<span class="n">${counts().reports}</span>`)}
     <div class="navlabel">Forms</div>
-    ${list.length?list.map(f=>`<button class="nav nav-form${f.id===activeForm?' on':''}" data-act="nav-form" data-id="${f.id}"${f.id===activeForm?' aria-current="page"':''} title="${esc(f.name)}"${rail?` aria-label="${esc(f.name)}"`:''}>${badge(f)}<span class="t">${esc(f.name)}</span><span class="n">${recordsOf(f.id).length}</span></button>`).join(''):'<p class="nav-empty">No forms shared with you yet.</p>'}
+    ${list.length?list.map(f=>`<button class="nav nav-form${f.id===activeForm?' on':''}" data-act="nav-form" data-id="${f.id}"${f.id===activeForm?' aria-current="page"':''} title="${esc(f.name)}"${rail?` aria-label="${esc(f.name)}"`:''}>${badge(f)}<span class="t">${esc(f.name)}</span><span class="n">${recordsOf(f.id).length}</span></button>`).join(''):total?'':'<p class="nav-empty">No forms shared with you yet.</p>'}
     ${total>list.length?`<button class="nav nav-all" data-act="${rail?'palette':'fs-all'}"${tip(`All forms (${total})`)}><span class="glyph navg rail-only" aria-hidden="true">⋯</span><span class="t">All forms (${total})</span><span aria-hidden="true">→</span></button>`:''}
     ${adm?`<div class="nav-bottom">${navBtn('nav-settings',inSettings(),'Settings',GEAR)}</div>`:''}
     <div class="side-foot">${ui.appear?appearanceHTML():''}${store.user?personAv(store.user.uid,name,{small:true}):''}<div class="who" title="${esc(name)}"><b>${esc(name)}</b><span>${adm?'Administrator':'Member'}</span></div><div class="foot-acts"><button type="button" class="ibtn theme-btn" data-act="appear" aria-expanded="${!!ui.appear}" aria-label="Appearance: mode, colour and density" title="Appearance">${THEME_ICON[readTheme(localStorage)]}<span class="foot-l">Appearance</span></button><button class="btn sm ghost" data-act="sign-out">Sign out</button></div></div>`;
@@ -509,7 +512,7 @@ function settingsGroups(){return [
     {act:'nav-designer',on:['designer'],t:'Form designer',g:'⚙',n:store.forms.length,d:'Build forms, fields, sections and workflows.'},
     {act:'nav-imports',on:['imports'],t:'Import history',g:'⇪',n:store.imports.length,d:'Past imports and rule changes, with Undo for 7 days.'},
     {act:'nav-exports',on:['exports'],t:'PDF exports',g:'⇩',d:'Company name and logo on PDF and Word exports.'},
-    {act:'nav-calendar',on:['calendar'],t:'Dates and time',g:'☼',d:'Time zone, the day weeks start and the fiscal year, for reports and dashboards.'}]},
+    {act:'nav-dates',on:['dates'],t:'Dates and time',g:'☼',d:'Time zone, the day weeks start and the fiscal year, for reports and dashboards.'}]},
   {h:'People and access',items:[
     {act:'nav-users',on:['users'],t:'Users',g:'☺',n:store.users.length,d:'Who has an account, their groups, roles and Cadence access.'},
     {act:'nav-groups',on:['groups','groupEdit'],t:'Security groups',g:'◫',n:store.groups.length,d:'Which forms each group can see and change.'},
@@ -539,6 +542,7 @@ function renderMain(){
   else if(view.name==='records'){const f=formById(view.formId);title=f?.name;h=viewRecords(f);wide=true;}
   else if(view.name==='record'){const f=formById(view.formId);title=f?.name;h=viewRecord(f);}
   else if(view.name==='mywork'){title='My work';h=viewMyWork();}
+  else if(view.name==='calendar'){title='Calendar';h=calview.viewCalendar();}
   else if(view.name==='import'){title=importTitle();h=viewImport(formById(view.formId));}
   else if(view.name==='imports'){title='Import history';h=viewImports();}
   else if(view.name==='designer'){title='Form designer';h=viewDesigner();}
@@ -564,7 +568,7 @@ function renderMain(){
   m.querySelector('.st-ni.on')?.scrollIntoView({block:'nearest',inline:'center'}); // phones: the row shows where you are
   afterDashRender(); // a dashboard that's new on screen plays its entrance
   thinAxes(m); // chart axis labels: as many as fit
-  syncTaskWatch();syncEmailWatch();syncStageWatch();cmt.sync();cmt.afterRender();wordui.sync();
+  syncTaskWatch();syncEmailWatch();syncStageWatch();cmt.sync();cmt.afterRender();wordui.sync();calview.sync(view.name==='calendar');
 }
 
 /* ---------- Cadence tasks linked to the open record ---------- */
@@ -910,6 +914,8 @@ function viewWaiting(tab,hasWf){
     ${myWorkTabs(tab,hasWf)}<div id="mw-p" role="tabpanel" aria-labelledby="mw-t-waiting">
     ${recs.length?tables:`<div class="panel empty"><h2>Nothing waiting${who==='all'?'':' on you'}</h2><p>When a record reaches a stage that’s yours, it shows up here.</p></div>`}</div>`;
 }
+/** Records waiting on me (or a group or role I'm in) at a stage with a due date, for the Calendar. */
+function calWf(){const me=store.user?.uid,groups=store.me?.groups||[],roles=myRoles();return store.records.filter(r=>{const f=formById(r.formId);return f&&wfOn(f)&&r.stage&&stageById(f,r.stage)&&(r.assignee===me||(r.assigneeGroup&&groups.includes(r.assigneeGroup))||(r.assigneeRole&&roles.includes(r.assigneeRole)));}).map(r=>{const f=formById(r.formId),x=dueOf(f,r);return x?{rec:r,form:f,due:x.due,stage:stageById(f,r.stage).name||'a stage',who:whoHas(r)}:null;}).filter(Boolean);}
 const myWorkCount=()=>{const me=store.user?.uid,groups=store.me?.groups||[],roles=myRoles();return store.records.filter(r=>r.stage&&(r.assignee===me||(r.assigneeGroup&&groups.includes(r.assigneeGroup))||(r.assigneeRole&&roles.includes(r.assigneeRole)))&&wfOn(formById(r.formId))).length;};
 
 /* ---------- Email PDF (administrators) ----------
@@ -1931,7 +1937,7 @@ function viewFormEdit(){
       <label class="prop full"><span>Email PDF: subject</span><input class="in" data-fprop="emailSubject" value="${esc(f.emailSubject||'')}" maxlength="200" placeholder="${esc(DEFAULT_SUBJECT)}"></label>
       <label class="prop full"><span>Email PDF: message</span><textarea class="in" data-fprop="emailMessage" rows="6" maxlength="10000" placeholder="${esc(DEFAULT_MESSAGE)}">${esc(f.emailMessage||'')}</textarea><small class="help">What <b>Email PDF</b> fills in; it can be changed before sending. Use {Field name} for any field on this form (for example {${esc((f.fields||[]).find(x=>x.type!=='heading')?.label||'Invoice #')}}), plus {Title}, {Item}, {Company}, {Sender} and {Date}. Leave empty for the standard wording shown.</small></label>
       <div class="prop full"><span>Word templates</span><div class="xw-links"><button type="button" class="btn sm" data-act="wd-placeholders">Placeholders for this form (.docx)</button><a class="btn sm ghost" href="/word-template-sample.docx" download="Formwright quote template.docx">Sample template</a></div><small class="help">Every placeholder a Word template for this form can use, to copy into your own document${f.dirty?' (made from the form as it is on screen, so save it before using new fields)':''}. People add templates from <b>Export ▾ → Word templates…</b> on a record.</small></div>
-      <div class="prop"><span>Visibility</span><label class="switch"><input type="checkbox" data-fprop="showInSidebar" data-kind="bool"${f.showInSidebar?' checked':''}><span class="tr"></span><span>Show in sidebar</span></label><small class="help">Hidden forms stay in the designer and under their parent records.</small></div>
+      <div class="prop"><span>Visibility</span><label class="switch"><input type="checkbox" data-fprop="showInSidebar" data-kind="bool"${f.showInSidebar?' checked':''}><span class="tr"></span><span>Show in sidebar</span></label><small class="help">Only forms switched on are listed in the sidebar. Hidden ones stay in the designer, under their parent records, and in Search forms and Ctrl K.</small></div>
     </div></div>
     ${f.isNew?'':`<section class="section"><div class="section-h"><h2>Delete form</h2></div><div class="panel"><div class="parentcard"><p class="grow help">Deletes the form and its ${recordsOf(f.id).length} records. Child records in other forms are kept.</p><button class="btn danger${ui.confirm==='form'?' armed':''}" data-act="del-form">${ui.confirm==='form'?'Tap again to delete':'Delete form'}</button></div></div></section>`}`;
   }else{
@@ -1997,7 +2003,7 @@ function fieldEditor(x){
   if(x.type==='rating')h+=P('Number of stars',num('max',x.max));
   if(x.type==='autonumber')h+=autoEditor(x,P,inp,num,sw);
   if(x.type==='relation')h+=P('Links to form',`<select class="in" data-prop="relForm"><option value="">Choose a form…</option>${[...store.forms].sort(byOrder).map(o=>`<option value="${o.id}"${o.id===x.relForm?' selected':''}>${esc(o.name)}</option>`).join('')}</select>`);
-  if(x.type!=='heading')h+=`<div class="props-sw">${x.type==='formula'||x.type==='autonumber'?'':sw('required','Required')}${NOLIST.has(x.type)?'':sw('inList','Column in the starting list')}${x.type==='textarea'?`<label class="switch"><input type="checkbox" data-prop="plain" data-kind="neg"${x.plain?'':' checked'}><span class="tr"></span><span>Allow formatting</span></label>`:''}<label class="switch"><input type="checkbox" data-prop="width" data-kind="half"${x.width==='half'?' checked':''}><span class="tr"></span><span>Half width on wide screens</span></label></div>`;
+  if(x.type!=='heading')h+=`<div class="props-sw">${x.type==='formula'||x.type==='autonumber'?'':sw('required','Required')}${NOLIST.has(x.type)?'':sw('inList','Column in the starting list')}${x.type==='date'||x.type==='datetime'?sw('calendar','Show on the calendar'):''}${x.type==='textarea'?`<label class="switch"><input type="checkbox" data-prop="plain" data-kind="neg"${x.plain?'':' checked'}><span class="tr"></span><span>Allow formatting</span></label>`:''}<label class="switch"><input type="checkbox" data-prop="width" data-kind="half"${x.width==='half'?' checked':''}><span class="tr"></span><span>Half width on wide screens</span></label></div>`;
   h+=`<div class="prop full"><span class="keyline">Field ID ${esc(x.id)}</span></div>`;
   return `<div class="fedit">${h}</div>`;
 }
@@ -2227,7 +2233,7 @@ document.addEventListener('click',async e=>{
     case 'nav-automations':go({name:'automations'});break;
     case 'nav-schedules':go({name:'schedules'});break;
     case 'nav-settings':go({name:'settings'});break;
-    case 'nav-calendar':if(view.name!=='calendar')calLeave();go({name:'calendar'});break;
+    case 'nav-dates':if(view.name!=='dates')calLeave();go({name:'dates'});break;
     case 'rec-duplicate':{
       const rec=view.recordId?recById(view.recordId):null,form=rec?formById(rec.formId):null;
       if(!rec||!form||!canCreate(store.me,form.id))return;
@@ -2404,6 +2410,7 @@ document.addEventListener('click',async e=>{
       const rec=recById(a.recId),form=rec&&formById(rec.formId),t=form&&stageById(form,a.to);if(!t)return;a.busy=true;renderMain();await doWfMove(rec,form,t,a.label,a.comment);ui.wfAsk=null;renderMain();break;}
     case 'wf-who':ui.wfWho=el.dataset.v;renderMain();break;
     case 'wd-placeholders':if(fdraft)wordui.downloadPlaceholders(fdraft);break;
+    case 'nav-cal':go({name:'calendar'});break;
     case 'nav-mywork':ui.mwTab=cmt.unreadCount()||!store.forms.some(f=>wfOn(f))?'mentions':'waiting';go({name:'mywork'});break;
     case 'mw-tab':ui.mwTab=el.dataset.v;renderMain();document.querySelector(`[data-act="mw-tab"][data-v="${CSS.escape(el.dataset.v)}"]`)?.focus();break;
     case 'cs-no':if(ui.cascade&&!ui.cascade.busy){ui.cascade=null;renderMain();}break;
@@ -2420,7 +2427,7 @@ document.addEventListener('click',async e=>{
     case 'load-examples':await loadExamples();break;
     case 'try-reset':pdraft=null;renderMain();break;
     case 'preview-check':{const errs=validate(fdraft,pdraft.values,draftRules(pdraft));pdraft.errors=errs;renderMain();toast(Object.keys(errs).length?`${Object.keys(errs).length} field${Object.keys(errs).length>1?'s need':' needs'} attention.`:'Everything checks out.');break;}
-    default:await admin.onClick(el,a,id);
+    default:if(a.startsWith('cv-')&&await calview.onClick(a,el))return;await admin.onClick(el,a,id);
   }
 });
 document.addEventListener('input',e=>{
@@ -2721,7 +2728,8 @@ export function startApp(){
   initRichUI();
   palette.initPalette({store,formById,recTitle,isAdmin:()=>isAdmin(store.me),canView:f=>canViewForm(store.me,f.id),canCreate:id=>canCreate(store.me,id),searchable:()=>allSearchable(store.forms,f=>canViewForm(store.me,f.id)).map(x=>x.form),
     go:v=>go(v),home:()=>home(),newRecord:id=>{const f=formById(id);if(f)goRec(newRecordDraft(f,null),{name:'record',formId:id,recordId:null});},openRecord:id=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
-  tm.initTaskModal({store,recById,formById,recTitle,toast,cadenceUrl,tasks:()=>tw.tasks||[]});
+  tm.initTaskModal({store,recById,formById,recTitle,toast,cadenceUrl,tasks:()=>[...(tw.tasks||[]),...calview.calTasks()]});
+  calview.initCalendar({go,renderMain,recById,formById:id=>{const f=formById(id);return f&&canViewForm(store.me,f.id)?f:null;},recTitle,cadenceUrl,wfItems:calWf,openRecord:id=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});else toast('That record was deleted, or you can no longer see it.');},openAutomation:id=>openAutomation(id)});
   cmt.initComments({store,view:()=>view,recById,formById,recTitle,itemName,toast,isAdmin:()=>isAdmin(store.me),canUseTasks,foldBtn,folded,
     unfold:(fid,k)=>saveFolds(setFold(folds(),fid,k,false)),openRecord:id=>{const r=recById(id);if(!r)return;if(view.name==='record'&&view.recordId===id){renderMain();return;}goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
   initDashMail();

@@ -107,6 +107,7 @@ src/
   pdfdraw.js               Export PDF: draws the document with pdf-lib (unit-tested)
   pdfexport.js             Export PDF: fetches photos, loads pdf-lib on first use, downloads the file
   exportset.js             Settings → PDF exports: company name and logo
+  callogic.js, calendar.js Workspace → Calendar: what's on each day (pure, unit-tested), and the screen
   cal.js                   The company calendar: time zone, week start, fiscal year; days, weeks, quarters, names (pure, unit-tested)
   calset.js, calpreview.js Settings → Dates and time, and its preview
   duplogic.js              Duplicate: which values a copy keeps (pure, unit-tested)
@@ -146,7 +147,7 @@ Security rules, Storage rules, indexes and their tests live in the Cadence folde
 
 | Collection | Document | Written by |
 |---|---|---|
-| `forms/{formId}` | `name, itemName, description, color, showInSidebar, order, titleField, fields[], children[]` | admins |
+| `forms/{formId}` | `name, itemName, description, color, showInSidebar, order, titleField, fields[] (a date field's `calendar: true` puts it on the Calendar), children[]` | admins |
 | `records/{id}` | `formId, values{fieldId: value}, parentId, parentFormId, ownerId, createdBy, createdAt, updatedAt, updatedBy`; `nums{fieldId: number}` and `autoLog[]` from the server; `stage, assignee, assigneeGroup, stageAt` with a workflow | per access; at a workflow stage only its assignee or admins (`nums`, `autoLog`: server only) |
 | `records/{id}/comments/{id}` | `by, byName, at, text, mentions[{uid, name}], parent, task, editedAt`; `notified{uid: sent, no-access, gone}` from the server | anyone who can see the record, as themselves; edit your own, delete your own (admins any) |
 | `mentions/{id}` | `to, by, byName, recordId, formId, recordTitle, formName, commentId, snippet, at, read` | server only; the person mentioned reads it and marks it read |
@@ -226,6 +227,19 @@ Stored in `reportDefs/{id}` (`name, ownerId, shared, groups, def`) and `dashboar
 - **Who sees them:** shortcuts to administration are left out for non-admins, and shortcuts to forms someone can't see (or can't add to) are left out for them; the remaining tiles close up. Admin shortcuts are marked "Admins only" while editing.
 - **KPI tiles** keep the title and count at the top; the number and what it measures sit centred in the space below and grow with the tile. "Number of …" uses the plural ("Number of invoices").
 
+## Calendar
+
+**Calendar** (Workspace, under My work; `#/calendar`) shows what's on each day, each kind in its own colour:
+
+- **Tasks** (blue): your Cadence tasks, and tasks given to a role you hold, on their due date and time. Done ones are crossed out; overdue ones are outlined.
+- **Workflow due** (orange): records waiting on you (or a group or role you're in) at a stage with a due date; late ones say so.
+- **Scheduled reports** (purple, administrators): every dashboard email still to come, at its send time.
+- **Automations** (green, administrators): scheduled runs still to come, the heads-up the day before, and "N days before/after a date" automations for each record (7:00 a.m.; they still check their "Only if" when they run).
+- **Waiting for your OK** (red, administrators): approve-first sends waiting now, on today.
+- **Form dates** (gold): any date or date-and-time field with **Show on the calendar** switched on in the Form designer (off unless you turn it on), one entry per record, for everyone who can see that record.
+
+**Month**, **Week** or **List** (a phone starts on List; your choice is remembered on this device), with ‹ **Today** › to move. The legend hides or shows a kind (remembered too). Clicking a day lists what's on it with a button for each: **Open** (a task opens in the task window; a task not linked to a record opens Cadence), **Done**, **Open record**, **Open dashboard**, **Open automation** or **Review**. Clicking an entry in a day opens it straight away. On a phone, the month shows coloured dots; tap a day to see the list. Weeks start on the day set in Settings → Dates and time. Worked out in `src/callogic.js` (unit-tested), drawn by `src/calendar.js`.
+
 ## Sub-forms (grids)
 
 A child form can show **inside** its parent record as an editable grid, like line items on an invoice, instead of as separate records.
@@ -258,7 +272,7 @@ Records made on their own (imported line items, say) can be put under a parent l
 
 ## Records lists
 
-**The sidebar** has Workspace (Home, My work, Dashboards, Reports), **Forms** (the forms switched on for the sidebar, with their record counts) and, for administrators, **Settings** (the ⚙ at the bottom, just above your name; members don't see it). **Search forms** at the top, or **Ctrl K** (⌘K on a Mac) anywhere, opens one box to jump to a form, a record, a new record or a page. On a computer the rows are compact so the sidebar fits without scrolling; if it ever needs to scroll, a thin scrollbar shows only while the pointer is over it.
+**The sidebar** has Workspace (Home, My work, Calendar, Dashboards, Reports), **Forms** (only the forms whose **Sidebar** switch is on in the Form designer, parent or child, with their record counts; up to six, recently opened first, plus **All forms**; with every switch off the section shows just **All forms**) and, for administrators, **Settings** (the ⚙ at the bottom, just above your name; members don't see it). **Search forms** at the top, or **Ctrl K** (⌘K on a Mac) anywhere, opens one box to jump to a form, a record, a new record or a page. On a computer the rows are compact so the sidebar fits without scrolling; if it ever needs to scroll, a thin scrollbar shows only while the pointer is over it.
 
 - **Fold the sidebar:** **«** at its top (or **Alt+B**) folds it to a strip of icons, giving the page the width; **»** opens it again. Remembered on each device.
 - **At the bottom:** your Google photo (or initials), your name and access level, then **Appearance** and **Sign out**.

@@ -5,6 +5,7 @@
 //   #/reports             the Reports list
 //   #/report/<reportId>   one saved report
 //   #/dashboards          the Dashboards list
+//   #/calendar            the Calendar
 //   #/dashboard/<id>      one dashboard
 // Pure functions: no DOM, no Firebase.
 
@@ -14,6 +15,7 @@ const RE = /^#\/(record|form|report|dashboard)\/([^/?#]+)\/?$/;
 export function parseRoute(hash) {
   if (/^#\/reports\/?$/.test(String(hash || ''))) return { kind: 'reports' };
   if (/^#\/dashboards\/?$/.test(String(hash || ''))) return { kind: 'dashboards' };
+  if (/^#\/calendar\/?$/.test(String(hash || ''))) return { kind: 'calendar' };
   const m = RE.exec(String(hash || ''));
   if (!m) return null;
   let id;
@@ -33,6 +35,7 @@ export function routeFor(view) {
   if (view.name === 'reports') return '#/reports';
   if (view.name === 'report' && view.reportId) return '#/report/' + encodeURIComponent(view.reportId);
   if (view.name === 'dashboards') return '#/dashboards';
+  if (view.name === 'calendar') return '#/calendar';
   if (view.name === 'dashboard' && view.dashboardId) return '#/dashboard/' + encodeURIComponent(view.dashboardId);
   return '';
 }

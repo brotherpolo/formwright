@@ -8,6 +8,7 @@
 export const PAGES = [
   { key: 'home', title: 'Home', glyph: '⌂', desc: 'Your home dashboard.' },
   { key: 'mywork', title: 'My work', glyph: '☰', desc: 'Records waiting on you in a workflow.', needs: 'workflow' },
+  { key: 'calendar', title: 'Calendar', glyph: '▣', desc: 'Tasks, due dates and what’s scheduled, by day.' },
   { key: 'dashboards', title: 'Dashboards', glyph: '▦', desc: 'Every dashboard you can see.' },
   { key: 'reports', title: 'Reports', glyph: '▤', desc: 'Saved charts and tables.' },
   { key: 'settings', title: 'Settings', glyph: '⚙', desc: 'Forms, people, automations and schedules.', admin: true },
@@ -16,7 +17,7 @@ export const PAGES = [
   { key: 'roles', title: 'Roles', glyph: '◉', desc: 'Jobs people do; workflow stages can go to one.', admin: true },
   { key: 'users', title: 'Users', glyph: '☺', desc: 'People, their groups and roles.', admin: true },
   { key: 'imports', title: 'Import history', glyph: '⇪', desc: 'Imports and rule changes, with Undo.', admin: true },
-  { key: 'calendar', title: 'Dates and time', glyph: '☼', desc: 'Time zone, week start and fiscal year.', admin: true },
+  { key: 'dates', title: 'Dates and time', glyph: '☼', desc: 'Time zone, week start and fiscal year.', admin: true },
   { key: 'exports', title: 'PDF exports', glyph: '⇩', desc: 'Company name and logo on PDFs.', admin: true },
   { key: 'automations', title: 'Automations', glyph: '↯', desc: 'When this happens, do that.', admin: true },
   { key: 'schedules', title: 'Schedules', glyph: '◷', desc: 'Dashboard emails and scheduled automations.', admin: true },

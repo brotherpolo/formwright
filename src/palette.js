@@ -9,6 +9,7 @@ let P = null; // { q, i, list }
 const PAGES = [
   { id: 'home', label: 'Home', glyph: '⌂' },
   { id: 'mywork', label: 'My work', glyph: '☰' },
+  { id: 'calendar', label: 'Calendar', glyph: '▣' },
   { id: 'dashboards', label: 'Dashboards', glyph: '▦' },
   { id: 'reports', label: 'Reports', glyph: '▤' },
 ];
@@ -23,7 +24,7 @@ const ADMIN_PAGES = [
   { id: 'audit', label: 'Audit trail', glyph: '⌕' },
   { id: 'imports', label: 'Import history', glyph: '⇪' },
   { id: 'exports', label: 'PDF exports', glyph: '⇩' },
-  { id: 'calendar', label: 'Dates and time', glyph: '☼' },
+  { id: 'dates', label: 'Dates and time', glyph: '☼' },
 ];
 
 export function initPalette(helpers) {

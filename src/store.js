@@ -416,6 +416,17 @@ export function watchTasks(recordId, onNext, onError) {
   return () => unsubs.forEach((u) => u());
 }
 
+/** All my Cadence tasks (owner or assignee) and tasks given to a role I hold, for the Calendar. */
+export function watchMyTasks(onNext, onError) {
+  const parts = new Map(), unsubs = [];
+  const emit = () => { const seen = new Map(); [...parts.values()].flat().forEach((t) => seen.set(t.id, t)); onNext([...seen.values()]); };
+  const listen = (key, q, optional) => unsubs.push(onSnapshot(q, (s) => { parts.set(key, s.docs.map((d) => ({ ...d.data(), id: d.id }))); emit(); },
+    (err) => { if (optional) { parts.delete(key); emit(); } else onError?.(err); }));
+  listen('mine', query(collection(db, 'tasks'), where('members', 'array-contains', store.user.uid)));
+  ((store.me && store.me.roles) || []).slice(0, 10).forEach((r) => listen('role:' + r, query(collection(db, 'tasks'), where('assigneeRole', '==', r)), true));
+  return () => unsubs.forEach((u) => u());
+}
+
 /* ---------- Adding and editing Cadence tasks in Formwright ----------
    The same documents Cadence writes (tasks/{id}); Cadence's security rules check every write. */
 
