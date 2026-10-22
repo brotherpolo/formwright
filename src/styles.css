@@ -1263,3 +1263,12 @@ input[type="date"]:not(:disabled):not([readonly]),input[type="datetime-local"]:n
 @media (max-width:640px){.rec-star .t{display:none}}
 .nav-star .star-mk{margin-left:auto;color:#d99a00;font-size:11px}
 :root[data-rail="1"] .nav-star .star-mk{display:none}
+
+/* The offline bar (offline.js) */
+#offbar{position:sticky;top:0;z-index:90;display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 14px;font-size:13px;text-align:center}
+#offbar[hidden]{display:none}
+#offbar.off{background:#3a3f4f;color:#fff}
+#offbar.sync{background:var(--accent-soft);color:var(--accent)}
+.ob-spin{width:12px;height:12px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:obspin .8s linear infinite;flex:none}
+@keyframes obspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.ob-spin{animation:none}}

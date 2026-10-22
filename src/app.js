@@ -7,7 +7,8 @@ import { readTheme, applyTheme, nextTheme, themeLabel, readScheme, applyScheme, 
 import { viewProblems, onClick as pbClick, onChange as pbChange, freshCount, enterProblems, initProblems } from './problemsview.js';
 import { dayKeyOf, getCalendar } from './cal.js';
 import { noteRecent, toggleStar } from './palettelogic.js';
-import { saveStars } from './store.js';
+import { saveStars, fileSrc } from './store.js';
+import { offlineReady } from './offline.js';
 import { recentDelHTML, onClick as rdClick, onKey as rdKey, initRecentDel, closeRecentDel } from './recentdel.js';
 import { qrDialogHTML, recordUrl, printLabel, downloadPng, copyText } from './qrlabel.js';
 import { undoDelete } from './store.js';
@@ -378,6 +379,7 @@ function onData(){
   if(accessGate())return;
   if(!booted){
     booted=true;$('#boot').hidden=true;$('#app').hidden=false;
+    offlineReady(); // changes from an earlier visit still syncing, uploads still waiting
     // the exit step below the first screen (see the back button notes above)
     if(!(history.state&&history.state.b===BOOT)){history.replaceState(st(-1),'',location.href);history.pushState(st(0),'',location.href);}
     const r=parseRoute(location.hash);
@@ -1535,7 +1537,7 @@ function readValue(f,v,id,scope){
     case 'url':return /^https?:\/\//i.test(String(v))?`<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>`:esc(v);
     case 'email':return `<a href="mailto:${esc(v)}">${esc(v)}</a>`;
     case 'phone':return `<a href="tel:${esc(String(v).replace(/[^\d+]/g,''))}">${esc(v)}</a>`;
-    case 'file':case 'image':{const src=v.url||v.data||'';const nm=esc(v.name||'File');
+    case 'file':case 'image':{const src=fileSrc(v);const nm=esc(v.name||'File');
       if(f.type==='image'&&src)return `<a class="rd-pic" href="${esc(src)}" target="_blank" rel="noopener"><img src="${esc(src)}" alt="${nm}"></a>`;
       return src?`<a href="${esc(src)}" target="_blank" rel="noopener">${nm}</a>${v.size?` <span class="help">${fsize(v.size)}</span>`:''}`:nm;}
     case 'signature':return typeof v==='string'&&v.startsWith('data:image')?`<img class="rd-sig" src="${esc(v)}" alt="Signature">`:'Signed';
@@ -1574,7 +1576,7 @@ function control(f,v,id,scope){
     case 'location':{const L=v||{},u=mapUrl(L);return `<div class="loc"><input class="in" type="text" ${a} data-part="address" value="${esc(L.address||'')}" placeholder="Street address or place name" autocomplete="street-address"><div class="row2"><input class="in" type="number" step="any" inputmode="decimal" data-fid="${f.id}" data-part="lat" value="${esc(L.lat??'')}" placeholder="Latitude" aria-label="${esc(f.label)} latitude"><input class="in" type="number" step="any" inputmode="decimal" data-fid="${f.id}" data-part="lng" value="${esc(L.lng??'')}" placeholder="Longitude" aria-label="${esc(f.label)} longitude"></div><a id="map-${id}" href="${esc(u)}" target="_blank" rel="noopener"${u?'':' hidden'}>Open in Google Maps ↗</a></div>`;}
     case 'file':case 'image':{
       let chip='';
-      if(v){const src=v.url||v.data||'';chip=`<div class="file-chip">${f.type==='image'&&src?`<img src="${esc(src)}" alt="">`:`<span class="glyph">${f.type==='image'?'▣':'⇪'}</span>`}<span class="nm">${esc(v.name)}</span><span class="sz">${v.size?fsize(v.size):''}</span>${src?`<a class="btn sm ghost" href="${esc(src)}" target="_blank" rel="noopener">Open</a>`:''}<button type="button" class="ibtn" data-act="file-clear" data-fid="${f.id}" aria-label="Remove file">✕</button></div>`;}
+      if(v){const src=fileSrc(v);chip=`<div class="file-chip">${f.type==='image'&&src?`<img src="${esc(src)}" alt="">`:`<span class="glyph">${f.type==='image'?'▣':'⇪'}</span>`}<span class="nm">${esc(v.name)}</span><span class="sz">${v.size?fsize(v.size):''}</span>${src?`<a class="btn sm ghost" href="${esc(src)}" target="_blank" rel="noopener">Open</a>`:''}<button type="button" class="ibtn" data-act="file-clear" data-fid="${f.id}" aria-label="Remove file">✕</button></div>`;}
       return `<div class="filew">${chip}<label class="pick"><input type="file" ${a}${f.type==='image'?' accept="image/*"':''}>${v?'Replace':(f.type==='image'?'Take or choose a photo':'Choose a file')}</label></div>`;}
     case 'signature':return `<div class="sig"><canvas data-sig="${f.id}" data-scope="${scope}" aria-label="Signature pad for ${esc(f.label)}"></canvas><div class="sigbar"><span>${v?'Signed':'Sign above with your finger or mouse'}</span><button type="button" class="btn sm ghost" data-act="sig-clear" data-fid="${f.id}">Clear</button></div></div>`;
     case 'relation':{const tf=formById(f.relForm);if(!tf)return `<p class="help">Choose which form this links to in the designer.</p>`;const rs=recordsOf(tf.id).map(r=>({r,t:recTitle(r,tf)})).sort((x,y)=>x.t.localeCompare(y.t));return `<div class="row2" style="grid-template-columns:minmax(0,1fr) auto"><select class="in" ${a}><option value="">Choose a ${esc(itemName(tf).toLowerCase())}…</option>${rs.map(({r,t})=>`<option value="${r.id}"${r.id===v?' selected':''}>${esc(t)}</option>`).join('')}</select>${v&&recById(v)&&scope==='record'?`<button type="button" class="btn" data-act="open-record" data-id="${v}">Open</button>`:''}</div>`;}
@@ -1708,6 +1710,7 @@ async function onFile(t){
       val=await uploadFile(file,form.id);
     }
     d.values[f.id]=val;markDirty(d);repaint(d,f);
+    if(val?.pending)toast(`No signal: the ${f.type==='image'?'photo':'file'} is kept on this device and uploads when you’re back. Save as usual.`,{duration:7000});
   }catch(e){fb.classList.remove('pending');toast(e?.code==='storage/unauthorized'?'You don’t have permission to upload files to this form.':'The upload failed. Check your connection and try again.');console.error(e);}
 }
 function initSig(c){

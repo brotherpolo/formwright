@@ -10,13 +10,14 @@ import {
   query,
   where,
   onSnapshot,
-  setDoc,
+  setDoc as _setDoc,
   getDoc,
   getDocFromServer,
   getDocs,
-  updateDoc,
-  deleteDoc,
-  writeBatch,
+  updateDoc as _updateDoc,
+  deleteDoc as _deleteDoc,
+  writeBatch as _writeBatch,
+  waitForPendingWrites,
   orderBy,
   limit,
   startAfter,
@@ -24,6 +25,40 @@ import {
 import { ref, uploadBytes, getDownloadURL, getBlob, deleteObject } from 'firebase/storage';
 import { isAdmin, formLevel, effectiveAccess, withInherited } from './access.js';
 import { clone } from './util.js';
+import { queuePut, queueAll, queueGet, queueDel, findPending, uploaded, stale } from './offlinequeue.js';
+
+/* ---------- working with no signal ----------
+   Firestore keeps a copy of everything on this device and holds changes made offline until the
+   signal returns (firebase.js turns that on). A save waits for the server only while there's a
+   signal: with none, or a few seconds of trying, it counts as done on this device and syncs
+   later. If the server later refuses a change made offline, a message says so. store.offline
+   says how things stand, for the bar at the top (offline.js). */
+const QUICK_MS = 6000;
+export const offline = { pending: 0, uploads: 0, backlog: false, listeners: new Set() };
+const offlineChanged = () => offline.listeners.forEach((f) => { try { f(); } catch (e) { /* a listener's own problem */ } });
+export const isOnline = () => typeof navigator === 'undefined' || navigator.onLine !== false;
+let lateError = (e) => console.error('[formwright] a change made offline was not saved', e);
+export function onLateError(fn) { lateError = fn; }
+function settle(p) {
+  offline.pending++; offlineChanged();
+  let quick = false;
+  const done = p.then(() => { offline.pending--; offlineChanged(); }, (e) => { offline.pending--; offlineChanged(); if (quick) lateError(e); throw e; });
+  done.catch(() => {});
+  const held = () => new Promise((res) => setTimeout(res, isOnline() ? QUICK_MS : 0)).then(() => { quick = true; return 'queued'; });
+  return Promise.race([done, held()]);
+}
+// every save in this file goes through these
+const setDoc = (...a) => settle(_setDoc(...a));
+const updateDoc = (...a) => settle(_updateDoc(...a));
+const deleteDoc = (...a) => settle(_deleteDoc(...a));
+const writeBatch = (d) => { const b = _writeBatch(d); const commit = b.commit.bind(b); b.commit = () => settle(commit()); return b; };
+/** Changes from an earlier visit still waiting to reach the server (they're kept on the device). */
+export function watchBacklog() {
+  offline.backlog = true; offlineChanged();
+  waitForPendingWrites(db).then(() => { offline.backlog = false; offlineChanged(); }, () => {});
+}
+/** Things only the server can do (email a PDF, restore a record…) need a signal. */
+const needsSignal = () => { if (!isOnline()) throw Object.assign(new Error('That needs a connection. Try again when you’re back online.'), { code: 'offline' }); };
 
 export const store = {
   mode: 'cloud',
@@ -98,7 +133,8 @@ export async function ensureAccount(user) {
   try {
     // the Google account photo, when signed in with Google (refreshed each sign-in)
     const photo = /^https:\/\//.test(String(user.photoURL || '')) && String(user.photoURL).length <= 1000 ? { photoURL: user.photoURL } : {};
-    await setDoc(doc(db, 'profiles', user.uid), { displayName: name, ...photo }, { merge: true });
+    // not waited for: with no signal it's saved on this device and sent later
+    _setDoc(doc(db, 'profiles', user.uid), { displayName: name, ...photo }, { merge: true }).catch((e) => console.warn('[formwright] profile not saved', e?.code || e));
   } catch (e) {
     console.warn('[formwright] profile not saved', e);
   }
@@ -421,6 +457,7 @@ export async function saveExportSettings({ companyName, logo }) {
 
 /** An uploaded file's contents (for photos in a PDF), through Storage so its rules apply. */
 export async function fileBlob(v) {
+  if (v && v.pending && !v.url) { const q = await queueGet(v.pending); if (q?.blob) return q.blob; }
   if (v.path) {
     try { return await getBlob(ref(storage, v.path)); } catch (e) { if (!v.url) throw e; }
   }
@@ -718,11 +755,11 @@ export function withNums(r) {
 const fns = () => getFunctions(app, 'us-central1');
 /** Admins: number the records of a form that have none yet (keeps numbers already typed in). */
 export async function fillAutoNumbers(formId, fieldId) {
-  return (await httpsCallable(fns(), 'autoNumberFill')({ formId, fieldId })).data;
+  return (needsSignal(), await httpsCallable(fns(), 'autoNumberFill')({ formId, fieldId })).data;
 }
 /** Admins: change one record's number (must be unique on its form). */
 export async function setAutoNumber(recordId, fieldId, value) {
-  return (await httpsCallable(fns(), 'autoNumberSet')({ recordId, fieldId, value })).data;
+  return (needsSignal(), await httpsCallable(fns(), 'autoNumberSet')({ recordId, fieldId, value })).data;
 }
 /** Admins: the next number a field will hand out ({ next, years } or null). */
 export async function autoCounter(formId, fieldId) {
@@ -733,7 +770,7 @@ export async function autoCounter(formId, fieldId) {
 
 /** Admins: send a record's PDF. mail: { recordId, to, cc, copyMe, subject, message, pdf (base64), fileName } */
 export async function emailRecord(mail) {
-  return (await httpsCallable(fns(), 'emailRecord')(mail)).data;
+  return (needsSignal(), await httpsCallable(fns(), 'emailRecord')(mail)).data;
 }
 /* ---------- Workflows ---------- */
 /** Move a record to another stage: the record and its history entry together. */
@@ -786,23 +823,23 @@ export async function saveDashMail(dashboardId, data) {
 export async function deleteDashMail(dashboardId) { await deleteDoc(doc(db, 'dashMails', dashboardId)); }
 /** Admins: email a dashboard to yourself now, to see how it looks. → { to } */
 export async function testDashMail(dashboardId) {
-  return (await httpsCallable(fns(), 'dashMailTest')({ dashboardId })).data;
+  return (needsSignal(), await httpsCallable(fns(), 'dashMailTest')({ dashboardId })).data;
 }
 export async function testAutomation(automation, recordId) {
-  return (await httpsCallable(fns(), 'automationTest')({ automation, recordId })).data;
+  return (needsSignal(), await httpsCallable(fns(), 'automationTest')({ automation, recordId })).data;
 }
 /** Admins: a scheduled automation's batch if it ran now. → { next, nextText, checked, items: [{ recordId, title, steps }] } */
 export async function previewAutomation(automation) {
-  return (await httpsCallable(fns(), 'automationPreview')({ automation })).data;
+  return (needsSignal(), await httpsCallable(fns(), 'automationPreview')({ automation })).data;
 }
 /** Admins: OK (send: true) or drop one waiting in pendingSends. → { ok, sent, did, errors } */
 export async function decidePendingSend(id, send) {
-  return (await httpsCallable(fns(), 'automationSend')({ id, send: !!send })).data;
+  return (needsSignal(), await httpsCallable(fns(), 'automationSend')({ id, send: !!send })).data;
 }
 
 /** Admins: delete sent emails and their kept PDFs. what: { ids: [emailId] } or { all: true }. → { deleted: n } */
 export async function deleteSentEmails(recordId, what) {
-  return (await httpsCallable(fns(), 'deleteSentEmails')({ recordId, ...what })).data;
+  return (needsSignal(), await httpsCallable(fns(), 'deleteSentEmails')({ recordId, ...what })).data;
 }
 /** Live list of what's been emailed from a record, newest first. Returns an unsubscribe function. */
 /* ---------- Comments on a record, and @mentions ---------- */
@@ -864,11 +901,11 @@ export async function loadAudit({ filter = null, from = null, to = null, after =
 }
 /** Admins: bring a deleted record back from its audit entry. */
 export async function restoreDeleted(auditId) {
-  return (await httpsCallable(fns(), 'restoreRecord')({ auditId })).data;
+  return (needsSignal(), await httpsCallable(fns(), 'restoreRecord')({ auditId })).data;
 }
 /** Undo a deletion you just made (the server allows it for 10 minutes, on a form you can still add to). */
 export async function undoDelete(recordId) {
-  return (await httpsCallable(fns(), 'restoreRecord')({ recordId })).data;
+  return (needsSignal(), await httpsCallable(fns(), 'restoreRecord')({ recordId })).data;
 }
 
 /* ---------- Writes ---------- */
@@ -1022,10 +1059,60 @@ export async function uploadFile(file, formId) {
   const me = store.user.uid;
   const safe = file.name.replace(/[^\w.\-]+/g, '_').slice(-80);
   const path = `uploads/${formId}/${me}/${Date.now()}-${safe}`;
+  const base = { name: file.name, size: file.size, type: file.type, path };
+  // no signal, or the upload doesn't finish in time: keep it on this device and upload it later
+  const later = async () => {
+    const id = 'up-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    await queuePut({ id, path, blob: file, name: file.name, type: file.type || 'application/octet-stream', size: file.size, formId, uid: me, at: Date.now() });
+    rememberLocal(id, file);
+    offline.uploads++; offlineChanged();
+    return { ...base, url: '', pending: id };
+  };
+  if (!isOnline()) return later();
   const r = ref(storage, path);
-  await uploadBytes(r, file, { contentType: file.type || 'application/octet-stream' });
-  const url = await getDownloadURL(r);
-  return { name: file.name, size: file.size, type: file.type, path, url };
+  const up = (async () => { await uploadBytes(r, file, { contentType: file.type || 'application/octet-stream' }); return getDownloadURL(r); })();
+  const url = await Promise.race([up.catch(() => null), new Promise((res) => setTimeout(() => res(null), 20000))]);
+  if (url) return { ...base, url };
+  return later();
+}
+
+/* ---------- uploads waiting on this device ---------- */
+const localUrls = new Map(); // queue id → object URL of the device copy, for showing it
+function rememberLocal(id, blob) { if (!localUrls.has(id)) try { localUrls.set(id, URL.createObjectURL(blob)); } catch (e) { /* no object URLs */ } }
+/** Where to show a file from: its url, or the copy on this device while it waits to upload. */
+export const fileSrc = (v) => (v ? v.url || v.data || (v.pending ? localUrls.get(v.pending) || '' : '') : '');
+let flushing = false;
+/** Upload what's waiting (with a signal), and put the real file into the records that hold it. */
+export async function flushUploads() {
+  if (flushing || !store.user) return;
+  flushing = true;
+  try {
+    const items = (await queueAll()).filter((x) => x.uid === store.user.uid);
+    items.forEach((x) => rememberLocal(x.id, x.blob));
+    offline.uploads = items.length; offlineChanged();
+    if (!isOnline() || !store.ready) return;
+    for (const x of stale(items, store.records)) { await queueDel(x.id); offline.uploads--; } // picked for a form that was never saved
+    for (const x of items) {
+      const where = findPending(store.records, x.id);
+      if (!where.length) continue; // not saved into a record yet: wait
+      try {
+        const r = ref(storage, x.path);
+        await uploadBytes(r, x.blob, { contentType: x.type });
+        const url = await getDownloadURL(r);
+        for (const w of where) {
+          const rec = store.records.find((y) => y.id === w.recordId);
+          await _updateDoc(doc(db, 'records', w.recordId), { ['values.' + w.fieldId]: plain(uploaded(rec.values[w.fieldId], url)), updatedAt: Date.now(), updatedBy: store.user.uid });
+        }
+        await queueDel(x.id);
+        offline.uploads--; offlineChanged();
+      } catch (e) {
+        if (!isOnline()) break;
+        console.warn('[formwright] waiting upload', x.name, e?.code || e);
+        if (/unauthorized|permission/.test(e?.code || '')) { lateError(Object.assign(new Error(`“${x.name}” couldn’t be uploaded: you don’t have permission any more.`), { code: e.code })); await queueDel(x.id); offline.uploads--; offlineChanged(); }
+      }
+    }
+  } catch (e) { console.warn('[formwright] uploads waiting', e?.code || e); }
+  finally { flushing = false; }
 }
 
 /* ---------- Admin: users and groups ---------- */

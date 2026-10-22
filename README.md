@@ -82,6 +82,8 @@ src/
   problems.js              Reports what goes wrong in the browser to problems/{id}
   problemsview.js          Settings → Problems and backups
   recentdel.js             Recently deleted under a form's list (admins): Restore
+  offline.js               Working with no signal: the Offline / Syncing bar, back-online sync, late-error messages
+  offlinequeue.js          Photos and files picked offline wait here (IndexedDB) until they upload (helpers unit-tested)
   layoutlogic.js           Board and Timeline: columns, moves, spans, the axis (pure, unit-tested)
   listlayouts.js           A form's list as a Board or a Timeline, with dragging
   dash.js, dash.css        Reports and dashboards screens (charts reuse reports.css)
@@ -505,6 +507,17 @@ Each form can have rules (form designer → **Rules** tab) that change the recor
 - **The rule list** (right of the rule, above Try it; first on phones): the designer shows one rule at a time and the list picks which, with **‹ Prev / Next ›** too. Each item shows the rule's name (or "Rule 3"), its sentence, and tags: Applies now, **Overlaps**, **Needs attention**, Off. **Find a rule** searches names, fields and sections. **Drag ⋮⋮** to reorder (paused while searching; the ↑ ↓ buttons on the rule still work from the keyboard). Rules are numbered by position, and the order never changes what they do, so reordering or renaming never asks to apply anything to saved records.
 - **Names:** each rule can have a name (up to 60 characters, `rule.name`), shown in the list, in problem messages ("Rule 2 · Done projects …"), in overlaps and in Import history (**Rule change: Rule 2 · Done projects**). **Rules that overlap** names the rules on each side as links that open them.
 - **Changing rules on a form with saved records:** Save form works out which saved records the new rules would empty fields on and asks: **Apply to all N** empties them now, **Leave them** saves the rules and each record follows them on its next save, or **Cancel**. Applying is written like an import, so it's listed in **Import history** as a **Rule change** (filter: All / Imports / Rule changes) with **Undo** for 7 days, and every record change is in the audit trail. Undo skips records edited since. Rule edits themselves show in the audit trail as "Show and hide rules".
+
+## Working with no signal
+
+Formwright keeps working on a phone, tablet or computer with no signal, once it has been opened there with a signal.
+
+- **Opening offline:** the service worker (`public/sw.js`) keeps the app's own files on the device after each visit with a signal. Page loads always try the network first (up to 6 seconds), so an update is never held back; the device copy opens only when there's no answer. Each build writes `precache.json` (a Vite plugin in `vite.config.js`) listing its files, and the files from older builds are cleared away.
+- **Records:** Firestore keeps its own copy of what you've seen on the device (`persistentLocalCache` in `src/firebase.js`). Saves, edits and deletes made offline finish at once and sync when the signal returns. If two people change the same field, the change that reaches the server last wins.
+- **The bar:** along the top, **Offline. Changes are saved on this phone and sync when you're back · 3 waiting**, then **Syncing 3 changes…** until the backlog has gone. Changes made in an earlier visit that haven't synced yet are counted too.
+- **Photos and files:** picked offline (or on an upload that's taken over 20 seconds), they wait on the device (IndexedDB) and the record shows them straight away from that copy. They upload when the signal returns (and every minute while there's something waiting), and the record then gets the real link. `src/offlinequeue.js`.
+- **Needs a signal:** anything that runs on the server: emailing PDFs, Word templates, restoring deleted records, account setup on the very first visit, and the like. These say so ("That needs a connection. Try again when you’re back online.") instead of failing silently.
+- **Refused later:** if the server turns down a change made offline (say your access changed in the meantime), a message says so and it's listed under Problems.
 
 ## Deleting, Undo and Recently deleted
 
