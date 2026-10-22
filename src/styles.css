@@ -1252,3 +1252,14 @@ input[type="date"]:not(:disabled):not([readonly]),input[type="datetime-local"]:n
 .rd-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;max-height:min(60vh,520px);overflow:auto;border:1px solid var(--line);border-radius:10px}
 .rd-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--line)}.rd-row:last-child{border-bottom:0}
 .rd-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.rd-t b{overflow-wrap:anywhere}
+
+/* Ctrl K groups; Starred (sidebar, records) */
+.pal-sec{margin:8px 10px 2px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pal-sec:first-child{margin-top:2px}
+.pal-star{color:#d99a00}
+.rec-star .t{margin-left:4px}
+.rec-star.on{color:#b07a00}
+.rec-star.on span[aria-hidden]{color:#d99a00}
+@media (max-width:640px){.rec-star .t{display:none}}
+.nav-star .star-mk{margin-left:auto;color:#d99a00;font-size:11px}
+:root[data-rail="1"] .nav-star .star-mk{display:none}

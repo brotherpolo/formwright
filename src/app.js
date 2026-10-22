@@ -6,6 +6,8 @@ import { readTheme, applyTheme, nextTheme, themeLabel, readScheme, applyScheme, 
 
 import { viewProblems, onClick as pbClick, onChange as pbChange, freshCount, enterProblems, initProblems } from './problemsview.js';
 import { dayKeyOf, getCalendar } from './cal.js';
+import { noteRecent, toggleStar } from './palettelogic.js';
+import { saveStars } from './store.js';
 import { recentDelHTML, onClick as rdClick, onKey as rdKey, initRecentDel, closeRecentDel } from './recentdel.js';
 import { qrDialogHTML, recordUrl, printLabel, downloadPng, copyText } from './qrlabel.js';
 import { undoDelete } from './store.js';
@@ -196,7 +198,7 @@ const ui={search:'',openField:null,tab:'fields',palette:false,confirm:null,leave
 function dirty(){return (view.name==='record'&&rdraft?.dirty)||(view.name==='formEdit'&&fdraft?.dirty)||(view.name==='report'&&reportDirty(view.reportId))||(view.name==='dashboard'&&dashDirty(view.dashboardId))||admin.isDirty(view)}
 function guard(){if(importRunning()){toast('The import is still running. Wait for it to finish.');return false;}if(dirty()&&!ui.leaveOk){ui.leaveOk=true;toast('You have unsaved changes. Tap again to leave without saving.');setTimeout(()=>ui.leaveOk=false,4000);return false;}ui.leaveOk=true;return true;}
 export function goRec(draft,v){if(!guard())return;rdraft=draft;go(v);}
-export function go(v,push=true){ui.subPop=null;ui.recMore=false;ui.qr=null;closeRecentDel();if(v.name==='record'&&v.recordId!==view.recordId)ui.rsTab='comments';ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
+export function go(v,push=true){ui.subPop=null;ui.recMore=false;ui.qr=null;closeRecentDel();if(v.name==='record'&&v.recordId)noteOpened(v.recordId);if(v.name==='record'&&v.recordId!==view.recordId)ui.rsTab='comments';ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
   if(ADMIN_VIEWS.has(v.name)&&!isAdmin(store.me)){toast('Only administrators can open that.');return false;}
   if((v.name==='records'||v.name==='record')&&!canViewForm(store.me,v.formId)){toast('You don’t have access to that form.');return false;}
   if(!guard())return false;
@@ -466,6 +468,19 @@ function asideCount(){
 function paintAsideCount(){const el=$('.rs-strip');if(!el)return;const n=asideCount();el.querySelector('.rs-n')?.replaceChildren(String(n));el.querySelector('.rs-n')?.toggleAttribute('hidden',!n);el.setAttribute('aria-label',`Show Activity${n?` (${n})`:''}`);}
 /** Settings (administrators): one item at the bottom of the sidebar, lit on any of its pages. */
 const inSettings=()=>ADMIN_VIEWS.has(view.name)&&view.name!=='import';
+/* ---------- Recently opened (this device) and Starred (yours, stars/{uid}) ---------- */
+const RECENT_RECS=()=>'fw.recent.'+(store.user?.uid||'');
+function recentIds(){try{const v=JSON.parse(localStorage.getItem(RECENT_RECS())||'[]');return Array.isArray(v)?v:[];}catch(e){return [];}}
+function noteOpened(id){try{localStorage.setItem(RECENT_RECS(),JSON.stringify(noteRecent(recentIds(),id)));}catch(e){/* private mode */}}
+const isStarred=id=>(store.starred||[]).includes(id);
+async function starToggle(id){
+  const before=store.starred||[],on=!isStarred(id);
+  store.starred=toggleStar(before,id);renderMain();renderSide();
+  try{await saveStars(store.starred);toast(on?'Starred. It’s in the sidebar and at the top of Ctrl K.':'Unstarred');}
+  catch(e){store.starred=before;renderMain();renderSide();console.warn('[formwright] star',e?.code||e);toast(e?.code==='permission-denied'?'Stars need the latest security rules (Cadence). Ask an administrator.':'That didn’t save. Try again.');}
+}
+/** The sidebar's Starred list: your starred records you can still open, up to 8. */
+function starredRecs(){return (store.starred||[]).map(id=>recById(id)).filter(r=>r&&formById(r.formId)&&canViewForm(store.me,r.formId)).slice(0,8);}
 function renderSide(){
   const fsFocus=document.activeElement?.id==='fs-q'?document.activeElement.selectionStart:null; // a redraw while searching keeps the cursor
   const activeForm=(view.name==='records'||view.name==='record')?view.formId:null;
@@ -491,6 +506,7 @@ function renderSide(){
     ${navBtn('nav-cal',view.name==='calendar','Calendar','▣')}
     ${navBtn('nav-dashboards',(view.name==='dashboards'||view.name==='dashboard')&&!onHome(),'Dashboards','▦',`<span class="n">${counts().dashboards}</span>`)}
     ${navBtn('nav-reports',view.name==='reports'||view.name==='report','Reports','▤',`<span class="n">${counts().reports}</span>`)}
+    ${starredRecs().length?`<div class="navlabel">Starred</div>${starredRecs().map(r=>{const f=formById(r.formId),t=recTitle(r,f)||'Untitled',on=view.name==='record'&&view.recordId===r.id;return `<button class="nav nav-star${on?' on':''}" data-act="open-record" data-id="${esc(r.id)}"${on?' aria-current="page"':''} title="${esc(t+' · '+f.name)}"${rail?` aria-label="${esc(t)}"`:''}>${badge(f)}<span class="t">${esc(t)}</span><span class="star-mk" aria-hidden="true">★</span></button>`;}).join('')}`:''}
     <div class="navlabel">Forms</div>
     ${list.length?list.map(f=>`<button class="nav nav-form${f.id===activeForm?' on':''}" data-act="nav-form" data-id="${f.id}"${f.id===activeForm?' aria-current="page"':''} title="${esc(f.name)}"${rail?` aria-label="${esc(f.name)}"`:''}>${badge(f)}<span class="t">${esc(f.name)}</span><span class="n">${recordsOf(f.id).length}</span></button>`).join(''):total?'':'<p class="nav-empty">No forms shared with you yet.</p>'}
     ${total>list.length?`<button class="nav nav-all" data-act="${rail?'palette':'fs-all'}"${tip(`All forms (${total})`)}><span class="glyph navg rail-only" aria-hidden="true">⋯</span><span class="t">All forms (${total})</span><span aria-hidden="true">→</span></button>`:''}
@@ -775,6 +791,7 @@ function viewRecord(form){
   <div class="recbar" role="toolbar" aria-label="${esc(itemName(form))} actions">
     <button class="btn ghost" data-act="back">${rdraft.dirty?'Discard':'<span aria-hidden="true">←</span> Back'}</button>
     <span class="grow" id="dirtynote" role="status">${rdraft.dirty?'Unsaved changes':ro?'Read only':''}</span>
+    ${rec?`<button type="button" class="btn ghost rec-star${isStarred(rec.id)?' on':''}" data-act="star" data-id="${esc(rec.id)}" aria-pressed="${isStarred(rec.id)}" title="${isStarred(rec.id)?'Starred: in the sidebar and Ctrl K. Click to unstar.':'Star it: keep it in the sidebar and at the top of Ctrl K'}"><span aria-hidden="true">${isStarred(rec.id)?'★':'☆'}</span><span class="t">${isStarred(rec.id)?'Starred':'Star'}</span></button>`:''}
     ${rec?wordui.exportButton(ui.pdfBusy):''}
     ${moreHTML}
     ${rec&&!ro&&!reading?`<button class="btn ghost" data-act="rec-mode" aria-keyshortcuts="Alt+E Control+Shift+C" title="Back to Read view (Alt+E)">Done</button>`:''}
@@ -2338,6 +2355,7 @@ document.addEventListener('click',async e=>{
     case 'save-record':saveRecord();break;
     case 'rec-mode':toggleRecMode();break;
     case 'rs-tab':ui.rsTab=el.dataset.v;renderMain();$(`#rs-t-${CSS.escape(el.dataset.v)}`)?.focus();break;
+    case 'star':starToggle(el.dataset.id);break;
     case 'rec-qr':{const rec=recById(view.recordId);if(!rec)break;ui.recMore=false;ui.qr=rec.id;renderMain();setTimeout(()=>$('[data-act="qr-print"]')?.focus(),0);break;}
     case 'qr-close':ui.qr=null;renderMain();$('[data-act="rec-more"]')?.focus();break;
     case 'qr-scrim':if(e.target===el){ui.qr=null;renderMain();}break;
@@ -2804,7 +2822,7 @@ export function startApp(){
   initAudit({fmt,formById,recById,recTitle:(r,f)=>recTitle(r,f),go,renderMain});
   initAttach({fmt,valOf,recTitle,titleFieldOf,formById,recById});
   initRichUI();
-  palette.initPalette({store,formById,recTitle,isAdmin:()=>isAdmin(store.me),canView:f=>canViewForm(store.me,f.id),canCreate:id=>canCreate(store.me,id),searchable:()=>allSearchable(store.forms,f=>canViewForm(store.me,f.id)).map(x=>x.form),
+  palette.initPalette({store,formById,recTitle,mine:()=>({starred:store.starred||[],recent:recentIds()}),isAdmin:()=>isAdmin(store.me),canView:f=>canViewForm(store.me,f.id),canCreate:id=>canCreate(store.me,id),searchable:()=>allSearchable(store.forms,f=>canViewForm(store.me,f.id)).map(x=>x.form),
     go:v=>go(v),home:()=>home(),newRecord:id=>{const f=formById(id);if(f)goRec(newRecordDraft(f,null),{name:'record',formId:id,recordId:null});},openRecord:id=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
   tm.initTaskModal({store,recById,formById,recTitle,toast,cadenceUrl,tasks:()=>[...(tw.tasks||[]),...calview.calTasks()]});
   initProblems({renderMain});

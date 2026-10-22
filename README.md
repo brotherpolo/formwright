@@ -286,7 +286,7 @@ Records made on their own (imported line items, say) can be put under a parent l
 
 ## Records lists
 
-**The sidebar** has Workspace (Home, My work, Calendar, Dashboards, Reports), **Forms** (only the forms whose **Sidebar** switch is on in the Form designer, parent or child, with their record counts; up to six, recently opened first, plus **All forms**; with every switch off the section shows just **All forms**) and, for administrators, **Settings** (the ⚙ at the bottom, just above your name; members don't see it). **Search forms** at the top, or **Ctrl K** (⌘K on a Mac) anywhere, opens one box to jump to a form, a record, a new record or a page. On a computer the rows are compact so the sidebar fits without scrolling; if it ever needs to scroll, a thin scrollbar shows only while the pointer is over it.
+**The sidebar** has Workspace (Home, My work, Calendar, Dashboards, Reports), **Forms** (only the forms whose **Sidebar** switch is on in the Form designer, parent or child, with their record counts; up to six, recently opened first, plus **All forms**; with every switch off the section shows just **All forms**) and, for administrators, **Settings** (the ⚙ at the bottom, just above your name; members don't see it). **Search forms** at the top, or **Ctrl K** (⌘K on a Mac) anywhere, opens one box to jump to a form, a record, a new record or a page. With nothing typed it shows, under headings, your **Starred** records, the records you **Recently opened** (on this device, newest first), pages, your forms, administrators' Settings pages, and the records changed most recently; typed, your starred and recently opened records come first among equally good matches. On a computer the rows are compact so the sidebar fits without scrolling; if it ever needs to scroll, a thin scrollbar shows only while the pointer is over it.
 
 - **Fold the sidebar:** **«** at its top (or **Alt+B**) folds it to a strip of icons, giving the page the width; **»** opens it again. Remembered on each device.
 - **At the bottom:** your Google photo (or initials), your name and access level, then **Appearance** and **Sign out**.
@@ -337,6 +337,10 @@ Each form's list can be set up from the list itself.
 - **Phones:** the list shows cards with tick boxes. The toolbar is compact: **+ New**, a view picker, **⋯**, then search and a **sort chip** (↓ Date ▾: tap the arrow to reverse, ▾ to sort by another field, including Last updated and Created). **⋯** opens a sheet with Filter, Columns, Sort, Row height, the view's actions (rename, share, delete, save changes) and, for administrators, Edit form and Import and templates. When a view has unsaved changes, one line says "Changed from …" with **Reset** and **Save…** (Save… opens the sheet's save choices).
 
 A view only decides how the list looks. It never shows anyone records they couldn't already see.
+
+## Starred records
+
+**☆ Star** in a record's top bar keeps it handy: a **Starred** list in the sidebar (between Workspace and Forms, up to 8, newest star first) and the top of Ctrl K. Click again to unstar. Stars are each person's own and private (`stars/{uid}`, which only that person can read or change), so they follow you to your phone. A star on a record that's been deleted, or that you can no longer see, just doesn't show. Logic in `src/palettelogic.js` (unit-tested).
 
 ## Board and Timeline (a form's list)
 

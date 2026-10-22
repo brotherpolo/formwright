@@ -3,7 +3,7 @@
 import { esc, badge, itemName } from './ui.js';
 import { paletteResults } from './palettelogic.js';
 
-let H = null; // { store, formById, recTitle, canView(f), canCreate(id), isAdmin(), go(v), home(), newRecord(formId), openRecord(id), searchable() }
+let H = null; // { store, formById, recTitle, mine() → { starred, recent }, canView(f), canCreate(id), isAdmin(), go(v), home(), newRecord(formId), openRecord(id), searchable() }
 let P = null; // { q, i, list }
 
 const PAGES = [
@@ -53,7 +53,8 @@ export function initPalette(helpers) {
 
 function items() {
   const s = H.store, out = [];
-  PAGES.concat(H.isAdmin() ? ADMIN_PAGES : []).forEach((p) => out.push({ kind: 'page', id: p.id, label: p.label, sub: 'Page', glyph: p.glyph }));
+  PAGES.forEach((p) => out.push({ kind: 'page', id: p.id, label: p.label, sub: 'Page', glyph: p.glyph }));
+  if (H.isAdmin()) ADMIN_PAGES.forEach((p) => out.push({ kind: 'page', id: p.id, label: p.label, sub: 'Settings', glyph: p.glyph, admin: true }));
   H.searchable().forEach((f) => {
     out.push({ kind: 'form', id: f.id, label: f.name || 'Untitled form', sub: 'Form', form: f });
     if (H.canCreate(f.id)) out.push({ kind: 'new', id: f.id, label: 'New ' + itemName(f).toLowerCase(), sub: f.name, form: f });
@@ -91,10 +92,10 @@ function icon(it) {
 const KIND = { page: 'Page', form: 'Form · list', new: 'New record', record: 'Record' };
 function paintList() {
   if (!P) return;
-  P.list = paletteResults(items(), P.q, 12);
+  P.list = paletteResults(items(), P.q, 12, H.mine ? H.mine() : {});
   P.i = Math.min(P.i, Math.max(0, P.list.length - 1));
   const box = document.getElementById('pal-list'); if (!box) return;
-  box.innerHTML = P.list.length ? P.list.map((it, i) => `<button type="button" role="option" id="pal-o${i}" class="pal-opt${i === P.i ? ' hi' : ''}" aria-selected="${i === P.i}" data-pal="${i}" tabindex="-1">${icon(it)}<span class="pal-t"><b>${esc(it.label)}</b>${it.kind === 'record' || it.kind === 'new' ? `<small>${esc(it.sub)}</small>` : ''}</span><span class="pal-k">${KIND[it.kind]}</span></button>`).join('')
+  box.innerHTML = P.list.length ? P.list.map((it, i) => `${it.group && (!i || P.list[i - 1].group !== it.group) ? `<p class="pal-sec" role="presentation">${esc(it.group)}</p>` : ''}<button type="button" role="option" id="pal-o${i}" class="pal-opt${i === P.i ? ' hi' : ''}" aria-selected="${i === P.i}" data-pal="${i}" tabindex="-1">${icon(it)}<span class="pal-t"><b>${esc(it.label)}${it.starred ? '<span class="pal-star" aria-label=", starred"> ★</span>' : ''}</b>${it.kind === 'record' || it.kind === 'new' ? `<small>${esc(it.sub)}</small>` : ''}</span><span class="pal-k">${KIND[it.kind]}</span></button>`).join('')
     : `<p class="pal-none">Nothing matches “${esc(P.q)}”.</p>`;
   const q = document.getElementById('pal-q');
   if (q) { if (P.list.length) q.setAttribute('aria-activedescendant', 'pal-o' + P.i); else q.removeAttribute('aria-activedescendant'); }

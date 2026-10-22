@@ -47,6 +47,7 @@ export const store = {
   problems: [], // problems/{id}: what went wrong for people and the server (admins; Settings → Problems)
   problemNotify: [], // settings/problems.notify: admins who get the morning email
   backup: null, // system/backup: how the last nightly backup went (admins)
+  starred: [], // stars/{uid}.ids: records you've starred, newest first (yours only)
   listViewsReady: false,
   imports: [], // admins: past imports, newest first
   automations: [], automationsError: null, // admins: Settings → Automations
@@ -180,6 +181,8 @@ export function startData(user) {
     changed();
   }));
   pair('listViews', 'list views', (list, ok) => { store.listViews = list; store.listViewsReady = ok; changed(); });
+  // starred records: your own, private (stars/{uid}; older rules: none)
+  baseUnsubs.push(onSnapshot(doc(db, 'stars', user.uid), (s) => { store.starred = s.exists() && Array.isArray(s.data().ids) ? s.data().ids : []; changed(); }, () => { store.starred = []; }));
   // My work → Mentions: written by the server when someone @mentions you in a comment
   const onMentions = (s) => { store.mentions = s.docs.map((d) => ({ ...d.data(), id: d.id })).sort((a, b) => (b.at || 0) - (a.at || 0)); changed(); };
   const mentionsPlain = () => onSnapshot(query(collection(db, 'mentions'), where('to', '==', user.uid), limit(200)), onMentions, () => { store.mentions = []; });
@@ -212,7 +215,7 @@ export function stopData() {
   if (assignedSub) { assignedSub(); assignedSub = null; }
   roleSubs.forEach((u) => u()); roleSubs.clear(); roleRecs.clear();
   assigned = [];
-  Object.assign(store, { ready: false, user: null, me: null, forms: [], records: [], profiles: {}, groups: [], users: [], reports: [], reportsReady: false, listViews: [], listViewsReady: false, imports: [], reportDefs: [], dashboards: [], dashReady: false, homeDefault: '', homeDefaultReady: false, mentions: [], problems: [], problemNotify: [], backup: null });
+  Object.assign(store, { ready: false, user: null, me: null, forms: [], records: [], profiles: {}, groups: [], users: [], reports: [], reportsReady: false, listViews: [], listViewsReady: false, imports: [], reportDefs: [], dashboards: [], dashReady: false, homeDefault: '', homeDefaultReady: false, mentions: [], problems: [], problemNotify: [], backup: null, starred: [] });
   store.recordsLoading.clear();
 }
 
@@ -366,6 +369,11 @@ export async function setDefaultHome(id) {
 /** The dashboard that opens when you start Formwright ('' for none). */
 export async function setHomeDashboard(id) {
   await setDoc(doc(db, 'profiles', store.user.uid), { homeDashboard: String(id || '').slice(0, 100) }, { merge: true });
+}
+
+/* ---------- Starred records (yours) ---------- */
+export async function saveStars(ids) {
+  await setDoc(doc(db, 'stars', store.user.uid), { ids: (ids || []).slice(0, 100), updatedAt: Date.now() });
 }
 
 /* ---------- Problems (Settings → Problems) ---------- */
