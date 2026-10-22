@@ -137,7 +137,7 @@ export function viewRecords(form) {
   const head = `
   <div class="head">
     <div class="ttl">${badge(form, 1)}<div><h1>${esc(form.name)}</h1>${form.description ? `<p class="sub">${esc(form.description)}</p>` : ''}</div></div>
-    <div class="actions">${admin ? `<button class="btn ghost ph-hide" data-act="edit-form" data-id="${form.id}">Edit form</button>` : ''}${admin ? `<span class="ph-hide">${importButton(form)}</span>` : ''}${mayCreate ? `<button class="btn primary" data-act="new-record" data-id="${form.id}" aria-label="New ${esc(itemName(form).toLowerCase())}">+ New<span class="ph-hide"> ${esc(itemName(form).toLowerCase())}</span></button>` : ''}</div>
+    <div class="actions">${admin ? `<button class="btn ghost ph-hide" data-act="edit-form" data-id="${form.id}">Edit form</button>` : ''}${admin ? `<span class="ph-hide">${importButton(form)}</span>` : ''}${mayCreate ? `<button class="btn primary${all.length ? ' ph-only' : ''}" data-act="new-record" data-id="${form.id}" aria-label="New ${esc(itemName(form).toLowerCase())}">+ New<span class="ph-hide"> ${esc(itemName(form).toLowerCase())}</span></button>` : ''}</div>
   </div>${scope}`;
 
   if (!all.length) {
@@ -146,7 +146,7 @@ export function viewRecords(form) {
 
   return head + `
   <div class="lv" id="lv">
-    ${viewsBar(c, view, dirty, admin)}
+    ${viewsBar(c, view, dirty, admin, mayCreate ? `<button class="btn primary lv-new ph-hide" data-act="new-record" data-id="${form.id}">+ New ${esc(itemName(form).toLowerCase())}</button>` : '')}
     <div class="lv-tools">
       ${layoutSeg(cfg, 'll-wide')}
       <input class="in lv-search" id="search" type="search" placeholder="Search ${esc(form.name.toLowerCase())}" value="${esc(H.search())}" aria-label="Search records">
@@ -181,7 +181,8 @@ function setLayout(patch) {
   repaint();
 }
 
-function viewsBar(c, view, dirty, admin) {
+/** The saved views row; on computers it starts with + New (newBtn). */
+function viewsBar(c, view, dirty, admin, newBtn = '') {
   const tabs = c.views.map((v) => `<button type="button" role="tab" class="lv-tab${v.id === view.id ? ' on' : ''}" aria-selected="${v.id === view.id}" data-lv="view" data-v="${esc(v.id)}">${esc(v.name)}${v.builtin ? '' : v.shared ? '<span class="chip acc">Everyone</span>' : '<span class="chip">Just me</span>'}</button>`).join('');
   let right = '';
   if (LV.naming) {
@@ -209,7 +210,7 @@ function viewsBar(c, view, dirty, admin) {
   }
   const phone = `<div class="lv-phonebar"><select class="in" data-lvc="viewsel" aria-label="View">${c.views.map((v) => `<option value="${esc(v.id)}"${v.id === view.id ? ' selected' : ''}>${esc(v.name)}${v.builtin ? '' : v.shared ? ' · Everyone' : ' · Just me'}</option>`).join('')}</select>
     ${layoutSeg(LV.cfg, 'll-ph')}<button type="button" class="btn lv-more" data-lv="sheet" aria-haspopup="dialog" aria-expanded="${LV.sheet}" aria-label="List options: filter, columns, sort, row height${admin ? ', form settings' : ''}">${ICON_MORE}</button></div>`;
-  return `<div class="lv-views">${phone}<div class="lv-tabs" role="tablist" aria-label="Saved views">${tabs}</div>${dirty || LV.naming ? right : `<span class="ph-hide">${right}</span>`}</div>`;
+  return `<div class="lv-views">${phone}${newBtn}<div class="lv-tabs" role="tablist" aria-label="Saved views">${tabs}</div>${dirty || LV.naming ? right : `<span class="ph-hide">${right}</span>`}</div>`;
 }
 
 const ICON_MORE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';

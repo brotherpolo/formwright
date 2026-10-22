@@ -2,6 +2,7 @@
 .lv{display:flex;flex-direction:column;gap:12px}
 .lv-views{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding-bottom:10px}
 .lv-tabs{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 auto;min-width:0}
+.lv-new{flex:none;margin-right:4px;white-space:nowrap}
 .lv-tab{display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;background:none;border-radius:9px;padding:0 12px;min-height:40px;font-weight:500;color:var(--muted);cursor:pointer}
 .lv-tab:hover{background:var(--sunk);color:var(--fg)}
 .lv-tab.on{background:var(--surface);border-color:var(--line);color:var(--fg);font-weight:600}
