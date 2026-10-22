@@ -11,13 +11,14 @@
 //     zoom: 'week' | 'month' | 'quarter' }
 
 import { wfOn, stagesOf, stageById, movesOf, firstStage } from './workflow.js';
+import { isLayout } from './fixedlogic.js';
 
 export const LAYOUTS = [['table', 'Table'], ['board', 'Board'], ['timeline', 'Timeline']];
 export const ZOOMS = { week: { label: 'Weeks', pd: 36, tick: 'day' }, month: { label: 'Months', pd: 12, tick: 'week' }, quarter: { label: 'Quarters', pd: 3.5, tick: 'month' } };
 const CHOICE = new Set(['select', 'radio', 'checkbox']);
 const SUM = new Set(['number', 'decimal', 'currency', 'percent']);
 const DATES = new Set(['date', 'datetime']);
-const fieldsOf = (form) => (form?.fields || []).filter((f) => f && f.type !== 'heading');
+const fieldsOf = (form) => (form?.fields || []).filter((f) => f && !isLayout(f));
 const fieldIn = (form, id) => fieldsOf(form).find((f) => f.id === id) || null;
 const optsOf = (f) => (f.type === 'checkbox' ? ['Yes', 'No'] : (f.options || []).map(String).filter((o) => o !== ''));
 

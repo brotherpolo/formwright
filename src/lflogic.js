@@ -63,7 +63,7 @@ export function lfMatches(ctx, ref, formIds) {
     if (fid === ref.form || chainOf(ctx, fid).includes(ref.form)) return;
     const form = ctx.formById(fid);
     (form ? fieldsOf(form) : []).forEach((x) => {
-      if (x.type === 'heading') return;
+      if (x.type === 'heading' || x.type === 'instructions') return;
       const r = { form: fid, id: x.id };
       if (isDateField(f)) { // dates: the same name is ticked; other dates are offered
         if (isDateField(x)) out.push({ ref: r, f: x, form, why: String(x.label || '').trim().toLowerCase() === name ? 'name' : 'kind', on: String(x.label || '').trim().toLowerCase() === name });

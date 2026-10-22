@@ -144,7 +144,7 @@ function dlgHTML() {
   </div></div>`;
 }
 const SAMPLE_URL = '/word-template-sample.docx';
-const sampleField = (form) => { const f = (form?.fields || []).find((x) => x.type !== 'heading'); return f ? f.label : 'Field name'; };
+const sampleField = (form) => { const f = (form?.fields || []).find((x) => x.type !== 'heading' && x.type !== 'instructions'); return f ? f.label : 'Field name'; };
 
 /* ---------- the form, for checking (docxgen.js) ---------- */
 const schemaCtx = () => ({ formById: H.formById, parentsOf: H.parentsOf, itemName: H.itemName, checkExpr: H.checkExpr });
@@ -213,7 +213,7 @@ export function recordScope(rec, form, ctx, depth = 0) {
   return {
     get(name) {
       const f = fieldByName(form, name);
-      if (f && f.type !== 'heading') return fieldVal(f);
+      if (f && f.type !== 'heading' && f.type !== 'instructions') return fieldVal(f);
       const sp = splitName(name);
       if (sp) { const s = linked(sp[0]); if (s) return s.get(sp[1]); }
       return sys(name);

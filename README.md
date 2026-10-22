@@ -84,6 +84,8 @@ src/
   recentdel.js             Recently deleted under a form's list (admins): Restore
   offline.js               Working with no signal: the Offline / Syncing bar, back-online sync, late-error messages
   offlinequeue.js          Photos and files picked offline wait here (IndexedDB) until they upload (helpers unit-tested)
+  fixedlogic.js            Default values, Read only fields and Instructions: what's fixed, today/now, stored or not (unit-tested)
+  filelist.js              Attachments fields: the list of files, tiles, "3 files", what was added or removed (unit-tested)
   layoutlogic.js           Board and Timeline: columns, moves, spans, the axis (pure, unit-tested)
   listlayouts.js           A form's list as a Board or a Timeline, with dragging
   dash.js, dash.css        Reports and dashboards screens (charts reuse reports.css)
@@ -551,6 +553,28 @@ Formwright keeps working on a phone, tablet or computer with no signal, once it 
 - **Not copied:** auto numbers (the copy gets its own when saved), signatures (they belong to one record), calculations (worked out again), child records and Tasks.
 - **Sub-form grids:** their rows are copied as new rows of the copy.
 - Nothing is saved until you click **Save**; Back without saving leaves no trace. A line under the title says what it's a copy of.
+
+## Default values, Read only and Instructions (Form designer → a field's settings)
+
+- **Default value:** every field that holds a typed value (text, numbers, dates, choices, Yes / No, website, colour) has one. It's filled in on new records (and new sub-form rows, and Try it) and people can change it. Dates can default to **Today**, times and date & time to **Now**. A choice default that's no longer an option is ignored. `field.defaultValue`.
+- **Read only:** people can't change the field on the record; it shows as its value with a small 🔒 **Read only**. Required doesn't apply. Calculations and auto numbers are read only already.
+  - **Read only with a default value** = a value the form gives every record. It isn't stored on records: every record, old ones too, shows the form's current value, so changing it in the designer changes it everywhere (lists, PDFs, calculations, emails and automations on the server all see it). Imports skip it.
+  - **Read only with no default:** shows what the record holds (set by an automation, an import or before it was made read only), and nobody can change it on the record.
+  - **A read-only Website** shows as a button. **Button text** (only once it's read only) sets its words, e.g. "Open the safety checklist ↗"; empty shows the address. In sub-form grids it's a link.
+- **Instructions** (under Layout, beside Section heading): an optional title and formatted text (bold, lists, links) shown on the form while it's being filled in: on the record in Edit view, in new records and in Try it. It holds no value, so it isn't in Read view, lists, PDFs, Word templates, imports, calculations or filters. Rules and workflow stages can hide it. In the Text view it's a line like `Before you start: instructions` (its text is kept).
+- Logic in `src/fixedlogic.js` (unit-tested); the server kit (`src/server/recordkit.js` → Cadence `functions/fwkit.cjs`) shows fixed values the same way.
+
+## Attachments (a field type under Media)
+
+**Attachments** holds any number of files on a record (**File upload** stays one file).
+
+- **Where it shows:** under a Section Heading, it's a field inside that section and folds with it. Not under a heading, it's **its own section**, titled with its caption, with its own fold arrow (key `a:<fieldId>`, remembered like other sections).
+- **Adding files:** drag files onto the field (anywhere on its own section): the drop area lights up. Several at once is fine. Or **Browse…**. On phones: **＋ Add files** and **Take photo**. Each file must be under 25 MB; web pages, SVG pictures and scripts are refused (the storage rules don't allow them). Save waits while files are still uploading.
+- **Each file** is a card: a thumbnail for pictures, otherwise a PDF / XLS / DOC / PPT / ZIP tile, its name, size, who added it and when. Click to open it; **✕** removes it (save to keep the change). The title shows the count (**Attachments · 3**).
+- **No signal:** files wait on the device and upload when you're back, like File upload; several waiting in one field all arrive.
+- **Required** means at least one file ("Add at least one file.").
+- **Elsewhere:** lists show "3 files"; PDFs list each file on its own line (name · size); Word templates give `{Attachments|bullets}`, a list of the names; the audit trail says "Added Permit.pdf · Removed Storefront.jpg" (an upload finishing isn't a change); imports skip it.
+- Stored as `values.<fieldId> = [{ name, size, type, path, url, by, at }]`.
 
 ## Smaller photos
 

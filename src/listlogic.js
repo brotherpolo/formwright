@@ -17,7 +17,7 @@ import { shownName } from './fieldnames.js';
 import { richBlocks, cellRichHTML } from './richtext.js';
 import { titleFieldOf } from './reportlogic.js';
 
-export const NOCOL = new Set(['heading', 'signature']);
+export const NOCOL = new Set(['heading', 'instructions', 'signature']);
 export const NUMERIC = new Set(['number', 'decimal', 'currency', 'percent', 'range', 'rating']);
 export const FILTERABLE = new Set(['select', 'radio', 'multiselect', 'checkbox']);
 export const SETTABLE = new Set(['select', 'radio', 'checkbox']);
@@ -29,7 +29,7 @@ const DENSITIES = new Set(['cozy', 'compact']);
 export const defaultViewId = (formId) => DEFAULT_PREFIX + formId;
 export const isDefaultViewId = (id) => typeof id === 'string' && id.startsWith(DEFAULT_PREFIX);
 
-const fieldsOf = (form) => (form?.fields || []).filter((f) => f.type !== 'heading');
+const fieldsOf = (form) => (form?.fields || []).filter((f) => f.type !== 'heading' && f.type !== 'instructions');
 const fieldIn = (form, id) => (form?.fields || []).find((f) => f.id === id) || null;
 const isNumField = (f) => !!f && (NUMERIC.has(f.type) || (f.type === 'formula' && f.format !== 'text'));
 

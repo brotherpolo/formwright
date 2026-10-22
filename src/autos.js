@@ -7,6 +7,7 @@ import { esc, uid, clone, toast, badge, itemName } from './ui.js';
 import { opsFor, opOf } from './rules.js';
 import { condsHTML, rulesClick, rulesChange, rulesCtx } from './rulesui.js';
 import { TRIGGERS, ACTS, SET_MODES, NO_SET, MAX_ACTS, blankAutomation, blankAct, autoText, triggerText, checkAutomation } from './autologic.js';
+import { isLayout } from './fixedlogic.js';
 
 let H = { formById: null, parentsOf: null, recordsOf: null, recTitle: null, go: null, renderMain: null, forms: () => [] };
 export function initAutos(helpers) { H = { ...H, ...helpers }; }
@@ -16,7 +17,7 @@ const people = () => [...store.users].map((u) => ({ id: u.id, name: store.profil
 const personName = (id) => people().find((p) => p.id === id)?.name || 'someone';
 const ctxText = { formById: (id) => H.formById(id), parentsOf: (id) => H.parentsOf(id), person: personName, role: (id) => (store.roles || []).find((r) => r.id === id)?.name || 'a removed role' };
 const when = (t) => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-const fieldsOf = (f, pred = () => true) => (f?.fields || []).filter((x) => x.type !== 'heading' && pred(x));
+const fieldsOf = (f, pred = () => true) => (f?.fields || []).filter((x) => !isLayout(x) && pred(x));
 
 export const isDirty = (view) => view.name === 'automation' && !!AM.draft && AM.dirty && !AM.leaveArmed;
 

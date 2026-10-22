@@ -32,14 +32,14 @@ const SYSTEM = [
 /** The form's title field, the same rule Formwright uses for record titles. */
 export function titleFieldOf(form) {
   const fs = form.fields || [];
-  return fs.find((f) => f.id === form.titleField) || fs.find((f) => ['text', 'email', 'phone', 'url'].includes(f.type)) || fs.find((f) => f.type !== 'heading');
+  return fs.find((f) => f.id === form.titleField) || fs.find((f) => ['text', 'email', 'phone', 'url'].includes(f.type)) || fs.find((f) => f.type !== 'heading' && f.type !== 'instructions');
 }
 
 /** Fields a report can use: the form's own (minus layout-only ones) plus Created on / Last edited / Created by. */
 /** Who has a record at its workflow stage (forms with a workflow): a person, for "Me" filters and columns. */
 const ASSIGNEE = { id: '_assignee', label: 'Person responsible', type: 'owner', system: true };
 export function reportFields(form) {
-  const own = (form.fields || []).filter((f) => !['heading', 'signature'].includes(f.type));
+  const own = (form.fields || []).filter((f) => !['heading', 'instructions', 'signature'].includes(f.type));
   return own.concat(SYSTEM, form.workflow?.on && (form.workflow.stages || []).length ? [ASSIGNEE] : []);
 }
 

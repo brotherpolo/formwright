@@ -14,7 +14,7 @@ let H = { fmt: null, valOf: null, recTitle: null, titleFieldOf: null, formById: 
 export function initAttach(helpers) { H = { ...H, ...helpers }; }
 
 const PAGE = 50;
-const NOCOL = new Set(['heading', 'signature', 'file', 'image', 'textarea', 'formula', 'attachments']);
+const NOCOL = new Set(['heading', 'instructions', 'signature', 'file', 'image', 'textarea', 'formula', 'attachments']);
 let A = null; // the open window's state
 let back = null; // what had focus before it opened
 
@@ -31,7 +31,7 @@ const named = (rec) => { const t = titleOf(rec); const f = H.formById(rec.formId
 
 // Search looks through every field (long text included) and the parent's name. Cached per
 // record object: the store swaps the object when a record changes.
-const NOSEARCH = new Set(['heading', 'file', 'image', 'signature', 'attachments']);
+const NOSEARCH = new Set(['heading', 'instructions', 'file', 'image', 'signature', 'attachments']);
 const TEXT = new WeakMap();
 function fullText(rec) {
   let t = TEXT.get(rec);

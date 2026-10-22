@@ -37,7 +37,7 @@ export function attachCandidates(opts) {
 export function matchingFields(parentForm, childForm) {
   const out = [];
   (childForm?.fields || []).forEach((f) => {
-    if (f.type === 'formula' || f.type === 'heading' || f.type === 'autonumber') return;
+    if (f.type === 'formula' || f.type === 'heading' || f.type === 'instructions' || f.type === 'autonumber') return;
     const m = (parentForm?.fields || []).find((p) => p.type === f.type && lc(p.label) === lc(f.label));
     if (m) out.push([f.id, m.id]);
   });
@@ -163,7 +163,7 @@ export function suggestParent({ childForm, parentForms, recs, parentsOf, valOf, 
 }
 
 /** Fields a person can filter the attach list by. */
-const NOFILTER = new Set(['heading', 'file', 'image', 'signature', 'textarea', 'location', 'color', 'attachments']);
+const NOFILTER = new Set(['heading', 'instructions', 'file', 'image', 'signature', 'textarea', 'location', 'color', 'attachments']);
 export function filterFields(form) { return (form?.fields || []).filter((f) => !NOFILTER.has(f.type)); }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

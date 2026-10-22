@@ -25,6 +25,7 @@ import {
 import { ref, uploadBytes, getDownloadURL, getBlob, deleteObject } from 'firebase/storage';
 import { isAdmin, formLevel, effectiveAccess, withInherited } from './access.js';
 import { clone } from './util.js';
+import { withFixed, stripFixed } from './fixedlogic.js';
 import { queuePut, queueAll, queueGet, queueDel, findPending, fillUploaded, stale } from './offlinequeue.js';
 
 /* ---------- working with no signal ----------
@@ -389,8 +390,12 @@ function flattenRecords() {
   const all = [...recordsByForm.values()].flat();
   const extra = assigned.concat(...roleRecs.values());
   if (extra.length) { const have = new Set(all.map((r) => r.id)); extra.forEach((r) => { if (!have.has(r.id)) { have.add(r.id); all.push(r); } }); }
-  store.records = all;
+  // read-only fields with a value set in the designer show the form's value (fixedlogic.js)
+  const forms = new Map(store.forms.map((f) => [f.id, f]));
+  store.records = all.map((r) => withFixed(r, forms.get(r.formId)));
 }
+/** Values as they're stored: without fixed fields (those come from the form). */
+const storeVals = (values, formId) => stripFixed(values, store.forms.find((f) => f.id === formId));
 
 /** Update the display name other people see. */
 export async function saveProfileName(userId, displayName) {
@@ -628,7 +633,8 @@ export async function setRecordsValues(recs, set) {
 /** Replace records' values (rules emptying fields, a bulk set): changes [{ id, values }]. Auto numbers are untouched. */
 export async function rewriteValues(changes) {
   const me = store.user.uid, now = Date.now();
-  await commitOps(changes.map((c) => (b) => b.update(doc(db, 'records', c.id), { values: plain(c.values || {}), updatedAt: now, updatedBy: me })));
+  const formOf = (id) => store.records.find((r) => r.id === id)?.formId;
+  await commitOps(changes.map((c) => (b) => b.update(doc(db, 'records', c.id), { values: plain(storeVals(c.values, formOf(c.id))), updatedAt: now, updatedBy: me })));
 }
 
 /**
@@ -663,7 +669,7 @@ export async function runImport({ id, formId, formName, fileName, counts, create
   }));
   const groups = [];
   creates.forEach((c) => groups.push([(b) => b.set(doc(db, 'records', c.id), plain({
-    formId, values: c.values || {}, parentId: c.parentId || null, parentFormId: c.parentFormId || null,
+    formId, values: storeVals(c.values, formId), parentId: c.parentId || null, parentFormId: c.parentFormId || null,
     ownerId: me, createdBy: me, createdAt: stamp, updatedAt: stamp, updatedBy: me,
   }))]));
   updates.forEach((u) => {
@@ -672,7 +678,7 @@ export async function runImport({ id, formId, formName, fileName, counts, create
     groups.push([
       (b) => b.set(doc(db, 'imports', id, 'before', u.id), plain({ values: old.values || {}, parentId: old.parentId || null, parentFormId: old.parentFormId || null, updatedAt: old.updatedAt || 0, updatedBy: old.updatedBy || '' })),
       (b) => b.set(doc(db, 'records', u.id), plain({
-        formId: old.formId, values: u.values || {}, parentId: u.parentId || null, parentFormId: u.parentFormId || null,
+        formId: old.formId, values: storeVals(u.values, old.formId), parentId: u.parentId || null, parentFormId: u.parentFormId || null,
         ownerId: old.ownerId, createdBy: old.createdBy, createdAt: old.createdAt || stamp, updatedAt: stamp, updatedBy: me,
       }), KEEP_NUMS),
     ]);
@@ -950,7 +956,7 @@ function recordData(rec) {
   const now = Date.now();
   return {
     formId: rec.formId,
-    values: plain(rec.values || {}),
+    values: plain(storeVals(rec.values, rec.formId)),
     parentId: rec.parentId || null,
     parentFormId: rec.parentFormId || null,
     ownerId: existing?.ownerId || me,

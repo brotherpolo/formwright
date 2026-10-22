@@ -9,6 +9,7 @@
 import { FX } from '../formulas.js';
 import { fieldItem } from '../pdfdoc.js';
 import { filesText, fileNames, fileLines } from '../filelist.js';
+import { withFixed, isFixed, defaultFor, isLayout } from '../fixedlogic.js';
 import { evaluate, NO_RULES } from '../rules.js';
 import { fieldByName } from '../fieldnames.js';
 import { richBlocks } from '../richtext.js';
@@ -20,8 +21,10 @@ const isEmpty = (v) => v == null || v === '' || (Array.isArray(v) && !v.length) 
 const lc = (s) => String(s || '').trim().toLowerCase();
 export const itemName = (f) => (f?.itemName || '').trim() || (f?.name || 'Record').replace(/s$/i, '');
 
-export function makeKit({ forms = [], records = [], locale = 'en-CA', timeZone = 'America/Toronto' } = {}) {
+export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', timeZone = 'America/Toronto' } = {}) {
   const formMap = new Map(forms.map((f) => [f.id, f]));
+  // read-only fields with a value set in the designer: every record shows the form's value
+  const records = stored.map((r) => withFixed(r, formMap.get(r.formId), new Date(), timeZone));
   const recMap = new Map(records.map((r) => [r.id, r]));
   const kids = new Map();
   records.forEach((r) => { if (r.parentId) { if (!kids.has(r.parentId)) kids.set(r.parentId, []); kids.get(r.parentId).push(r); } });
@@ -31,7 +34,7 @@ export function makeKit({ forms = [], records = [], locale = 'en-CA', timeZone =
 
   const titleFieldOf = (form) => {
     const fs = form?.fields || [];
-    return fs.find((f) => f.id === form.titleField) || fs.find((f) => ['text', 'email', 'phone', 'url'].includes(f.type)) || fs.find((f) => f.type !== 'heading');
+    return fs.find((f) => f.id === form.titleField) || fs.find((f) => ['text', 'email', 'phone', 'url'].includes(f.type)) || fs.find((f) => !isLayout(f));
   };
   const num = (v, o) => Number(v).toLocaleString(locale, o);
   function fmtCalc(f, v) {
@@ -107,6 +110,7 @@ export function makeKit({ forms = [], records = [], locale = 'en-CA', timeZone =
   function valOf(f, rec, form) {
     if (f.id === STAGE_FIELD) return stageName(form || formById(rec.formId), rec);
     if (f.type === 'autonumber') return rec.nums?.[f.id] ?? null;
+    if (isFixed(f)) return defaultFor(f, new Date(), timeZone);
     if (f.type !== 'formula') return rec.values?.[f.id];
     form = form || formById(rec.formId);
     try { const v = evalFormula(form, f, rec); return typeof v === 'number' && !isFinite(v) ? null : v; } catch (e) { return null; }
@@ -116,7 +120,7 @@ export function makeKit({ forms = [], records = [], locale = 'en-CA', timeZone =
     const f = titleFieldOf(form); const t = f ? fmt(f, valOf(f, rec, form)) : '';
     return t || 'Untitled ' + itemName(form).toLowerCase();
   }
-  const text = (form, rec, f) => (f.type === 'heading' ? '' : f.type === 'textarea' ? String(valOf(f, rec, form) ?? '') : fmt(f, valOf(f, rec, form)));
+  const text = (form, rec, f) => (isLayout(f) ? '' : f.type === 'textarea' ? String(valOf(f, rec, form) ?? '') : fmt(f, valOf(f, rec, form)));
   /** {Field name} in templates: this record's field, or undefined when there's no such field. */
   const fieldText = (form, rec, label) => { const f = fieldByName(form, label); return f ? text(form, rec, f) : undefined; };
 
@@ -144,7 +148,7 @@ export function makeKit({ forms = [], records = [], locale = 'en-CA', timeZone =
   /** The PDF model (as pdfdraw.js draws it), with the form's default columns. */
   function pdfModel(form, rec, { stamp = '', userName = (id) => '' } = {}) {
     const rs = rulesFor(form, rec), sv = stageView(form, rec.stage); // what the rules and the record's stage hide is left out
-    const items = (form.fields || []).filter((f) => !rs.hiddenFields.has(f.id) && !rs.hidden.has('f:' + f.id) && !sv.hide.has(f.id) && !sv.keys.has('f:' + f.id)).map((f) => {
+    const items = (form.fields || []).filter((f) => f.type !== 'instructions' && !rs.hiddenFields.has(f.id) && !rs.hidden.has('f:' + f.id) && !sv.hide.has(f.id) && !sv.keys.has('f:' + f.id)).map((f) => {
       const v = f.type === 'heading' || rs.cleared.has(f.id) ? null : valOf(f, rec, form);
       const it = fieldItem(f, v, f.type === 'heading' ? '' : f.type === 'rating' ? (isEmpty(v) ? '' : `${v} of ${f.max || 5}`) : f.type === 'attachments' ? fileLines(v) : text(form, { ...rec, values: { ...rec.values, [f.id]: v } }, f), f.type === 'textarea' && v != null && !f.plain ? richBlocks(rec.values, f.id) : null);
       return it;
@@ -159,7 +163,7 @@ export function makeKit({ forms = [], records = [], locale = 'en-CA', timeZone =
       const isGrid = rel.display === 'grid';
       if (rs.hidden.has((isGrid ? 'g:' : 'c:') + cf.id) || sv.keys.has((isGrid ? 'g:' : 'c:') + cf.id)) return;
       const rows = childrenOf(rec.id, cf.id).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-      const usable = (cf.fields || []).filter((f) => f.type !== 'heading');
+      const usable = (cf.fields || []).filter((f) => !isLayout(f));
       const num = (f) => (['number', 'decimal', 'currency', 'percent', 'range'].includes(f.type) || f.type === 'formula');
       if (isGrid) {
         const picked = Array.isArray(rel.cols) && rel.cols.length ? rel.cols.map((id) => usable.find((f) => f.id === id)).filter(Boolean) : usable.filter((f) => !POPUP.has(f.type)).slice(0, 8);

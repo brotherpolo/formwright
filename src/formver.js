@@ -239,7 +239,7 @@ export function saveState(f) {
 function extras(form) {
   const w = form.workflow?.on ? `workflow: ${(form.workflow.stages || []).length} stages` : 'no workflow';
   const k = (form.children || []).length, r = (form.rules || []).length;
-  return `${(form.fields || []).filter((x) => x.type !== 'heading').length} fields · ${k} relationship${k === 1 ? '' : 's'} · ${r} rule${r === 1 ? '' : 's'} · ${w}`;
+  return `${(form.fields || []).filter((x) => x.type !== 'heading' && x.type !== 'instructions').length} fields · ${k} relationship${k === 1 ? '' : 's'} · ${r} rule${r === 1 ? '' : 's'} · ${w}`;
 }
 export function viewHistory(f) {
   if (f.isNew) return `<div class="panel empty"><h2>No history yet</h2><p>Every time the form is saved, a copy is kept here. You can look back at any version, download it, or make it active again.</p></div>`;

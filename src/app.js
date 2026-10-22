@@ -63,7 +63,8 @@ import * as wordui from './wordui.js';
 import * as allwork from './allwork.js';
 import { typeColors, categoryStyle, canvasRows, blockOf, moveBefore, stepTarget, sectionOf, snapBefore, sectionStep } from './dzlogic.js';
 import { richEditorHTML, richViewHTML, initRichUI } from './richui.js';
-import { fromEditor, richBlocks, RICH_KEY } from './richtext.js';
+import { fromEditor, richBlocks, RICH_KEY, editorHTML } from './richtext.js';
+import { isLayout, canDefault, canReadOnly, hasDefault, isFixed, isReadOnly, defaultFor, withDefaults, defaultText } from './fixedlogic.js';
 import { STAGE_FIELD, wfOn, stagesOf, stageById, stageIndex, firstStage, stageName, stageView, withStageField, canWork, assigneeFor, movesOf, missingToMove, waited, stageDue, dueState, dayKey } from './workflow.js';
 import { initRules, viewRules, rulesClick, rulesChange, rulesInput, rulesListHTML, parentUse, rulesCtx } from './rulesui.js';
 import { formatAuto, nextAuto, missingNumbers, autoSettings } from './autonum.js';
@@ -74,7 +75,7 @@ import examples from './examples.json';
 const ADMIN_VIEWS = new Set(['settings', 'dates', 'problems', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 
 // other words people search field types by
-const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',attachments:'attachments files documents many multiple upload drag drop pdf photos',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold'};
+const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',attachments:'attachments files documents many multiple upload drag drop pdf photos',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold',instructions:'instructions note guidance help explanation text block read only'};
 const TYPES=[
  ['text','Short text','Aa','Text'],['textarea','Long text','¶','Text'],
  ['email','Email','@','Contact'],['phone','Phone','+1','Contact'],['url','Website','//','Contact'],['location','Location','⌖','Contact'],
@@ -82,10 +83,10 @@ const TYPES=[
  ['date','Date','D','Date & time'],['time','Time','T','Date & time'],['datetime','Date & time','DT','Date & time'],
  ['checkbox','Yes / No','✓','Choices'],['select','Dropdown','▾','Choices'],['radio','Single choice','◉','Choices'],['multiselect','Multiple choice','☰','Choices'],
  ['file','File upload','⇪','Media'],['attachments','Attachments','⧉','Media'],['image','Photo','▣','Media'],['signature','Signature','✎','Media'],['color','Color','◐','Media'],
- ['relation','Link to record','↗','Relations'],['heading','Section heading','§','Layout']];
+ ['relation','Link to record','↗','Relations'],['heading','Section heading','§','Layout'],['instructions','Instructions','ℹ','Layout']];
 const T=Object.fromEntries(TYPES.map(t=>[t[0],{label:t[1],glyph:t[2],group:t[3]}]));
 const TYCOL=typeColors(TYPES); // each type's shade of its category's colour
-const gly=(type,cls='glyph')=>`<span class="${cls}${TYCOL[type]?' tc':type==='heading'?' tsec':''}"${TYCOL[type]?` style="${TYCOL[type].style}"`:''} title="${esc(T[type]?.label||'')}">${T[type]?.glyph||'?'}</span>`;
+const gly=(type,cls='glyph')=>`<span class="${cls}${TYCOL[type]?' tc':type==='heading'||type==='instructions'?' tsec':''}"${TYCOL[type]?` style="${TYCOL[type].style}"`:''} title="${esc(T[type]?.label||'')}">${T[type]?.glyph||'?'}</span>`;
 /* Designer: which sections are folded, per form, remembered on this device */
 let dzFold={formId:null,set:new Set()};
 function dzFolded(){
@@ -100,8 +101,8 @@ function dzUnfoldFor(fid){const sec=sectionOf(fdraft?.fields,fid);if(sec&&dzFold
 const CHOICE=new Set(['select','radio','multiselect']);
 const NUMERIC=new Set(['number','decimal','currency','percent','range','rating']);
 const PLACEHOLDER=new Set(['text','textarea','email','phone','url','number','decimal','currency','percent']);
-const NOCOL=new Set(['heading','signature','textarea']); // not on the record page's child cards
-const NOLIST=new Set(['heading','signature']); // can't be a records-list column
+const NOCOL=new Set(['heading','instructions','signature','textarea']); // not on the record page's child cards
+const NOLIST=new Set(['heading','instructions','signature']); // can't be a records-list column
 
 /* ---------- Lookups ---------- */
 const formById=id=>store.forms.find(f=>f.id===id);
@@ -109,7 +110,7 @@ const recById=id=>store.records.find(r=>r.id===id);
 const byOrder=(a,b)=>(a.order??0)-(b.order??0)||a.name.localeCompare(b.name);
 function titleFieldOf(form){
   const fs=(form.fields||[]);
-  return fs.find(f=>f.id===form.titleField)||fs.find(f=>['text','email','phone','url'].includes(f.type))||fs.find(f=>f.type!=='heading');
+  return fs.find(f=>f.id===form.titleField)||fs.find(f=>['text','email','phone','url'].includes(f.type))||fs.find(f=>!isLayout(f));
 }
 function recTitle(rec,form){
   form=form||formById(rec.formId); if(!form)return 'Untitled';
@@ -729,7 +730,7 @@ function newRecordDraft(form,parent){
     if(rel?.copy&&pf){(form.fields||[]).forEach(f=>{const m=f.type!=='formula'&&f.type!=='autonumber'&&pf.fields.find(p=>p.type===f.type&&p.type!=='heading'&&p.label.trim().toLowerCase()===f.label.trim().toLowerCase());if(m&&!isEmpty(parent.values?.[m.id])){values[f.id]=clone(parent.values[m.id]);copied++;}});}
     (form.fields||[]).forEach(f=>{if(f.type==='relation'&&f.relForm===parent.formId&&isEmpty(values[f.id]))values[f.id]=parent.id;});
   }
-  return {formId:form.id,recordId:null,values,parentId:parent?.id||null,parentFormId:parent?.formId||null,errors:{},dirty:false,copied};
+  return {formId:form.id,recordId:null,values:withDefaults(values,form),parentId:parent?.id||null,parentFormId:parent?.formId||null,errors:{},dirty:false,copied};
 }
 function viewRecord(form){
   if(!form)return '';
@@ -1206,7 +1207,7 @@ function pdfText(f,v){if(f.type==='attachments')return fileLines(v);if(f.type===
 const pdfNum=f=>(NUMERIC.has(f.type)||f.type==='formula')&&f.type!=='rating';
 function pdfModel(form,rec){
   const rs=withStage(rulesOf(form,rec,rec.parentId?recById(rec.parentId):null),form,rec.stage); // what the rules and the stage hide is left out
-  const items=(form.fields||[]).filter(f=>!rs.hiddenFields.has(f.id)&&!rs.hidden.has('f:'+f.id)).map(f=>{const v=f.type==='heading'||rs.cleared.has(f.id)?null:valOf(f,rec,form);return fieldItem(f,v,f.type==='heading'?'':pdfText(f,v),v==null||f.plain?null:richBlocks(rec.values,f.id));});
+  const items=(form.fields||[]).filter(f=>f.type!=='instructions'&&!rs.hiddenFields.has(f.id)&&!rs.hidden.has('f:'+f.id)).map(f=>{const v=f.type==='heading'||rs.cleared.has(f.id)?null:valOf(f,rec,form);return fieldItem(f,v,f.type==='heading'?'':pdfText(f,v),v==null||f.plain?null:richBlocks(rec.values,f.id));});
   const sections=[];
   const grels=gridRels(form),gmap=Object.fromEntries(grels.map(g=>[g.cf.id,g]));
   const kids=Object.fromEntries((form.children||[]).filter(c=>c.display!=='grid').map(c=>formById(c.formId)).filter(cf=>cf&&canViewForm(store.me,cf.id)).map(cf=>[cf.id,cf]));
@@ -1326,7 +1327,7 @@ function childSection(form,cf,rec,ro){
 
 /** The columns a grid shows for this person: their choice, else the ones set in the form designer. */
 function gridColsFor(form,rel,cf){
-  const usable=(cf.fields||[]).filter(f=>f.type!=='heading');
+  const usable=(cf.fields||[]).filter(f=>!isLayout(f));
   const p=subPrefs(form.id,'g:'+cf.id);
   const keys=colsFor(p.cols,usable.map(f=>({key:f.id})),gridCols(rel,cf).map(f=>f.id),{min:1});
   return keys.map(id=>usable.find(f=>f.id===id)).filter(Boolean);
@@ -1366,7 +1367,7 @@ const GRID_SUM=new Set(['number','decimal','currency']);
 let cdraft=null;
 function gridRels(form){return (form.children||[]).filter(c=>c.display==='grid').map(rel=>({rel,cf:formById(rel.formId)})).filter(x=>x.cf&&x.cf.id!==form.id&&canViewForm(store.me,x.cf.id));}
 function gridCols(rel,cf){
-  const usable=(cf.fields||[]).filter(f=>f.type!=='heading');
+  const usable=(cf.fields||[]).filter(f=>!isLayout(f));
   const picked=Array.isArray(rel.cols)&&rel.cols.length?rel.cols.map(id=>usable.find(f=>f.id===id)).filter(Boolean):usable.filter(f=>!POPUP_TYPES.has(f.type)).slice(0,8);
   return picked.length?picked:usable.slice(0,1);
 }
@@ -1387,7 +1388,8 @@ function syncGrids(d,rec,rels){
 function newRowValues(cf,d,parentForm){
   const values={};
   (cf.fields||[]).forEach(f=>{if(f.type==='checkbox')values[f.id]=false;if(f.type==='range')values[f.id]=f.min??0;if(f.type==='relation'&&f.relForm===parentForm.id&&d.recordId)values[f.id]=d.recordId;});
-  return values;
+  (cf.fields||[]).forEach(f=>{if(hasDefault(f)&&(f.type==='checkbox'||f.type==='range'))delete values[f.id];});
+  return withDefaults(values,cf);
 }
 function rowEditable(row,cf){return row.isNew?canCreate(store.me,cf.id):canEditRecord(store.me,{formId:cf.id,ownerId:row.ownerId});}
 function sortRowsGrid(g,cf,d,sort){
@@ -1406,6 +1408,7 @@ function gridCell(cf,row,f,d,ro){
   if(cf.rules?.length){const st=row._rs||(row._rs=rowRules(cf,row,d));if(st.blank.has(f.id))return `<span class="gcalc rule-na" title="${st.cleared.has(f.id)?'Cleared':'Hidden'} by a rule">—</span>`;}
   const ids=`data-grid="${cf.id}" data-row="${row.id}" data-gf="${f.id}"`,v=row.values[f.id],val=v==null?'':esc(v),dis=ro?' disabled':'';
   const lab=` aria-label="${esc(f.label)}"`;
+  if(isReadOnly(f)){const rv=isFixed(f)?defaultFor(f):v;let t='';try{t=isEmpty(rv)?'':fmt(f,rv)}catch(e){t=String(rv??'')}if(f.type==='url'&&t)return `<a class="gcalc" href="${esc(/^https?:\/\//i.test(t)?t:'https://'+t)}" target="_blank" rel="noopener">${esc(f.linkText||t)} ↗</a>`;return `<span class="gcalc" title="Read only">${esc(t||'—')}</span>`;}
   if(f.type==='autonumber'){const live=row.isNew?null:recById(row.id);const t=live?.nums?.[f.id];return `<span class="gcalc gauto">${esc(t||(row.isNew?'On save':'…'))}</span>`;}
   if(f.type==='formula'){const r=calc(cf,f,rowRec(row,cf,d));return `<span class="gcalc" id="gc-${cf.id}-${row.id}-${f.id}">${esc(r.e?'—':fmtCalc(f,r.v))}</span>`;}
   if(POPUP_TYPES.has(f.type)){const s=popupSummary(f,v);return `<button type="button" class="gpopbtn${s?' has':''}" data-act="grid-cell" data-grid="${cf.id}" data-row="${row.id}" data-fid="${f.id}">${esc(s||(ro?'—':f.type==='signature'?'Sign':'Add'))}</button>`;}
@@ -1458,7 +1461,7 @@ function gridSection(form,rel,cf,d,parentRo){
   const gSum=cols.map((f,i)=>totals[i]==null?'':`${f.label} ${f.type==='formula'?fmtCalc(f,totals[i]):fmt(f,totals[i])}`).filter(Boolean).slice(0,3).join(' · ');
   const gHead=`<div class="section-h"><h2>${foldBtn(k,gOpen,`${badge(cf)}<span>${esc(cf.name)}</span> <span class="count">${allRows.filter(r=>!r.isNew).length}</span>`,gSum)}</h2><span class="chip acc">Grid</span></div>`;
   if(!gOpen)return `<section class="section gsec" id="grid-${cf.id}">${gHead}</section>`;
-  const usable=(cf.fields||[]).filter(f=>f.type!=='heading');
+  const usable=(cf.fields||[]).filter(f=>!isLayout(f));
   const buttons=`${mayAdd?`<button type="button" class="btn sm soft" data-act="grid-add" data-grid="${cf.id}">+ Add ${esc(itemName(cf).toLowerCase())}</button>`:''}${parentRo?'':`<button type="button" class="btn sm soft" data-act="grid-attach" data-grid="${cf.id}">Attach existing</button>`}`;
   const tools=colsTool(k,ui.subPop===k,cols.map(f=>({key:f.id,label:f.label})),usable.map(f=>({key:f.id,label:f.label,group:''})),{min:1})+(allRows.length?showMenu(k,p.show,allRows.filter(r=>!r.isNew).length):'');
   const hint=(sort?'Click a heading again to reverse. ':'Click a heading to sort. ')+(mayAdd?'New rows stay at the top until you save.':'');
@@ -1513,7 +1516,7 @@ function formFieldsHTML(form,d,scope){
   fs.filter(f=>f.type==='heading').forEach(h=>{if(folded(form.id,'h:'+h.id)&&!fs.some(f=>under[f.id]===h.id&&d.errors?.[f.id]))shut.add(h.id);});
   return `<div class="fgrid" data-scope="${scope}">${fs.map(f=>{
     if(f.type==='heading'){
-      const open=!shut.has(f.id),kids=fs.filter(x=>under[x.id]===f.id);
+      const open=!shut.has(f.id),kids=fs.filter(x=>under[x.id]===f.id&&x.type!=='instructions');
       const vals=kids.filter(x=>!['file','image','signature','textarea','formula','location','attachments'].includes(x.type)).map(x=>{let t='';try{t=fmt(x,d.values[x.id])}catch(e){}return t?x.label+': '+t:''}).filter(Boolean).slice(0,2);
       const sum=kids.length+' field'+(kids.length===1?'':'s')+(vals.length?' · '+vals.join(' · '):'');
       return `<div class="fsec${st.hidden.has('f:'+f.id)?' rule-off':''}" id="fb-${scope}-${f.id}"><h3>${foldBtn('h:'+f.id,open,`<span>${esc(f.label)}</span>`,sum)}</h3>${open&&f.help?`<p class="help">${esc(f.help)}</p>`:''}</div>`;
@@ -1525,7 +1528,9 @@ function formFieldsHTML(form,d,scope){
 function fieldBlock(f,v,err,scope,locked){
   if(f.type==='heading')return `<div class="fsec" id="fb-${scope}-${f.id}"><h3>${esc(f.label)}</h3>${f.help?`<p class="help">${esc(f.help)}</p>`:''}</div>`;
   const id=`in-${scope}-${f.id}`;
+  if(f.type==='instructions')return instrBlock(f,scope);
   if(f.type==='attachments'&&attOwn(f,scope))return attSection(f,v,err,scope,locked,id);
+  if(isReadOnly(f)&&locked!==true)return roBlock(f,isFixed(f)?defaultFor(f):v,id,scope);
   if(scope==='record'&&rdraft?.reading&&locked!==true)return `<div class="fld rd w-${f.width==='half'?'half':'full'}" id="fb-${scope}-${f.id}"><span class="flabel">${esc(f.label)}</span><div class="rdv">${readValue(f,v,id,scope)}</div></div>`;
   const lab=['radio','multiselect','rating','checkbox','formula','autonumber'].includes(f.type)?`<span class="flabel" id="lb-${id}">${esc(f.label)}${f.required?'<span class="req">*</span>':''}</span>`:`<label class="flabel" for="${id}">${esc(f.label)}${f.required?'<span class="req">*</span>':''}${f.type==='attachments'&&asFiles(v).length?`<span class="att-n"> · ${asFiles(v).length}</span>`:''}</label>`;
   if(locked)return `<div class="fld w-${f.width==='half'?'half':'full'} locked${locked==='view'?' viewonly':''}" id="fb-${scope}-${f.id}">${lab}<div class="lockw" inert>${control(f,locked==='view'?v:null,id,scope)}</div><p class="help rule-note">${locked==='view'?'View only at this stage':'Cleared by a rule'}</p></div>`;
@@ -1660,7 +1665,7 @@ function applyRules(d){
   (form.fields||[]).forEach(f=>{
     const el=document.getElementById(`fb-${scope}-${f.id}`);if(!el)return;
     el.classList.toggle('rule-off',st.hiddenFields.has(f.id)||st.hidden.has('f:'+f.id));
-    if(f.type==='heading')return;
+    if(isLayout(f))return;
     if(prev.cleared.has(f.id)!==st.cleared.has(f.id)||prev.required(f)!==st.required(f)||!!prev.view?.has(f.id)!==!!st.view?.has(f.id)||!!prev.moveReq?.has(f.id)!==!!st.moveReq?.has(f.id)){repaint(d,f);const c=document.querySelector(`#fb-${scope}-${f.id} canvas[data-sig]`);if(c)initSig(c);}
   });
   if(d===rdraft){
@@ -1721,6 +1726,41 @@ async function onFile(t){
     if(val?.pending)toast(`No signal: the ${f.type==='image'?'photo':'file'} is kept on this device and uploads when you’re back. Save as usual.`,{duration:7000});
   }catch(e){fb.classList.remove('pending');toast(e?.code==='storage/unauthorized'?'You don’t have permission to upload files to this form.':'The upload failed. Check your connection and try again.');console.error(e);}
 }
+/* ---------- Read only fields and Instructions (fixedlogic.js) ---------- */
+const LOCK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+/** A read-only field's value: a Website is a button (with the designer's words), the rest as in Read view. */
+function roValue(f,v,id,scope){
+  if(f.type==='url'&&!isEmpty(v)){const u=/^[a-z][a-z0-9+.-]*:/i.test(String(v))?String(v):'https://'+v;if(!/^https?:|^mailto:/i.test(u))return esc(v);return `<a class="btn primary ro-link" href="${esc(u)}" target="_blank" rel="noopener">${esc(f.linkText||String(v))} <span aria-hidden="true">↗</span></a>`;}
+  if(f.type==='checkbox'&&v==null)return '<span class="rd-empty" aria-label="Empty">–</span>';
+  return readValue(f,v,id,scope);
+}
+function roBlock(f,v,id,scope){
+  return `<div class="fld rd ro w-${f.width==='half'?'half':'full'}" id="fb-${scope}-${f.id}"><span class="flabel" id="lb-${id}">${esc(f.label)}${scope==='record'&&rdraft?.reading?'':`<span class="ro-tag" title="People can’t change this">${LOCK} Read only</span>`}</span><div class="rdv">${roValue(f,v,id,scope)}</div>${f.help&&!(scope==='record'&&rdraft?.reading)?`<p class="help">${esc(f.help)}</p>`:''}</div>`;
+}
+/** Instructions: formatted text on the form while it's filled in (not in Read view, PDFs or lists). */
+function instrBlock(f,scope){
+  if(scope==='record'&&rdraft?.reading)return `<div class="finstr-off" id="fb-${scope}-${f.id}" hidden></div>`;
+  const vals={[f.id]:f.text||'',[RICH_KEY]:f.html?{[f.id]:f.html}:{}};
+  return `<div class="fld w-full finstr" id="fb-${scope}-${f.id}" role="note"${f.label?` aria-label="${esc(f.label)}"`:''}>${f.label?`<b class="finstr-t">${esc(f.label)}</b>`:''}<div class="finstr-b rte-view">${String(f.text||'').trim()?editorHTML(vals,f.id):'<p class="help">Instructions go here (Form designer).</p>'}</div></div>`;
+}
+/** The designer's Default value setting, shaped by the field type. */
+function defaultEditor(x){
+  const dv=x.defaultValue,a=`data-prop="defaultValue"`;let ctl;
+  const tok=(type,word,tokv)=>`<div class="dflt-row"><input class="in" type="${type}" ${a} value="${dv&&dv!==tokv?esc(dv):''}"${dv===tokv?' disabled':''} aria-label="Default value"><label class="switch"><input type="checkbox" ${a} data-kind="tok" data-v="${tokv}"${dv===tokv?' checked':''}><span class="tr"></span><span>${word}</span></label></div>`;
+  switch(x.type){
+    case 'textarea':ctl=`<textarea class="in" ${a} rows="3" aria-label="Default value">${esc(dv??'')}</textarea>`;break;
+    case 'number':case 'decimal':case 'currency':case 'percent':case 'rating':case 'range':ctl=`<input class="in" ${a} data-kind="num" type="number" step="any" inputmode="decimal" value="${esc(dv??'')}" aria-label="Default value">`;break;
+    case 'date':ctl=tok('date','Today','today');break;
+    case 'time':ctl=tok('time','Now','now');break;
+    case 'datetime':ctl=tok('datetime-local','Now','now');break;
+    case 'checkbox':ctl=`<select class="in" ${a} data-kind="yn" aria-label="Default value"><option value="">None</option><option value="yes"${dv===true?' selected':''}>Yes</option><option value="no"${dv===false?' selected':''}>No</option></select>`;break;
+    case 'select':case 'radio':ctl=`<select class="in" ${a} aria-label="Default value"><option value="">None</option>${(x.options||[]).filter(Boolean).map(o=>`<option${o===dv?' selected':''}>${esc(o)}</option>`).join('')}</select>`;break;
+    case 'multiselect':{const cur=Array.isArray(dv)?dv:[];ctl=`<div class="opts dflt-multi" role="group" aria-label="Default value">${(x.options||[]).filter(Boolean).map(o=>`<label class="opt"><input type="checkbox" ${a} data-kind="multi" value="${esc(o)}"${cur.includes(o)?' checked':''}>${esc(o)}</label>`).join('')||'<span class="help">Add options first.</span>'}</div>`;break;}
+    case 'color':ctl=`<input class="in" ${a} value="${esc(dv??'')}" placeholder="#3346c8" maxlength="7" aria-label="Default value">`;break;
+    default:ctl=`<input class="in" ${a} value="${esc(dv??'')}"${x.type==='url'?' inputmode="url" placeholder="https://"':x.type==='email'?' inputmode="email"':''} aria-label="Default value">`;
+  }
+  return `<div class="prop full"><span>Default value</span>${ctl}<small class="help">${x.readOnly?'Every record shows this. Change it here and it changes on every record, old ones too.':'Filled in on new records; people can change it.'}</small></div>`;
+}
 /* ---------- Attachments fields ----------
    Any number of files. Drop them on the field (or its own section, when it isn't under a Section
    Heading), Browse…, or on phones Add files / Take photo. Each upload waits on the device with no
@@ -1750,7 +1790,7 @@ function attControl(f,v,id,scope){
 }
 /** Not under a Section Heading: the field is its own section (folds like one; key 'a:<fieldId>'). */
 function attSection(f,v,err,scope,locked,id){
-  const d=draftFor(scope),form=d&&formOfDraft(d),reading=scope==='record'&&rdraft?.reading&&locked!==true;
+  const d=draftFor(scope),form=d&&formOfDraft(d),reading=(scope==='record'&&rdraft?.reading&&locked!==true)||isReadOnly(f);
   const open=scope!=='record'||!form||!folded(form.id,'a:'+f.id)||!!err;
   const n=asFiles(v).length;
   const title=`<span>${esc(f.label)}</span>${f.required&&!reading?'<span class="req">*</span>':''}${n?`<span class="att-n"> · ${n}</span>`:''}`;
@@ -1797,7 +1837,7 @@ function initSig(c){
 function validate(form,vals,st){
   const errs={};st=st||NO_RULES;
   (form.fields||[]).forEach(f=>{
-    if(f.type==='heading'||f.type==='formula'||f.type==='autonumber')return;const v=vals[f.id];
+    if(isLayout(f)||f.type==='formula'||f.type==='autonumber'||isReadOnly(f))return;const v=vals[f.id];
     if(st.blank.has(f.id)||st.hiddenFields.has(f.id)||st.view?.has(f.id))return; // hidden, cleared or view only: nothing to check
     if(st.required(f)&&(f.type==='checkbox'?!v:isEmpty(v))){errs[f.id]=f.type==='checkbox'?'This must be switched on.':f.type==='attachments'?'Add at least one file.':'This field is required.';return;}
     if(isEmpty(v))return;
@@ -1906,14 +1946,15 @@ function viewDesigner(){
     <div class="actions"><button class="btn primary" data-act="new-form">+ New form</button></div></div>
   ${fs.length?`${designerSearch(fs)}<div class="panel flist${String(ui.dq||'').trim()?' searching':''}">${fs.map((f,i)=>{
     const par=parentsOf(f.id),kids=(f.children||[]).map(c=>formById(c.formId)).filter(Boolean);
-    return `<div class="fcard" data-fname="${esc(f.name||'')}"${designerMatch(f,ui.dq)?'':' hidden'}>${badge(f,1)}<div class="info"><b>${esc(f.name)}</b><div class="tags"><span class="chip">${(f.fields||[]).filter(x=>x.type!=='heading').length} fields</span><span class="chip">${recordsOf(f.id).length} record${recordsOf(f.id).length===1?'':'s'}</span>${par.length?`<span class="chip acc">Child of ${par.map(p=>esc(p.name)).join(', ')}</span>`:''}${kids.length?`<span class="chip acc">Parent of ${kids.map(k=>esc(k.name)).join(', ')}</span>`:''}${f.showInSidebar?'':'<span class="chip warn fc-hid">Hidden</span>'}</div></div>
+    return `<div class="fcard" data-fname="${esc(f.name||'')}"${designerMatch(f,ui.dq)?'':' hidden'}>${badge(f,1)}<div class="info"><b>${esc(f.name)}</b><div class="tags"><span class="chip">${(f.fields||[]).filter(x=>x.type!=='instructions'&&x.type!=='heading').length} fields</span><span class="chip">${recordsOf(f.id).length} record${recordsOf(f.id).length===1?'':'s'}</span>${par.length?`<span class="chip acc">Child of ${par.map(p=>esc(p.name)).join(', ')}</span>`:''}${kids.length?`<span class="chip acc">Parent of ${kids.map(k=>esc(k.name)).join(', ')}</span>`:''}${f.showInSidebar?'':'<span class="chip warn fc-hid">Hidden</span>'}</div></div>
       <div class="ctl"><label class="switch vis"><input type="checkbox" data-act-change="toggle-sidebar" data-id="${f.id}"${f.showInSidebar?' checked':''}><span class="tr"></span><span>Sidebar</span></label>
       <button class="ibtn" data-act="form-move" data-id="${f.id}" data-dir="-1" aria-label="Move up"${i===0?' disabled':''}>↑</button><button class="ibtn" data-act="form-move" data-id="${f.id}" data-dir="1" aria-label="Move down"${i===fs.length-1?' disabled':''}>↓</button>
       <button class="btn sm" data-act="new-record" data-id="${f.id}" aria-label="Add ${/^[aeiou]/i.test(itemName(f))?'an':'a'} ${esc(itemName(f).toLowerCase())}" title="New ${esc(itemName(f).toLowerCase())}">+ Add</button><button class="btn sm" data-act="nav-records" data-id="${f.id}">Records</button></div><button class="btn sm primary fc-edit" data-act="edit-form" data-id="${f.id}">Edit</button></div>`;}).join('')}</div>`
   :`<div class="panel empty"><h2>No forms yet</h2><p>Create your first form, or load a set of connected example forms (Clients, Projects, Site visits, Contacts) to see how relationships work.</p><div class="actions"><button class="btn" data-act="load-examples">Load example forms</button><button class="btn primary" data-act="new-form">+ New form</button></div></div>`}`;
 }
 function newField(type){
-  const f={id:uid('x'),type,label:T[type].label,required:false,inList:false,width:['heading','textarea','location','multiselect','file','signature','attachments'].includes(type)?'full':'half',help:''};
+  const f={id:uid('x'),type,label:T[type].label,required:false,inList:false,width:['heading','instructions','textarea','location','multiselect','file','signature','attachments'].includes(type)?'full':'half',help:''};
+  if(type==='instructions'){f.label='';f.width='full';f.text='';f.html=null;}
   if(CHOICE.has(type))f.options=['Option 1','Option 2','Option 3'];
   if(type==='decimal')f.decimals=2;
   if(type==='currency')f.currency='CAD';
@@ -1970,7 +2011,7 @@ function tryInput(x,v){
   return `<input class="in" type="text" ${a} value="${esc(v??'')}">`;
 }
 function tryPanel(f){
-  if(!pdraft)pdraft={values:{},errors:{},dirty:false};
+  if(!pdraft)pdraft={values:withDefaults({},fdraft),errors:{},dirty:false};
   const use=parentUse(f);let par='';
   if(use.size){
     const ids=[...use.keys()].filter(id=>formById(id));
@@ -2014,7 +2055,7 @@ function dzCanvasHTML(f){
     return `<div class="crow${r.section?' in-sec':''}${r.last?' sec-last':''}" data-feid="${x.id}">
           ${grip(x)}
           ${gly(x.type)}
-          <div class="crow-m"><b id="frl-${x.id}">${esc(x.label||'Untitled field')}${x.required?'<span class="req">*</span>':''}</b><small>${esc(T[x.type].label)}${String(x.sysName||'').trim()&&String(x.sysName).trim()!==x.label?` · <span class="sysn" title="System name">${esc(String(x.sysName).trim())}</span>`:''}${x.type==='relation'&&formById(x.relForm)?' → '+esc(formById(x.relForm).name):''}${x.inList?' · in list':''}${f.titleField===x.id?' · title':''}${ruleTag(f,x.id)}</small></div>
+          <div class="crow-m"><b id="frl-${x.id}">${esc(x.label||(x.type==='instructions'?'Instructions':'Untitled field'))}${x.required&&!x.readOnly?'<span class="req">*</span>':''}</b><small>${x.type==='instructions'?esc(String(x.text||'No text yet').replace(/\s+/g,' ').slice(0,60)):esc(T[x.type].label)}${x.readOnly&&canReadOnly(x)?' · read only':''}${hasDefault(x)?` · default ${esc(defaultText(x).slice(0,30))}`:''}${String(x.sysName||'').trim()&&String(x.sysName).trim()!==x.label?` · <span class="sysn" title="System name">${esc(String(x.sysName).trim())}</span>`:''}${x.type==='relation'&&formById(x.relForm)?' → '+esc(formById(x.relForm).name):''}${x.inList?' · in list':''}${f.titleField===x.id?' · title':''}${ruleTag(f,x.id)}</small></div>
           <button class="ibtn dz-dots" data-act="open-field" data-id="${x.id}" aria-label="Options for ${esc(x.label||'field')}">⋯</button>
         </div>`;
   }).join('');
@@ -2064,7 +2105,7 @@ function viewFormEdit(){
           <button type="button" class="${grid?'on':''}" aria-pressed="${grid}" data-act="rel-display" data-i="${i}" data-v="grid">Grid in the record</button>
           <button type="button" class="${grid?'':'on'}" aria-pressed="${!grid}" data-act="rel-display" data-i="${i}" data-v="records">Separate records</button></div>
           ${isNew?'<span class="chip acc">New sub-form · saved with this form</span>':''}</div>
-        ${grid&&cf&&cf.id!==f.id?`<div class="relcols"><span class="help">Grid columns</span><div class="colchecks">${(cf.fields||[]).filter(x=>x.type!=='heading').map(x=>`<label class="colcheck"><input type="checkbox" data-crel="${i}" data-cprop="col" value="${x.id}"${colIds.has(x.id)?' checked':''}><span>${esc(x.label)}</span>${POPUP_TYPES.has(x.type)?'<small>pop-up</small>':x.type==='formula'?'<small>calc</small>':''}</label>`).join('')}</div></div>`:''}
+        ${grid&&cf&&cf.id!==f.id?`<div class="relcols"><span class="help">Grid columns</span><div class="colchecks">${(cf.fields||[]).filter(x=>!isLayout(x)).map(x=>`<label class="colcheck"><input type="checkbox" data-crel="${i}" data-cprop="col" value="${x.id}"${colIds.has(x.id)?' checked':''}><span>${esc(x.label)}</span>${POPUP_TYPES.has(x.type)?'<small>pop-up</small>':x.type==='formula'?'<small>calc</small>':''}</label>`).join('')}</div></div>`:''}
         ${cf&&cf.id!==f.id?`<label class="switch relinh"><input type="checkbox" data-crel="${i}" data-cprop="inherit"${inh?' checked':''}><span class="tr"></span><span>Rows follow this form’s access</span></label><p class="help">${inh?`Anyone who can see a ${noun} can see its ${esc(cf.name.toLowerCase())}, and editing works the same way. ${esc(cf.name)} no longer has its own row in Security groups.`:`${esc(cf.name)} keeps its own access in Security groups.`}</p>`:''}
       </div>`;
     };
@@ -2095,7 +2136,7 @@ function viewFormEdit(){
     </div></div>
     ${f.isNew?'':`<section class="section"><div class="section-h"><h2>Delete form</h2></div><div class="panel"><div class="parentcard"><p class="grow help">Deletes the form and its ${recordsOf(f.id).length} records. Child records in other forms are kept.</p><button class="btn danger${ui.confirm==='form'?' armed':''}" data-act="del-form">${ui.confirm==='form'?'Tap again to delete':'Delete form'}</button></div></div></section>`}`;
   }else{
-    if(!pdraft)pdraft={values:{},errors:{},dirty:false};
+    if(!pdraft)pdraft={values:withDefaults({},fdraft),errors:{},dirty:false};
     body=`<div class="panel"><div class="preview-note">Preview. Try the fields; nothing here is saved.</div>${formFieldsHTML(f,pdraft,'preview')}<div class="savebar"><button class="btn" data-act="preview-check">Check required fields</button></div></div>`;
   }
   return `
@@ -2133,12 +2174,18 @@ function fieldEditor(x){
   const inp=(p,v,attrs='')=>`<input class="in" data-prop="${p}" value="${esc(v??'')}" ${attrs}>`;
   const num=(p,v)=>inp(p,v,'type="number" step="any" inputmode="decimal" data-kind="num"');
   const sw=(p,l)=>`<label class="switch"><input type="checkbox" data-prop="${p}" data-kind="bool"${x[p]?' checked':''}><span class="tr"></span><span>${l}</span></label>`;
-  const shared=x.type!=='heading'&&fdraft.fields.some(o=>o.id!==x.id&&o.type!=='heading'&&String(o.label).trim().toLowerCase()===String(x.label).trim().toLowerCase());
+  if(x.type==='instructions'){
+    const vals={[x.id]:x.text||'',[RICH_KEY]:x.html?{[x.id]:x.html}:{}};
+    return `<div class="fedit">${P('Title (optional)',inp('label',x.label,'maxlength="120" placeholder="e.g. Before you start"'))}${P('Field type',`<select class="in" data-prop="type">${TYPES.map(t=>`<option value="${t[0]}"${t[0]===x.type?' selected':''}>${t[1]}</option>`).join('')}</select>`)}
+      <div class="prop full fedit-ins"><span>Text</span>${richEditorHTML({id:x.id,label:'Instructions'},vals,'ins-'+x.id,'What people should know or do here. Bold, lists and links work.')}<small class="help">Shown on the form while it’s being filled in. Nothing is saved on records, and it isn’t in lists, PDFs or imports.</small></div>
+      <div class="prop full"><span class="keyline">Field ID ${esc(x.id)}</span></div></div>`;
+  }
+  const shared=x.type!=='heading'&&fdraft.fields.some(o=>o.id!==x.id&&!isLayout(o)&&String(o.label).trim().toLowerCase()===String(x.label).trim().toLowerCase());
   let h=P(x.type==='heading'?'Label':'Caption',inp('label',x.label))+P('Field type',`<select class="in" data-prop="type">${TYPES.map(t=>`<option value="${t[0]}"${t[0]===x.type?' selected':''}>${t[1]}</option>`).join('')}</select>`);
   if(x.type!=='heading')h+=`<label class="prop full"><span>System name</span>${inp('sysName',x.sysName||'',`maxlength="80" placeholder="${esc(x.label||'')}" autocomplete="off"`)}<small class="help">${shared?'<b>Another field has this caption.</b> Give this one its own system name. ':''}What calculations, email placeholders, automations and imports call this field, such as {${esc(sysOf(x))}}. People only see the caption. Empty: the same as the caption.</small></label>`;
   h+=P(x.type==='heading'?'Description':'Help text',inp('help',x.help),'full');
   if(x.type==='formula'){
-    const others=fdraft.fields.filter(o=>o.id!==x.id&&o.type!=='heading');
+    const others=fdraft.fields.filter(o=>o.id!==x.id&&!isLayout(o));
     h+=`<label class="prop full"><span>Formula</span><textarea class="in fx" data-prop="expr" rows="3" spellcheck="false" autocapitalize="off" placeholder="{Price} * {Quantity}">${esc(x.expr||'')}</textarea></label>
     <div class="prop full"><span id="fxc-${x.id}" class="fxcheck${fxCheck(x).ok?'':' bad'}">${fxCheck(x).msg}</span></div>
     <div class="prop full"><span>Insert a field</span><div class="chips">${others.length?others.map(o=>`<button type="button" class="chipbtn" data-act="fx-ins" data-fid="${x.id}" data-ins="{${esc(sysOf(o))}}">${esc(sysOf(o))}</button>`).join(''):'<span class="help">Add other fields first.</span>'}</div></div>
@@ -2157,7 +2204,9 @@ function fieldEditor(x){
   if(x.type==='rating')h+=P('Number of stars',num('max',x.max));
   if(x.type==='autonumber')h+=autoEditor(x,P,inp,num,sw);
   if(x.type==='relation')h+=P('Links to form',`<select class="in" data-prop="relForm"><option value="">Choose a form…</option>${[...store.forms].sort(byOrder).map(o=>`<option value="${o.id}"${o.id===x.relForm?' selected':''}>${esc(o.name)}</option>`).join('')}</select>`);
-  if(x.type!=='heading')h+=`<div class="props-sw">${x.type==='formula'||x.type==='autonumber'?'':sw('required','Required')}${NOLIST.has(x.type)?'':sw('inList','Column in the starting list')}${x.type==='date'||x.type==='datetime'?sw('calendar','Show on the calendar'):''}${x.type==='textarea'?`<label class="switch"><input type="checkbox" data-prop="plain" data-kind="neg"${x.plain?'':' checked'}><span class="tr"></span><span>Allow formatting</span></label>`:''}<label class="switch"><input type="checkbox" data-prop="width" data-kind="half"${x.width==='half'?' checked':''}><span class="tr"></span><span>Half width on wide screens</span></label></div>`;
+  if(canDefault(x))h+=defaultEditor(x);
+  if(x.type==='url'&&x.readOnly)h+=P('Button text',inp('linkText',x.linkText,'maxlength="80" placeholder="e.g. Open the safety checklist"')+'<small class="help">A read-only website shows as a button with these words. Empty: the address.</small>','full');
+  if(x.type!=='heading')h+=`<div class="props-sw">${canReadOnly(x)?sw('readOnly','Read only'):''}${x.type==='formula'||x.type==='autonumber'||x.readOnly?'':sw('required','Required')}${NOLIST.has(x.type)?'':sw('inList','Column in the starting list')}${x.type==='date'||x.type==='datetime'?sw('calendar','Show on the calendar'):''}${x.type==='textarea'?`<label class="switch"><input type="checkbox" data-prop="plain" data-kind="neg"${x.plain?'':' checked'}><span class="tr"></span><span>Allow formatting</span></label>`:''}<label class="switch"><input type="checkbox" data-prop="width" data-kind="half"${x.width==='half'?' checked':''}><span class="tr"></span><span>Half width on wide screens</span></label></div>`;
   h+=`<div class="prop full"><span class="keyline">Field ID ${esc(x.id)}</span></div>`;
   return `<div class="fedit">${h}</div>`;
 }
@@ -2599,6 +2648,7 @@ document.addEventListener('click',async e=>{
   }
 });
 document.addEventListener('input',e=>{
+  {const t=e.target;if(t.dataset?.rich&&fdraft&&t.closest?.('.fedit-ins')){const f=fdraft.fields.find(x=>x.id===t.closest('[data-feid]')?.dataset.feid);if(f){const r=fromEditor(t.innerHTML);f.text=r.text;f.html=r.html||null;setFdirty();}return;}}
   if(e.target.dataset?.mail&&ui.mail&&e.target.type!=='checkbox'){ui.mail[e.target.dataset.mail]=e.target.value;return;}
   if(e.target.dataset?.wfComment&&ui.wfAsk){ui.wfAsk.comment=e.target.value;return;}
   if(e.target.dataset?.delall&&ui.mailDelAll){ui.mailDelAll.typed=e.target.value;const b=document.querySelector('[data-act="delall-go"]');if(b)b.disabled=String(e.target.value).trim()!==String(ew.list.length);return;}
@@ -2612,7 +2662,7 @@ document.addEventListener('input',e=>{
   if(t.id==='search'){ui.search=t.value;const pos=t.selectionStart;renderMain();const s=$('#search');if(s){s.focus();s.setSelectionRange(pos,pos);}return;}
   if(t.dataset.fid&&t.type!=='file'&&!(t.type==='radio'||t.type==='checkbox'))setVal(t);
   if(t.dataset.fprop&&t.dataset.kind!=='bool'){fdraft[t.dataset.fprop]=t.value;setFdirty();}
-  if(t.dataset.prop&&!['bool','half'].includes(t.dataset.kind)&&t.tagName!=='SELECT'){
+  if(t.dataset.prop&&!['bool','half','neg','tok','multi','yn'].includes(t.dataset.kind)&&t.tagName!=='SELECT'){
     const f=fdraft.fields.find(x=>x.id===t.closest('[data-feid]').dataset.feid);const p=t.dataset.prop,k=t.dataset.kind;
     f[p]=k==='num'?(t.value===''?null:Number(t.value)):k==='lines'?t.value.split('\n').map(s=>s.trim()):p==='currency'?t.value.toUpperCase():t.value;
     if(p==='expr')updateFxCheck(f);
@@ -2643,10 +2693,13 @@ document.addEventListener('change',async e=>{
   if(t.dataset.prop){
     const f=fdraft.fields.find(x=>x.id===t.closest('[data-feid]').dataset.feid);const p=t.dataset.prop,k=t.dataset.kind;
     if(k==='bool')f[p]=t.checked;else if(k==='neg'){if(t.checked)delete f[p];else f[p]=true;}else if(k==='half')f.width=t.checked?'half':'full';
-    else if(p==='type'){const nf=newField(t.value);Object.assign(f,{type:t.value},Object.fromEntries(Object.entries(nf).filter(([key])=>!['id','label','required','inList','help','width'].includes(key)&&f[key]==null)));if(NOLIST.has(f.type))f.inList=false;}
+    else if(k==='tok'){f.defaultValue=t.checked?t.dataset.v:null;}
+    else if(k==='multi'){const l=[...t.closest('.dflt-multi').querySelectorAll('input:checked')].map(i=>i.value);f.defaultValue=l.length?l:null;}
+    else if(k==='yn'){f.defaultValue=t.value===''?null:t.value==='yes';}
+    else if(p==='type'){delete f.defaultValue;delete f.linkText;if(!canReadOnly({type:t.value}))delete f.readOnly;const nf=newField(t.value);Object.assign(f,{type:t.value},Object.fromEntries(Object.entries(nf).filter(([key])=>!['id','label','required','inList','help','width'].includes(key)&&f[key]==null)));if(NOLIST.has(f.type))f.inList=false;}
     else if(t.tagName==='SELECT')f[p]=t.value;
     setFdirty();
-    if(['type','relForm','required','inList','format'].includes(p)||k==='bool')renderMain();
+    if(['type','relForm','required','inList','format'].includes(p)||k==='bool'||k==='tok')renderMain();
     return;
   }
   if(t.dataset.crel!=null){const c=fdraft.children[+t.dataset.crel];const p=t.dataset.cprop;

@@ -14,14 +14,14 @@ export const sysOf = (f) => String(f?.sysName || '').trim() || String(f?.label |
  */
 export function fieldByName(form, name) {
   const n = lc(name);
-  const fs = (form?.fields || []).filter((f) => f.type !== 'heading');
+  const fs = (form?.fields || []).filter((f) => f.type !== 'heading' && f.type !== 'instructions');
   return fs.find((f) => lc(sysOf(f)) === n) || fs.find((f) => f.id === name) || (() => { const c = fs.filter((f) => lc(f.label) === n); return c.length === 1 ? c[0] : undefined; })();
 }
 
 /** Captions used by more than one field (lower case). */
 export function sharedCaptions(fields) {
   const n = new Map();
-  (fields || []).forEach((f) => { if (f.type !== 'heading') n.set(lc(f.label), (n.get(lc(f.label)) || 0) + 1); });
+  (fields || []).forEach((f) => { if (f.type !== 'heading' && f.type !== 'instructions') n.set(lc(f.label), (n.get(lc(f.label)) || 0) + 1); });
   return new Set([...n].filter(([, c]) => c > 1).map(([k]) => k));
 }
 
@@ -41,11 +41,11 @@ export function shownName(form, f) {
  * "Caption 3"… → { fields, given: [{ id, label, sysName }] }. Headings don't take part.
  */
 export function uniqueSysNames(fields) {
-  const taken = new Set((fields || []).filter((f) => f.type !== 'heading').map((f) => lc(sysOf(f))));
+  const taken = new Set((fields || []).filter((f) => f.type !== 'heading' && f.type !== 'instructions').map((f) => lc(sysOf(f))));
   const seen = new Set();
   const given = [];
   const out = (fields || []).map((f) => {
-    if (f.type === 'heading') return f;
+    if (f.type === 'heading' || f.type === 'instructions') return f;
     let s = sysOf(f);
     if (!seen.has(lc(s))) { seen.add(lc(s)); return f; }
     const base = String(f.label || 'Field').trim() || 'Field';

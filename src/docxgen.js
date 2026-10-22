@@ -6,10 +6,11 @@
 import { zip } from './xlsx.js';
 import { encodeText as T } from './docxxml.js';
 import { sysOf, fieldByName } from './fieldnames.js';
+import { isLayout } from './fixedlogic.js';
 
 const NUM = new Set(['number', 'decimal', 'currency', 'percent', 'range', 'rating']);
 const isNum = (f) => NUM.has(f.type) || (f.type === 'formula' && ['number', 'currency', 'percent', 'days', 'hours'].includes(f.format));
-const usable = (form) => (form?.fields || []).filter((f) => f.type !== 'heading');
+const usable = (form) => (form?.fields || []).filter((f) => !isLayout(f));
 
 /* ---------- what a template for a form may use (for checking one) ---------- */
 const norm = (s) => String(s || '').trim().toLowerCase();
@@ -33,7 +34,7 @@ export function formSchema(form, ctx, depth = 0) {
   return {
     has(name) {
       const f = fieldByName(form, name);
-      if (f && f.type !== 'heading') return true;
+      if (f && !isLayout(f)) return true;
       const sp = splitName(name);
       if (sp) { const sc = linked(sp[0]); return !!sc && sc.has(sp[1]); }
       return SYS.has(norm(name));
@@ -77,6 +78,7 @@ function fieldRows(form, prefix, ctx) {
   const rows = [];
   for (const f of form.fields || []) {
     if (f.type === 'heading') { if (f.label) rows.push({ sub: f.label }); continue; }
+    if (f.type === 'instructions') continue;
     const l = fieldLine(f, prefix, ctx);
     rows.push({ label: f.label || sysOf(f), ph: l.ph, note: l.note || '' });
     if (f.type === 'relation' && !prefix) {

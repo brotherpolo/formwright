@@ -62,7 +62,7 @@ function overdueRows(s, at) {
 function fieldTable(f) {
   const st = f.workflow.stages;
   const rows = [];
-  (f.fields || []).forEach((x) => rows.push({ key: x.id, label: x.type === 'heading' ? `Section: ${x.label}` : shownName(f, x), heading: x.type === 'heading', calc: ['formula', 'autonumber'].includes(x.type) }));
+  (f.fields || []).forEach((x) => rows.push({ key: x.id, label: x.type === 'heading' ? `Section: ${x.label}` : x.type === 'instructions' ? `Instructions${x.label ? ': ' + x.label : ''}` : shownName(f, x), heading: x.type === 'heading' || x.type === 'instructions', calc: ['formula', 'autonumber'].includes(x.type) }));
   H.sections(f).forEach((x) => rows.push({ key: x.key, label: x.label, section: true }));
   const cell = (r, s, si) => {
     if (r.section || r.heading) {

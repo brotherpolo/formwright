@@ -22,6 +22,7 @@ const TYPE_NAME = { text: 'Text', textarea: 'Long text', email: 'Email', phone: 
 /* ---------- small helpers ---------- */
 
 import { sysOf } from './fieldnames.js';
+import { isFixed } from './fixedlogic.js';
 
 export const norm = (s) => String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 export const normTitle = (s) => String(s ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -164,7 +165,7 @@ export const parentRequired = (form, parents) => parents.some((p) => (p.children
 export function templateColumns(form, parents, itemName) {
   const cols = [{ key: 'id', label: 'Record ID', kind: 'id' }];
   if (parents.length) cols.push({ key: 'parent', label: parents.length === 1 ? itemName(parents[0]) : 'Belongs to', kind: 'parent', required: parentRequired(form, parents) });
-  (form.fields || []).filter((f) => IMPORT_TYPES.has(f.type)).forEach((f) => cols.push({ key: f.id, label: sysOf(f) || 'Field', kind: 'field', field: f, required: !!f.required }));
+  (form.fields || []).filter((f) => IMPORT_TYPES.has(f.type) && !isFixed(f)).forEach((f) => cols.push({ key: f.id, label: sysOf(f) || 'Field', kind: 'field', field: f, required: !!f.required }));
   const seen = new Map();
   cols.forEach((c) => {
     const k = norm(c.label), n = (seen.get(k) || 0) + 1;
@@ -175,7 +176,7 @@ export function templateColumns(form, parents, itemName) {
   return cols;
 }
 
-export const skippedFields = (form) => (form.fields || []).filter((f) => SKIP_WHY[f.type]).map((f) => ({ id: f.id, label: f.label, why: SKIP_WHY[f.type] }));
+export const skippedFields = (form) => (form.fields || []).filter((f) => SKIP_WHY[f.type] || isFixed(f)).map((f) => ({ id: f.id, label: f.label, why: isFixed(f) ? 'read only, set by the form' : SKIP_WHY[f.type] }));
 
 const listText = (a, max = 12) => (a.length > max ? a.slice(0, max).join(', ') + ` and ${a.length - max} more` : a.join(', '));
 

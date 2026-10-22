@@ -32,7 +32,7 @@ function sectionsOf(f) {
 export function rulesCtx(f) {
   const { grids, kids } = sectionsOf(f);
   const parents = (f.isNew ? [] : H.parentsOf(f.id)) || [];
-  const parentFields = new Map(parents.map((p) => [p.id, { name: p.name, fields: (withStageField(p).fields || []).filter((x) => x.type !== 'heading') }]));
+  const parentFields = new Map(parents.map((p) => [p.id, { name: p.name, fields: (withStageField(p).fields || []).filter((x) => x.type !== 'heading' && x.type !== 'instructions') }]));
   const targets = targetsOf(f, { grids, kids, tasks: H.canSeeTasks() });
   return { form: withStageField(f), targets, parentFields, recordTitle: titleOf }; // conditions can use the workflow Stage
 }
@@ -46,7 +46,7 @@ function titleOf(id) {
 const fieldOf = (ctx, c) => (!c.src || c.src === 'self' ? (ctx.form.fields || []).find((x) => x.id === c.field) : ctx.parentFields.get(c.src)?.fields.find((x) => x.id === c.field));
 
 function fieldPick(ctx, c, at) {
-  const own = (ctx.form.fields || []).filter((x) => x.type !== 'heading');
+  const own = (ctx.form.fields || []).filter((x) => x.type !== 'heading' && x.type !== 'instructions');
   const cur = c.field ? (c.src && c.src !== 'self' ? c.src : 'self') + '|' + c.field : '';
   const opt = (src, x) => `<option value="${esc(src + '|' + x.id)}"${cur === src + '|' + x.id ? ' selected' : ''}>${esc(src === 'self' ? shownName(ctx.form, x) : x.label || 'Untitled field')}</option>`;
   let html = `<select class="in rl-f" ${at} data-rlc="field" aria-label="Field"><option value="">Pick a field…</option><optgroup label="This form">${own.map((x) => opt('self', x)).join('')}</optgroup>`;

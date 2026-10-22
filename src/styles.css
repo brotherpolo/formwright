@@ -199,6 +199,23 @@ textarea.in{min-height:96px;resize:vertical;line-height:1.45}
 .pick:hover{border-color:var(--accent);color:var(--accent)}
 .pick input{position:absolute;opacity:0;width:1px;height:1px}
 .pick:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+/* Read only fields and Instructions (fixedlogic.js) */
+.ro-tag{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:12px;font-weight:500;color:var(--muted);vertical-align:1px}
+.fld.ro .rdv{min-height:40px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.ro-link{text-decoration:none;max-width:100%;white-space:normal;text-align:left}
+/* while editing, a read-only field lines up with the others: same label, its value where a box would be */
+.fld.rd.ro .flabel{color:inherit;font-size:14px;letter-spacing:normal}
+.fld.rd.ro .rdv{border-bottom:0;padding:0}
+.fset.reading .fld.rd.ro .flabel{color:var(--muted);font-size:12.5px;letter-spacing:.01em}
+.fset.reading .fld.rd.ro .rdv{border-bottom:1px solid var(--line);padding:2px 0 6px}
+.rdv a.ro-link{color:var(--accent-ink)}
+.finstr{grid-column:1/-1;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-left:4px solid var(--accent);border-radius:10px;padding:12px 14px;gap:4px}
+.finstr-t{display:block;font-weight:700}
+.finstr .finstr-b{border:0;padding:0;background:none;min-height:0;max-height:none;overflow:visible}
+.finstr-b>:first-child{margin-top:0}.finstr-b>:last-child{margin-bottom:0}
+.dflt-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dflt-row .in{flex:1;min-width:150px}
+.fedit-ins .rte{width:100%}
 /* Attachments fields (any number of files): a drop area, then one card per file */
 .attw{display:flex;flex-direction:column;gap:10px;min-width:0}
 .att-drop{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:10px;padding:18px;border:2px dashed var(--line-strong);border-radius:12px;background:var(--sunk);color:var(--muted);text-align:center;transition:border-color .15s,background .15s}

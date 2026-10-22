@@ -48,6 +48,7 @@ export function stageView(form, stageId) {
   fields.forEach((f) => {
     const m = mode(f.id), hm = under[f.id] ? mode(under[f.id]) : 'edit';
     if (f.type === 'heading') { if (m === 'hide') out.keys.add('f:' + f.id); return; }
+    if (f.type === 'instructions') { if (m === 'hide' || hm === 'hide') out.hide.add(f.id); return; }
     if (m === 'hide' || hm === 'hide') out.hide.add(f.id);
     else if (m === 'view' || hm === 'view') out.view.add(f.id);
     else if (m === 'req' && !['formula', 'autonumber'].includes(f.type)) out.req.add(f.id);

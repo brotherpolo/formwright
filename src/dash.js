@@ -301,7 +301,7 @@ function drillCols(c, def) {
   const out = [];
   const parent = parentsOf(c, def.form)[0];
   if (parent) { const pt = titleFieldOf(c.formById(parent)); if (pt) out.push({ form: parent, id: pt.id }); }
-  const usable = (form?.fields || []).filter((f) => !['heading', 'signature', 'file', 'image', 'attachments'].includes(f.type) && (!t || f.id !== t.id));
+  const usable = (form?.fields || []).filter((f) => !['heading', 'instructions', 'signature', 'file', 'image', 'attachments'].includes(f.type) && (!t || f.id !== t.id));
   const listed = usable.filter((f) => f.inList);
   (listed.length ? listed : usable).slice(0, 8).forEach((f) => out.push({ form: def.form, id: f.id }));
   return out;

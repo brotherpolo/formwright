@@ -29,7 +29,7 @@ export const ACTIONS = [
 ];
 export const ACTION_LABEL = Object.fromEntries(ACTIONS.map((a) => [a.key, a.label]));
 
-const NO_VALUE = new Set(['heading', 'formula', 'autonumber']);
+const NO_VALUE = new Set(['heading', 'instructions', 'formula', 'autonumber']);
 /** Fields whose value a rule can clear or make required. */
 export const holdsValue = (f) => !!f && !NO_VALUE.has(f.type);
 
@@ -222,7 +222,7 @@ export function withoutCleared(values, ids) {
 
 /** Everything a rule could point at on this form, for the designer's menus. */
 export function targetsOf(form, { grids = [], kids = [], tasks = true } = {}) {
-  const out = (form?.fields || []).map((f) => ({ key: 'f:' + f.id, label: f.type === 'heading' ? f.label || 'Untitled section' : shownName(form, f), kind: f.type === 'heading' ? 'section' : 'field', field: f }));
+  const out = (form?.fields || []).map((f) => ({ key: 'f:' + f.id, label: f.type === 'heading' ? f.label || 'Untitled section' : f.type === 'instructions' ? 'Instructions' + (f.label ? ': ' + f.label : '') : shownName(form, f), kind: f.type === 'heading' ? 'section' : 'field', field: f }));
   grids.forEach((cf) => out.push({ key: 'g:' + cf.id, label: cf.name, kind: 'grid' }));
   kids.forEach((cf) => out.push({ key: 'c:' + cf.id, label: cf.name, kind: 'child' }));
   if (tasks) out.push({ key: 't:tasks', label: 'Tasks', kind: 'tasks' });
