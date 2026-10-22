@@ -8,12 +8,13 @@
 //   kit.pdfModel(form, rec, { stamp }) → the model pdfdraw.js draws
 import { FX } from '../formulas.js';
 import { fieldItem } from '../pdfdoc.js';
+import { filesText, fileNames, fileLines } from '../filelist.js';
 import { evaluate, NO_RULES } from '../rules.js';
 import { fieldByName } from '../fieldnames.js';
 import { richBlocks } from '../richtext.js';
 import { withStageField, stageName, STAGE_FIELD, stageView } from '../workflow.js';
 
-const POPUP = new Set(['textarea', 'file', 'image', 'signature', 'location', 'multiselect']);
+const POPUP = new Set(['textarea', 'file', 'image', 'signature', 'location', 'multiselect', 'attachments']);
 export const COLORS = ['#3346c8', '#0f7b6c', '#b4531a', '#8a3fb8', '#b42367', '#3d6b1f', '#56607a', '#0b6aa2'];
 const isEmpty = (v) => v == null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.values(v).some((x) => x != null && x !== ''));
 const lc = (s) => String(s || '').trim().toLowerCase();
@@ -63,6 +64,7 @@ export function makeKit({ forms = [], records = [], locale = 'en-CA', timeZone =
         case 'multiselect': return v.join(', ');
         case 'location': return v.address || (v.lat != null ? `${v.lat}, ${v.lng}` : '');
         case 'file': case 'image': return v.name || 'File';
+        case 'attachments': return filesText(v);
         case 'signature': return 'Signed';
         case 'autonumber': return String(v);
         case 'relation': { const r = recById(v); return r ? recTitle(r) : '(removed)'; }
@@ -79,6 +81,7 @@ export function makeKit({ forms = [], records = [], locale = 'en-CA', timeZone =
     if (f.type === 'relation') { const r = v && recById(v); return r ? recTitle(r) : ''; }
     if (f.type === 'location') return v?.address || '';
     if (f.type === 'file' || f.type === 'image') return v?.name || '';
+    if (f.type === 'attachments') return fileNames(v).join(', ');
     return v ?? null;
   }
   function evalFormula(form, f, rec, depth = 0) {
@@ -143,7 +146,7 @@ export function makeKit({ forms = [], records = [], locale = 'en-CA', timeZone =
     const rs = rulesFor(form, rec), sv = stageView(form, rec.stage); // what the rules and the record's stage hide is left out
     const items = (form.fields || []).filter((f) => !rs.hiddenFields.has(f.id) && !rs.hidden.has('f:' + f.id) && !sv.hide.has(f.id) && !sv.keys.has('f:' + f.id)).map((f) => {
       const v = f.type === 'heading' || rs.cleared.has(f.id) ? null : valOf(f, rec, form);
-      const it = fieldItem(f, v, f.type === 'heading' ? '' : f.type === 'rating' ? (isEmpty(v) ? '' : `${v} of ${f.max || 5}`) : text(form, { ...rec, values: { ...rec.values, [f.id]: v } }, f), f.type === 'textarea' && v != null && !f.plain ? richBlocks(rec.values, f.id) : null);
+      const it = fieldItem(f, v, f.type === 'heading' ? '' : f.type === 'rating' ? (isEmpty(v) ? '' : `${v} of ${f.max || 5}`) : f.type === 'attachments' ? fileLines(v) : text(form, { ...rec, values: { ...rec.values, [f.id]: v } }, f), f.type === 'textarea' && v != null && !f.plain ? richBlocks(rec.values, f.id) : null);
       return it;
     });
     const sections = [];

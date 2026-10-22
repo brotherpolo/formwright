@@ -29,6 +29,7 @@ import { titleSortOf, columnCatalog, defaultConfig, cellOf, defaultViewId } from
 import { storeKey as subStoreKey, readSubs, prefsOf, setPrefs, colsFor, toggleCol as subToggle, moveCol as subMove, nextSort as subNext, limitRows, sortByVal, TASK_COLS, TASK_DEFAULT, taskCell } from './sublogic.js';
 import { colsTool, showMenu, sortMenu, toolBar, moreLine, headCell as subHead } from './subui.js';
 import { headingOf, readFolds, isFolded, setFold, setFolds, foldKeys } from './foldlogic.js';
+import { asFiles, filesText, fileNames, fileLines, fileKind, sizeText as fileSize } from './filelist.js';
 import { sectionOrder, moveSection, TASKS as TASKS_KEY } from './sectionlogic.js';
 import { searchForms, allSearchable, designerMatch, pushRecent, sidebarFormList } from './navlogic.js';
 import * as palette from './palette.js';
@@ -73,14 +74,14 @@ import examples from './examples.json';
 const ADMIN_VIEWS = new Set(['settings', 'dates', 'problems', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 
 // other words people search field types by
-const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold'};
+const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',attachments:'attachments files documents many multiple upload drag drop pdf photos',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold'};
 const TYPES=[
  ['text','Short text','Aa','Text'],['textarea','Long text','¶','Text'],
  ['email','Email','@','Contact'],['phone','Phone','+1','Contact'],['url','Website','//','Contact'],['location','Location','⌖','Contact'],
  ['number','Whole number','12','Numbers'],['decimal','Decimal','1.5','Numbers'],['currency','Currency','$','Numbers'],['percent','Percent','%','Numbers'],['rating','Rating','★','Numbers'],['autonumber','Auto number','#','Numbers'],['range','Slider','⟷','Numbers'],['formula','Calculation','ƒx','Numbers'],
  ['date','Date','D','Date & time'],['time','Time','T','Date & time'],['datetime','Date & time','DT','Date & time'],
  ['checkbox','Yes / No','✓','Choices'],['select','Dropdown','▾','Choices'],['radio','Single choice','◉','Choices'],['multiselect','Multiple choice','☰','Choices'],
- ['file','File upload','⇪','Media'],['image','Photo','▣','Media'],['signature','Signature','✎','Media'],['color','Color','◐','Media'],
+ ['file','File upload','⇪','Media'],['attachments','Attachments','⧉','Media'],['image','Photo','▣','Media'],['signature','Signature','✎','Media'],['color','Color','◐','Media'],
  ['relation','Link to record','↗','Relations'],['heading','Section heading','§','Layout']];
 const T=Object.fromEntries(TYPES.map(t=>[t[0],{label:t[1],glyph:t[2],group:t[3]}]));
 const TYCOL=typeColors(TYPES); // each type's shade of its category's colour
@@ -132,6 +133,7 @@ function fmt(f,v){
     case 'multiselect':return v.join(', ');
     case 'location':return v.address||(v.lat!=null?`${v.lat}, ${v.lng}`:'');
     case 'file':case 'image':return v.name||'File';
+    case 'attachments':return filesText(v);
     case 'signature':return 'Signed';
     case 'autonumber':return String(v);
     case 'relation':{const r=recById(v);return r?recTitle(r):'(removed)';}
@@ -153,6 +155,7 @@ function rawFor(f,rec,form,depth,check){
   if(f.type==='relation'){const r=v&&recById(v);return r?recTitle(r):'';}
   if(f.type==='location')return v?.address||'';
   if(f.type==='file'||f.type==='image')return v?.name||'';
+  if(f.type==='attachments')return fileNames(v).join(', ');
   return v??null;
 }
 function evalFormula(form,f,rec,depth=0,check=false){
@@ -1199,7 +1202,7 @@ async function sendMail(){
    form's section order. Only what this person can see is included (store.records already is). */
 const realName=id=>store.profiles[id]?.displayName||(id===store.user?.uid?(store.profiles[id]?.displayName||store.user?.displayName||'you'):'someone');
 const longDate=t=>new Date(t).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
-function pdfText(f,v){if(f.type==='rating')return isEmpty(v)?'':`${v} of ${f.max||5}`;if(f.type==='textarea')return isEmpty(v)?'':String(v);try{return fmt(f,v)}catch(e){return String(v??'')}}
+function pdfText(f,v){if(f.type==='attachments')return fileLines(v);if(f.type==='rating')return isEmpty(v)?'':`${v} of ${f.max||5}`;if(f.type==='textarea')return isEmpty(v)?'':String(v);try{return fmt(f,v)}catch(e){return String(v??'')}}
 const pdfNum=f=>(NUMERIC.has(f.type)||f.type==='formula')&&f.type!=='rating';
 function pdfModel(form,rec){
   const rs=withStage(rulesOf(form,rec,rec.parentId?recById(rec.parentId):null),form,rec.stage); // what the rules and the stage hide is left out
@@ -1291,7 +1294,7 @@ function childRowsOf(form,cf,rec,q){
   let rows=store.records.filter(r=>r.parentId===rec.id&&r.formId===cf.id).map(r=>({rec:r,title:recTitle(r,cf),cells:cols.map(c=>cellOf(c.key,r,h))}));
   const total=rows.length;
   // search looks at every field, not only the columns shown
-  const hayFields=(cf.fields||[]).filter(f=>!['heading','file','image','signature'].includes(f.type));
+  const hayFields=(cf.fields||[]).filter(f=>!['heading','file','image','signature','attachments'].includes(f.type));
   if(q&&q.trim())rows=rows.filter(r=>searchHit([r.title,...r.cells.map(c=>c.text),...hayFields.map(f=>{try{return fmt(f,valOf(f,r.rec,cf))}catch(e){return ''}})].join(' • '),q));
   const si=cols.findIndex(c=>c.key===sort.key);
   rows.forEach(r=>{r.sortVal=sort.key==='title'?cellOf('title',r.rec,h).sort:si>=0?r.cells[si].sort:cellOf(sort.key,r.rec,h).sort;});
@@ -1358,7 +1361,7 @@ function recordFoldKeys(form,rec){
 }
 const SORT_H={valOf:(f,r,fm)=>valOf(f,r,fm),fmt:(f,v)=>fmt(f,v),recTitle:(r,fm)=>recTitle(r,fm),recById:id=>recById(id),formById:id=>formById(id)};
 const DETACH_ICON='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 4 8"/><path d="M8 12h3"/><path d="M3 3l18 18"/></svg>';
-const POPUP_TYPES=new Set(['textarea','file','image','signature','location','multiselect']);
+const POPUP_TYPES=new Set(['textarea','file','image','signature','location','multiselect','attachments']);
 const GRID_SUM=new Set(['number','decimal','currency']);
 let cdraft=null;
 function gridRels(form){return (form.children||[]).filter(c=>c.display==='grid').map(rel=>({rel,cf:formById(rel.formId)})).filter(x=>x.cf&&x.cf.id!==form.id&&canViewForm(store.me,x.cf.id));}
@@ -1511,7 +1514,7 @@ function formFieldsHTML(form,d,scope){
   return `<div class="fgrid" data-scope="${scope}">${fs.map(f=>{
     if(f.type==='heading'){
       const open=!shut.has(f.id),kids=fs.filter(x=>under[x.id]===f.id);
-      const vals=kids.filter(x=>!['file','image','signature','textarea','formula','location'].includes(x.type)).map(x=>{let t='';try{t=fmt(x,d.values[x.id])}catch(e){}return t?x.label+': '+t:''}).filter(Boolean).slice(0,2);
+      const vals=kids.filter(x=>!['file','image','signature','textarea','formula','location','attachments'].includes(x.type)).map(x=>{let t='';try{t=fmt(x,d.values[x.id])}catch(e){}return t?x.label+': '+t:''}).filter(Boolean).slice(0,2);
       const sum=kids.length+' field'+(kids.length===1?'':'s')+(vals.length?' · '+vals.join(' · '):'');
       return `<div class="fsec${st.hidden.has('f:'+f.id)?' rule-off':''}" id="fb-${scope}-${f.id}"><h3>${foldBtn('h:'+f.id,open,`<span>${esc(f.label)}</span>`,sum)}</h3>${open&&f.help?`<p class="help">${esc(f.help)}</p>`:''}</div>`;
     }
@@ -1522,10 +1525,11 @@ function formFieldsHTML(form,d,scope){
 function fieldBlock(f,v,err,scope,locked){
   if(f.type==='heading')return `<div class="fsec" id="fb-${scope}-${f.id}"><h3>${esc(f.label)}</h3>${f.help?`<p class="help">${esc(f.help)}</p>`:''}</div>`;
   const id=`in-${scope}-${f.id}`;
+  if(f.type==='attachments'&&attOwn(f,scope))return attSection(f,v,err,scope,locked,id);
   if(scope==='record'&&rdraft?.reading&&locked!==true)return `<div class="fld rd w-${f.width==='half'?'half':'full'}" id="fb-${scope}-${f.id}"><span class="flabel">${esc(f.label)}</span><div class="rdv">${readValue(f,v,id,scope)}</div></div>`;
-  const lab=['radio','multiselect','rating','checkbox','formula','autonumber'].includes(f.type)?`<span class="flabel" id="lb-${id}">${esc(f.label)}${f.required?'<span class="req">*</span>':''}</span>`:`<label class="flabel" for="${id}">${esc(f.label)}${f.required?'<span class="req">*</span>':''}</label>`;
+  const lab=['radio','multiselect','rating','checkbox','formula','autonumber'].includes(f.type)?`<span class="flabel" id="lb-${id}">${esc(f.label)}${f.required?'<span class="req">*</span>':''}</span>`:`<label class="flabel" for="${id}">${esc(f.label)}${f.required?'<span class="req">*</span>':''}${f.type==='attachments'&&asFiles(v).length?`<span class="att-n"> · ${asFiles(v).length}</span>`:''}</label>`;
   if(locked)return `<div class="fld w-${f.width==='half'?'half':'full'} locked${locked==='view'?' viewonly':''}" id="fb-${scope}-${f.id}">${lab}<div class="lockw" inert>${control(f,locked==='view'?v:null,id,scope)}</div><p class="help rule-note">${locked==='view'?'View only at this stage':'Cleared by a rule'}</p></div>`;
-  return `<div class="fld w-${f.width==='half'?'half':'full'}${err?' bad':''}" id="fb-${scope}-${f.id}">${lab}${control(f,v,id,scope)}${f.help?`<p class="help">${esc(f.help)}</p>`:''}${err?`<p class="err">${esc(err)}</p>`:''}</div>`;
+  return `<div class="fld w-${f.width==='half'?'half':'full'}${err?' bad':''}${f.type==='attachments'?' att-fld':''}" id="fb-${scope}-${f.id}">${lab}${control(f,v,id,scope)}${f.help?`<p class="help">${esc(f.help)}</p>`:''}${err?`<p class="err">${esc(err)}</p>`:''}</div>`;
 }
 /** A field's value in Read view: formatted like the PDF, with links, pictures and linked records you can open. */
 function readValue(f,v,id,scope){
@@ -1540,6 +1544,7 @@ function readValue(f,v,id,scope){
     case 'file':case 'image':{const src=fileSrc(v);const nm=esc(v.name||'File');
       if(f.type==='image'&&src)return `<a class="rd-pic" href="${esc(src)}" target="_blank" rel="noopener"><img src="${esc(src)}" alt="${nm}"></a>`;
       return src?`<a href="${esc(src)}" target="_blank" rel="noopener">${nm}</a>${v.size?` <span class="help">${fsize(v.size)}</span>`:''}`:nm;}
+    case 'attachments':return attFilesHTML(f,v,scope,false);
     case 'signature':return typeof v==='string'&&v.startsWith('data:image')?`<img class="rd-sig" src="${esc(v)}" alt="Signature">`:'Signed';
     case 'location':{const u=mapUrl(v);const t=esc(fmt(f,v));return u?`${t} <a href="${esc(u)}" target="_blank" rel="noopener">Map ↗</a>`:t;}
     case 'relation':{const r=recById(v),tf=r&&formById(r.formId);return r&&tf?`<button type="button" class="rd-link" data-act="open-record" data-id="${esc(r.id)}">${esc(recTitle(r,tf))}</button>`:'(removed)';}
@@ -1578,6 +1583,7 @@ function control(f,v,id,scope){
       let chip='';
       if(v){const src=fileSrc(v);chip=`<div class="file-chip">${f.type==='image'&&src?`<img src="${esc(src)}" alt="">`:`<span class="glyph">${f.type==='image'?'▣':'⇪'}</span>`}<span class="nm">${esc(v.name)}</span><span class="sz">${v.size?fsize(v.size):''}</span>${src?`<a class="btn sm ghost" href="${esc(src)}" target="_blank" rel="noopener">Open</a>`:''}<button type="button" class="ibtn" data-act="file-clear" data-fid="${f.id}" aria-label="Remove file">✕</button></div>`;}
       return `<div class="filew">${chip}<label class="pick"><input type="file" ${a}${f.type==='image'?' accept="image/*"':''}>${v?'Replace':(f.type==='image'?'Take or choose a photo':'Choose a file')}</label></div>`;}
+    case 'attachments':return attControl(f,v,id,scope);
     case 'signature':return `<div class="sig"><canvas data-sig="${f.id}" data-scope="${scope}" aria-label="Signature pad for ${esc(f.label)}"></canvas><div class="sigbar"><span>${v?'Signed':'Sign above with your finger or mouse'}</span><button type="button" class="btn sm ghost" data-act="sig-clear" data-fid="${f.id}">Clear</button></div></div>`;
     case 'relation':{const tf=formById(f.relForm);if(!tf)return `<p class="help">Choose which form this links to in the designer.</p>`;const rs=recordsOf(tf.id).map(r=>({r,t:recTitle(r,tf)})).sort((x,y)=>x.t.localeCompare(y.t));return `<div class="row2" style="grid-template-columns:minmax(0,1fr) auto"><select class="in" ${a}><option value="">Choose a ${esc(itemName(tf).toLowerCase())}…</option>${rs.map(({r,t})=>`<option value="${r.id}"${r.id===v?' selected':''}>${esc(t)}</option>`).join('')}</select>${v&&recById(v)&&scope==='record'?`<button type="button" class="btn" data-act="open-record" data-id="${v}">Open</button>`:''}</div>`;}
   }
@@ -1699,7 +1705,9 @@ function setVal(t){
   markDirty(d);
 }
 async function onFile(t){
-  const d=draftOf(t);const form=formOfDraft(d);const f=form.fields.find(x=>x.id===t.dataset.fid);let file=t.files?.[0];if(!file)return;
+  const d=draftOf(t);const form=formOfDraft(d);const f=form.fields.find(x=>x.id===t.dataset.fid);
+  if(f?.type==='attachments'){const files=[...(t.files||[])];t.value='';return onAttach(d,form,f,files);}
+  let file=t.files?.[0];if(!file)return;
   const fb=t.closest('.fld');fb.classList.add('pending');
   try{
     let val;
@@ -1712,6 +1720,66 @@ async function onFile(t){
     d.values[f.id]=val;markDirty(d);repaint(d,f);
     if(val?.pending)toast(`No signal: the ${f.type==='image'?'photo':'file'} is kept on this device and uploads when you’re back. Save as usual.`,{duration:7000});
   }catch(e){fb.classList.remove('pending');toast(e?.code==='storage/unauthorized'?'You don’t have permission to upload files to this form.':'The upload failed. Check your connection and try again.');console.error(e);}
+}
+/* ---------- Attachments fields ----------
+   Any number of files. Drop them on the field (or its own section, when it isn't under a Section
+   Heading), Browse…, or on phones Add files / Take photo. Each upload waits on the device with no
+   signal, like File upload. The value: [{ name, size, type, path, url, by, at }] (filelist.js). */
+const ATT_MAX=25*1024*1024;
+// the storage rules refuse these: a browser could run them from the file's link
+const ATT_BLOCKED=x=>/^(text\/html|application\/xhtml\+xml|image\/svg\+xml|text\/javascript|application\/(x-)?javascript|application\/ecmascript|text\/xml|application\/xml)/i.test(x.type||'')||/\.(html?|xhtml|svg|js|mjs|xml)$/i.test(x.name||'');
+function attOwn(f,scope){if(scope!=='record'&&scope!=='preview')return false;const d=draftFor(scope);const form=d&&formOfDraft(d);return !!form&&!headingOf(form.fields||[])[f.id];}
+const attWhen=t=>t?new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric',...(new Date(t).getFullYear()!==new Date().getFullYear()?{year:'numeric'}:{})}):'';
+function attCard(f,x,i,edit){
+  const src=fileSrc(x),k=fileKind(x),nm=esc(x.name||'File'),wait=x.pending&&!x.url;
+  const th=k.kind==='img'&&src?`<img src="${esc(src)}" alt="" loading="lazy">`:`<span class="att-tag">${esc(k.tag)}</span>`;
+  const meta=wait?`<span class="att-wait">No signal: uploads when you’re back</span>`:esc([fileSize(x.size),x.by?realName(x.by):'',attWhen(x.at)].filter(Boolean).join(' · '));
+  const inner=`<span class="att-th">${th}</span><span class="att-tx"><span class="att-nm">${nm}</span><span class="att-m">${meta}</span></span>`;
+  return `<div class="att-card k-${k.kind}">${src?`<a class="att-open" href="${esc(src)}" target="_blank" rel="noopener" title="Open ${nm}">${inner}</a>`:`<span class="att-open">${inner}</span>`}${edit?`<button type="button" class="ibtn att-x" data-act="att-rm" data-fid="${f.id}" data-i="${i}" aria-label="Remove ${nm}">✕</button>`:''}</div>`;
+}
+function attFilesHTML(f,v,scope,edit){
+  const list=asFiles(v),ups=(draftFor(scope)?._attUp||{})[f.id]||[];
+  if(!list.length&&!ups.length)return edit?'':'<span class="rd-empty" aria-label="Empty">–</span>';
+  return `<div class="att-files">${list.map((x,i)=>attCard(f,x,i,edit)).join('')}${ups.map(u=>`<div class="att-card up" aria-live="polite"><span class="att-open"><span class="att-th"><span class="att-tag">${esc(fileKind(u).tag)}</span></span><span class="att-tx"><span class="att-nm">${esc(u.name)}</span><span class="att-m">Uploading…<span class="att-bar"><i></i></span></span></span></span></div>`).join('')}</div>`;
+}
+function attControl(f,v,id,scope){
+  return `<div class="attw">
+    <div class="att-drop ph-hide"><span><b>Drag files here</b> or</span><label class="btn sm att-browse">Browse…<input type="file" multiple class="att-in" id="${id}" data-fid="${f.id}"></label></div>
+    <div class="att-ph ph-only"><label class="btn primary sm">＋ Add files<input type="file" multiple class="att-in" data-fid="${f.id}"></label><label class="btn sm">Take photo<input type="file" accept="image/*" capture="environment" class="att-in" data-fid="${f.id}"></label></div>
+    ${attFilesHTML(f,v,scope,true)}</div>`;
+}
+/** Not under a Section Heading: the field is its own section (folds like one; key 'a:<fieldId>'). */
+function attSection(f,v,err,scope,locked,id){
+  const d=draftFor(scope),form=d&&formOfDraft(d),reading=scope==='record'&&rdraft?.reading&&locked!==true;
+  const open=scope!=='record'||!form||!folded(form.id,'a:'+f.id)||!!err;
+  const n=asFiles(v).length;
+  const title=`<span>${esc(f.label)}</span>${f.required&&!reading?'<span class="req">*</span>':''}${n?`<span class="att-n"> · ${n}</span>`:''}`;
+  const h=`<h3 class="att-h">${scope==='record'?foldBtn('a:'+f.id,open,title,filesText(v)):title}</h3>`;
+  let body;
+  if(reading)body=attFilesHTML(f,v,scope,false);
+  else if(locked)body=`<div class="lockw" inert>${attControl(f,locked==='view'?v:null,id,scope)}</div><p class="help rule-note">${locked==='view'?'View only at this stage':'Cleared by a rule'}</p>`;
+  else body=attControl(f,v,id,scope)+(f.help?`<p class="help">${esc(f.help)}</p>`:'')+(err?`<p class="err">${esc(err)}</p>`:'');
+  return `<div class="fld w-full att-sec${reading?' rd':''}${!reading&&!locked?' att-fld':''}${err?' bad':''}${locked?' locked':''}" id="fb-${scope}-${f.id}">${h}${open?`<div class="att-body">${body}</div>`:''}</div>`;
+}
+async function onAttach(d,form,f,files){
+  if(!d||!files.length||d.readOnly)return;
+  const big=files.filter(x=>x.size>ATT_MAX),bad=files.filter(x=>!big.includes(x)&&ATT_BLOCKED(x)),ok=files.filter(x=>!big.includes(x)&&!bad.includes(x));
+  const names=a=>a.map(x=>`“${x.name}”`).join(', ');
+  if(big.length)toast(`${names(big)} ${big.length===1?'is':'are'} over 25 MB, so ${big.length===1?'it wasn’t':'they weren’t'} added. Files must be under 25 MB.`,{duration:8000});
+  if(bad.length)toast(`${names(bad)} can’t be attached: web pages, SVG pictures and scripts aren’t allowed. Save ${bad.length===1?'it':'them'} as a PDF or zip first.`,{duration:8000});
+  if(!ok.length)return;
+  if(d.errors?.[f.id]){delete d.errors[f.id];}
+  if(d===pdraft){d.values[f.id]=[...asFiles(d.values[f.id]),...ok.map(x=>({name:x.name,size:x.size,type:x.type,url:URL.createObjectURL(x),by:store.user?.uid||'',at:Date.now()}))];markDirty(d);repaint(d,f);return;}
+  d._attUp=d._attUp||{};const ups=d._attUp[f.id]=d._attUp[f.id]||[];
+  const mine=ok.map(x=>({name:x.name,type:x.type}));ups.push(...mine);repaint(d,f);
+  let waiting=0,failed=[];
+  for(let i=0;i<ok.length;i++){
+    try{const val=await uploadFile(ok[i],form.id);d.values[f.id]=[...asFiles(d.values[f.id]),{...val,by:store.user?.uid||'',at:Date.now()}];if(val.pending)waiting++;markDirty(d);}
+    catch(e){failed.push(ok[i]);console.error(e);if(e?.code==='storage/unauthorized'&&!failed.unauth){failed.unauth=true;}}
+    finally{const j=ups.indexOf(mine[i]);if(j>=0)ups.splice(j,1);repaint(d,f);}
+  }
+  if(failed.length)toast(failed.unauth?'You don’t have permission to upload files to this form.':`${names(failed)} couldn’t be uploaded. Check your connection and try again.`,{duration:8000});
+  if(waiting)toast(`No signal: ${waiting===1?'the file is':waiting+' files are'} kept on this device and ${waiting===1?'uploads':'upload'} when you’re back. Save as usual.`,{duration:7000});
 }
 function initSig(c){
   const scope=c.dataset.scope,d=draftFor(scope);if(!d)return;const fid=c.dataset.sig;
@@ -1731,7 +1799,7 @@ function validate(form,vals,st){
   (form.fields||[]).forEach(f=>{
     if(f.type==='heading'||f.type==='formula'||f.type==='autonumber')return;const v=vals[f.id];
     if(st.blank.has(f.id)||st.hiddenFields.has(f.id)||st.view?.has(f.id))return; // hidden, cleared or view only: nothing to check
-    if(st.required(f)&&(f.type==='checkbox'?!v:isEmpty(v))){errs[f.id]=f.type==='checkbox'?'This must be switched on.':'This field is required.';return;}
+    if(st.required(f)&&(f.type==='checkbox'?!v:isEmpty(v))){errs[f.id]=f.type==='checkbox'?'This must be switched on.':f.type==='attachments'?'Add at least one file.':'This field is required.';return;}
     if(isEmpty(v))return;
     if(f.type==='email'&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))errs[f.id]='Enter an email like name@example.com.';
     if(f.type==='url'){try{const u=new URL(/^[a-z]+:\/\//i.test(v)?v:'https://'+v);if(!u.hostname.includes('.'))throw 0;}catch(e){errs[f.id]='Enter a web address like example.com.';}}
@@ -1747,7 +1815,9 @@ function validate(form,vals,st){
   return errs;
 }
 async function saveRecord(){
-  const d=rdraft,form=formById(d.formId);if(d.readOnly){toast('This record is read only for you.');return;}const rs=draftRules(d);const errs=validate(form,d.values,rs);
+  const d=rdraft,form=formById(d.formId);if(d.readOnly){toast('This record is read only for you.');return;}
+  if(Object.values(d._attUp||{}).some(a=>a.length)){toast('Files are still uploading. Save when they’ve finished.');return;}
+  const rs=draftRules(d);const errs=validate(form,d.values,rs);
   if(Object.keys(errs).length){d.errors=errs;renderMain();toast('Fix the highlighted fields, then save.');document.querySelector('.fld.bad')?.scrollIntoView({block:'center',behavior:'smooth'});return;}
   // sub-form rows: check, then work out their calculations
   const grels=gridRels(form);let rowErr=0;
@@ -1843,7 +1913,7 @@ function viewDesigner(){
   :`<div class="panel empty"><h2>No forms yet</h2><p>Create your first form, or load a set of connected example forms (Clients, Projects, Site visits, Contacts) to see how relationships work.</p><div class="actions"><button class="btn" data-act="load-examples">Load example forms</button><button class="btn primary" data-act="new-form">+ New form</button></div></div>`}`;
 }
 function newField(type){
-  const f={id:uid('x'),type,label:T[type].label,required:false,inList:false,width:['heading','textarea','location','multiselect','file','signature'].includes(type)?'full':'half',help:''};
+  const f={id:uid('x'),type,label:T[type].label,required:false,inList:false,width:['heading','textarea','location','multiselect','file','signature','attachments'].includes(type)?'full':'half',help:''};
   if(CHOICE.has(type))f.options=['Option 1','Option 2','Option 3'];
   if(type==='decimal')f.decimals=2;
   if(type==='currency')f.currency='CAD';
@@ -2455,6 +2525,7 @@ document.addEventListener('click',async e=>{
     case 'sub-showall':{const fid=rdraft?.formId;if(!fid)return;saveSub(fid,el.dataset.k,{show:'all'});renderMain();break;}
     case 'del-record':{const k='rec-'+view.recordId;if(ui.confirm!==k){ui.confirm=k;renderMain();$('.rb-item.danger')?.focus();return;}ui.recMore=false;ui.confirm=null;const rid=view.recordId;rdraft.dirty=false;const delForm=formById(view.formId);try{await store.del('records',rid);toast(`Deleted. ${isAdmin(store.me)?'Administrators can also restore it from Recently deleted for 90 days.':'You can undo this for 10 minutes.'}`,{action:'Undo',duration:12000,onAction:()=>undoDel(rid,delForm)});}catch(err){toast('Delete failed. Try again.');}break;}
     case 'rate':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);const n=+el.dataset.n;d.values[f.id]=d.values[f.id]===n?0:n;markDirty(d);repaint(d,f);break;}
+    case 'att-rm':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);const list=asFiles(d.values[f.id]);const x=list[+el.dataset.i];if(!x)break;list.splice(+el.dataset.i,1);d.values[f.id]=list.length?list:null;markDirty(d);repaint(d,f);toast(`Removed “${x.name||'File'}”. Save to keep the change.`);break;}
     case 'file-clear':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);d.values[f.id]=null;markDirty(d);repaint(d,f);break;}
     case 'sig-clear':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);d.values[f.id]=null;markDirty(d);repaint(d,f);break;}
     case 'edit-form':editForm(id);break;
@@ -2744,6 +2815,11 @@ document.addEventListener('dragstart',e=>{
   else return;
   try{e.dataTransfer.setData('text/plain',dzDrag.kind);}catch(err){}
 });
+/* Attachments fields: drop files anywhere on the field (or its own section) */
+const attTarget=e=>{const t=e.target.closest?.('.att-fld');return t&&!dzDrag&&[...(e.dataTransfer?.types||[])].includes('Files')&&!t.closest('fieldset[disabled],[inert]')&&t.querySelector('input.att-in')?t:null;};
+document.addEventListener('dragover',e=>{const t=attTarget(e);if(!t)return;e.preventDefault();e.dataTransfer.dropEffect='copy';t.classList.add('hot');});
+document.addEventListener('dragleave',e=>{const t=e.target.closest?.('.att-fld.hot');if(t&&!t.contains(e.relatedTarget))t.classList.remove('hot');});
+document.addEventListener('drop',e=>{const t=attTarget(e);if(!t)return;e.preventDefault();t.classList.remove('hot');const inp=t.querySelector('input.att-in');const d=draftOf(inp);if(!d)return;const form=formOfDraft(d);const f=form?.fields.find(x=>x.id===inp.dataset.fid);if(f)onAttach(d,form,f,[...(e.dataTransfer.files||[])]);});
 document.addEventListener('dragover',e=>{
   const canvas=e.target.closest?.('[data-dz-canvas]');
   if(!canvas||!dzDrag)return;

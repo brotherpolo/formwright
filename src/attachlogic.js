@@ -163,7 +163,7 @@ export function suggestParent({ childForm, parentForms, recs, parentsOf, valOf, 
 }
 
 /** Fields a person can filter the attach list by. */
-const NOFILTER = new Set(['heading', 'file', 'image', 'signature', 'textarea', 'location', 'color']);
+const NOFILTER = new Set(['heading', 'file', 'image', 'signature', 'textarea', 'location', 'color', 'attachments']);
 export function filterFields(form) { return (form?.fields || []).filter((f) => !NOFILTER.has(f.type)); }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

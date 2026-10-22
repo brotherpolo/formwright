@@ -2,6 +2,7 @@
 // sections. What's folded is remembered per user and per form (not per record), so folding
 // Notes on one invoice folds it on every invoice. Pure functions; app.js keeps the state.
 //   folds: { <formId>: { <key>: 1 } }   keys: 'h:<headingFieldId>' | 'g:<childFormId>' | 'c:<childFormId>'
+//   | 'a:<attachmentsFieldId>' (an Attachments field outside any section is its own section)
 
 /** Which heading each field sits under: { fieldId: headingId | null }. */
 export function headingOf(fields) {
@@ -12,6 +13,12 @@ export function headingOf(fields) {
     m[f.id] = h;
   }
   return m;
+}
+
+/** Attachments fields not under a Section Heading: each shows as its own section (key 'a:<fieldId>'). */
+export function ownAttachments(fields) {
+  const under = headingOf(fields);
+  return (fields || []).filter((f) => f.type === 'attachments' && !under[f.id]);
 }
 
 /** Saved folds, or {} when there are none or they can't be read. */
@@ -39,6 +46,7 @@ export function setFolds(folds, formId, keys, on) {
 export function foldKeys(form, gridFormIds, childFormIds) {
   return [
     ...(form?.fields || []).filter((f) => f.type === 'heading').map((f) => 'h:' + f.id),
+    ...ownAttachments(form?.fields).map((f) => 'a:' + f.id),
     ...gridFormIds.map((id) => 'g:' + id),
     ...childFormIds.map((id) => 'c:' + id),
   ];

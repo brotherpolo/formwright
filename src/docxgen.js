@@ -64,6 +64,7 @@ export function fieldLine(f, prefix = '', ctx = {}) {
     case 'image': return { ph: `{%${n}|width=8cm}`, note: 'a picture' };
     case 'signature': return { ph: `{%${n}|height=2cm}`, note: 'a signature' };
     case 'file': return { ph: `{${n}}`, note: 'a file: gives its name' };
+    case 'attachments': return { ph: `{${n}|bullets}`, note: 'its files: a bulleted list of their names' };
     case 'formula': return { ph: `{${n}}`, note: 'calculated' };
     case 'rating': return { ph: `{${n}}`, note: 'shown as stars' };
     case 'relation': { const lf = ctx.formById?.(f.relForm); return { ph: `{${n}}`, note: lf ? `a link: the ${ctx.itemName(lf).toLowerCase()}’s name` : 'a link' }; }
@@ -107,7 +108,7 @@ export function placeholderModel(form, ctx) {
     const totals = [{ label: `Number of ${cf.name.toLowerCase()}`, ph: `{= CHILDCOUNT("${cf.name}")}` },
       ...nums.map((f) => ({ label: `Total ${f.label}`, ph: `{= CHILDSUM("${cf.name}", "${sysOf(f)}")${f.type === 'currency' || f.format === 'currency' ? '|currency' : ''}}` }))];
     if (rel.display === 'grid') {
-      const cols = (ctx.gridCols ? ctx.gridCols(rel, cf) : usable(cf)).filter((f) => !['textarea', 'image', 'signature', 'file'].includes(f.type)).slice(0, 5);
+      const cols = (ctx.gridCols ? ctx.gridCols(rel, cf) : usable(cf)).filter((f) => !['textarea', 'image', 'signature', 'file', 'attachments'].includes(f.type)).slice(0, 5);
       sections.push({ title: `${cf.name} (grid)`, note: `A table that repeats a row per ${ci}. Copy the whole table; add or remove columns as you like.`, grid: { name: cf.name, cols: cols.map((f) => ({ label: f.label, ph: fieldLine(f, '', ctx).ph.replace(/^\{%/, '{%') })) }, each: { name: cf.name, rows: fieldRows(cf, '', ctx) }, rows: [{ sub: 'Totals (anywhere in the document)' }, ...totals] });
     } else {
       const first = usable(cf).slice(0, 2).map((f) => fieldLine(f, '', ctx).ph);

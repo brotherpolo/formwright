@@ -8,6 +8,7 @@ import { fieldByName } from './fieldnames.js';
 import { richBlocks } from './richtext.js';
 import { formSchema as schemaOf } from './docxgen.js';
 import { watchTemplates, addTemplate, replaceTemplateFile, renameTemplate, deleteTemplate, templateBytes, getExportSettings, fileBlob } from './store.js';
+import { fileNames } from './filelist.js';
 
 // H: { store, view(), recById, formById, recTitle, itemName, valOf(f,rec,form), fmt(f,v), realName(uid),
 //      stageName(form,rec), wfOn(form), parentsOf(formId), calcExpr(form,rec,expr), checkExpr(form,expr),
@@ -177,6 +178,7 @@ export function recordScope(rec, form, ctx, depth = 0) {
     let text = '';
     try { text = f.type === 'rating' ? (v == null || v === '' ? '' : `${v} of ${f.max || 5}`) : f.type === 'textarea' ? String(v ?? '') : H.fmt(f, v); } catch (e) { text = String(v ?? ''); }
     if (f.type === 'relation') v = text;
+    if (f.type === 'attachments') { v = fileNames(v); text = v.join(', '); } // |bullets lists them
     if (f.type === 'checkbox') v = !!v;
     const blocks = f.type === 'textarea' && !f.plain ? richBlocks(rec.values, f.id) : null;
     return { type: f.type === 'formula' ? (f.format === 'currency' ? 'currency' : typeof v === 'number' ? 'number' : 'text') : f.type, v, text, blocks, currency: f.currency };

@@ -51,6 +51,7 @@ export function openFor(view) {
 function show(e, c, side) {
   const v = c[side];
   if (v == null || v === '' || (Array.isArray(v) && !v.length)) return '';
+  if (c.type === 'attachments') return String(v); // "Added Permit.pdf · Removed Storefront.jpg"
   if (c.type === 'person') return personName(v);
   if (c.type === 'parent') { const r = H.recById(v); return r ? H.recTitle(r) : '(a deleted record)'; }
   if (v === 'signed' && c.type === 'signature') return 'Signed';
@@ -109,6 +110,7 @@ function entryHTML(e) {
     const from = show(e, c, 'from'), to = show(e, c, 'to');
     if (e.kind === 'commentdeleted') return `<li><span class="au-l">${esc(c.label)}</span><span class="au-v"><s>${esc(from)}</s> <i>deleted</i></span></li>`;
     if (e.kind === 'emaildeleted') return `<li><span class="au-l">${esc(c.label)}</span><span class="au-v">${esc(from)} <i>deleted</i></span></li>`;
+    if (c.type === 'attachments') return `<li><span class="au-l">${esc(changeLabel(c))}</span><span class="au-v">${esc(to)}</span></li>`;
     const pb = canPutBack(e, c) && rec ? putBackBtn(e, c, i, rec) : '';
     return `<li><span class="au-l">${esc(changeLabel(c))}</span><span class="au-v">${from ? `<s>${esc(from)}</s>` : '<i>empty</i>'} <span aria-hidden="true">→</span><span class="sr"> to </span> ${to ? `<b>${esc(to)}</b>` : '<i>empty</i>'}</span>${pb}</li>`;
   }).join('')}</ul>` : '';

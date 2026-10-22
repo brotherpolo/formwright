@@ -8,6 +8,7 @@ export function fieldKind(type) {
   if (type === 'image') return 'image';
   if (type === 'signature') return 'signature';
   if (type === 'file') return 'file';
+  if (type === 'attachments') return 'long'; // one line per file
   if (type === 'rating') return 'rating';
   if (type === 'color') return 'color';
   return 'text';
@@ -22,6 +23,7 @@ const fsize = (n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(0) 
  *   image     { kind, label, width, src: {path,url}|dataURL, name, text }
  *   signature { kind, label, width, src: dataURL, text }
  *   file      { kind, label, width, text: 'name · size' }
+ *   (Attachments print as long text: one 'name · size' line per file)
  *   rating    { kind, label, width, n, max, text }
  *   color     { kind, label, width, hex, text }
  */

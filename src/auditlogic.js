@@ -72,7 +72,7 @@ export function targetText(e) {
 /** Which changes can be put back: a field, the parent or the owner, with the whole old value kept. */
 export function canPutBack(e, c) {
   if (e.area !== 'record' || !['changed', 'moved', 'owner'].includes(e.kind)) return false;
-  if (['signature', 'file', 'image'].includes(c.type)) return false; // only their names are kept
+  if (['signature', 'file', 'image', 'attachments'].includes(c.type)) return false; // only their names are kept
   if (c.key === 'stage') return false; // a workflow move: use the stage bar
   if (typeof c.from === 'string' && c.from.length >= 1001 && c.from.endsWith('…')) return false; // shortened
   if (c.key === 'parent' || c.key === 'owner') return true;

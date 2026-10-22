@@ -34,11 +34,17 @@ export const queueDel = (id) => tx('readwrite', (s) => s.delete(id));
 
 /* ---------- pure helpers ---------- */
 
-/** Where a stand-in value sits: [{ recordId, fieldId }] (a record's own fields; grid rows are records too). */
+/** Where a stand-in value sits: [{ recordId, fieldId }] (a record's own fields, Attachments lists too; grid rows are records too). */
 export function findPending(records, id) {
   const out = [];
-  (records || []).forEach((r) => Object.entries(r.values || {}).forEach(([fid, v]) => { if (v && typeof v === 'object' && v.pending === id) out.push({ recordId: r.id, fieldId: fid }); }));
+  const has = (v) => v && typeof v === 'object' && v.pending === id;
+  (records || []).forEach((r) => Object.entries(r.values || {}).forEach(([fid, v]) => { if (has(v) || (Array.isArray(v) && v.some(has))) out.push({ recordId: r.id, fieldId: fid }); }));
   return out;
+}
+/** A field's value with the waiting file `id` uploaded to `url` (a single file, or one in an Attachments list). */
+export function fillUploaded(v, id, url) {
+  if (Array.isArray(v)) return v.map((x) => (x && x.pending === id ? uploaded(x, url) : x));
+  return v && v.pending === id ? uploaded(v, url) : v;
 }
 /** The value once uploaded: the stand-in with its url, and no longer pending. */
 export function uploaded(v, url) {

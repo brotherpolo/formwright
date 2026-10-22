@@ -66,7 +66,7 @@ export function kindOf(f, form) {
 }
 
 export function glyphOf(f) {
-  return ({ text: 'Aa', textarea: '¶', email: '@', phone: '+1', url: '//', location: '⌖', number: '#', decimal: '#', currency: '$', percent: '%', rating: '★', range: '⟷', formula: 'ƒx', date: '◷', time: '◷', datetime: '◷', checkbox: '✓', select: '▾', radio: '◉', multiselect: '☰', file: '⇪', image: '▣', color: '◐', relation: '↗', owner: '☺' })[f.type] || '·';
+  return ({ text: 'Aa', textarea: '¶', email: '@', phone: '+1', url: '//', location: '⌖', number: '#', decimal: '#', currency: '$', percent: '%', rating: '★', range: '⟷', formula: 'ƒx', date: '◷', time: '◷', datetime: '◷', checkbox: '✓', select: '▾', radio: '◉', multiselect: '☰', file: '⇪', attachments: '⧉', image: '▣', color: '◐', relation: '↗', owner: '☺' })[f.type] || '·';
 }
 
 /* ---------- forms above a form (parents) ---------- */

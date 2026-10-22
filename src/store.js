@@ -25,7 +25,7 @@ import {
 import { ref, uploadBytes, getDownloadURL, getBlob, deleteObject } from 'firebase/storage';
 import { isAdmin, formLevel, effectiveAccess, withInherited } from './access.js';
 import { clone } from './util.js';
-import { queuePut, queueAll, queueGet, queueDel, findPending, uploaded, stale } from './offlinequeue.js';
+import { queuePut, queueAll, queueGet, queueDel, findPending, fillUploaded, stale } from './offlinequeue.js';
 
 /* ---------- working with no signal ----------
    Firestore keeps a copy of everything on this device and holds changes made offline until the
@@ -1058,7 +1058,7 @@ export async function templateBytes(t) {
 export async function uploadFile(file, formId) {
   const me = store.user.uid;
   const safe = file.name.replace(/[^\w.\-]+/g, '_').slice(-80);
-  const path = `uploads/${formId}/${me}/${Date.now()}-${safe}`;
+  const path = `uploads/${formId}/${me}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${safe}`; // several at once never share a name
   const base = { name: file.name, size: file.size, type: file.type, path };
   // no signal, or the upload doesn't finish in time: keep it on this device and upload it later
   const later = async () => {
@@ -1092,6 +1092,7 @@ export async function flushUploads() {
     offline.uploads = items.length; offlineChanged();
     if (!isOnline() || !store.ready) return;
     for (const x of stale(items, store.records)) { await queueDel(x.id); offline.uploads--; } // picked for a form that was never saved
+    const done = new Map(); // uploaded in this run: id → url (the records may not show it yet)
     for (const x of items) {
       const where = findPending(store.records, x.id);
       if (!where.length) continue; // not saved into a record yet: wait
@@ -1101,8 +1102,11 @@ export async function flushUploads() {
         const url = await getDownloadURL(r);
         for (const w of where) {
           const rec = store.records.find((y) => y.id === w.recordId);
-          await _updateDoc(doc(db, 'records', w.recordId), { ['values.' + w.fieldId]: plain(uploaded(rec.values[w.fieldId], url)), updatedAt: Date.now(), updatedBy: store.user.uid });
+          let v = rec.values[w.fieldId];
+          for (const [id, u] of done) v = fillUploaded(v, id, u);
+          await _updateDoc(doc(db, 'records', w.recordId), { ['values.' + w.fieldId]: plain(fillUploaded(v, x.id, url)), updatedAt: Date.now(), updatedBy: store.user.uid });
         }
+        done.set(x.id, url);
         await queueDel(x.id);
         offline.uploads--; offlineChanged();
       } catch (e) {
