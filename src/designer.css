@@ -269,6 +269,8 @@ body.pd-on .pgrip{cursor:grabbing}
 .ft-preview{padding:12px 14px;border-color:var(--accent)}
 .ft-preview .actions,.ft-acts{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
 .ft-acts .grow{flex:1}
+.ft-acts{justify-content:flex-start;margin:0;padding:8px 2px 0}
+.ft-acts.ft-risk{color:var(--fg);font-weight:600}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer}
 .fv-banner{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 14px;margin:0 0 12px;border-color:var(--accent);background:var(--accent-soft)}
 .fv-banner .grow{flex:1;min-width:220px;display:flex;flex-direction:column;gap:2px}

@@ -131,9 +131,9 @@ const CHEAT = `<details class="fxref ft-help"><summary>How to write fields</summ
   <p><b>The @tag</b> at the end of a line is that field’s identity. Change anything before it and it’s still the same field, with its saved values. To add a field, write a new line without a tag. Delete a line to remove the field (saved values are kept, hidden, and Version history can bring it back).</p></div></details>`;
 
 export function viewText(f) {
-  if (!V.text) V.text = { value: textOf(f), base: textOf(f), dirty: false, result: null, preview: null };
+  if (!V.text) V.text = { value: textOf(f), base: textOf(f), dirty: false, result: null, summary: null, risk: null };
   const t = V.text, n = t.value.split('\n').length;
-  const errs = t.result?.errors || [], warns = t.result?.warnings || t.preview?.warnings || [];
+  const errs = t.result?.errors || [], warns = t.result?.warnings || [];
   const pp = paint(t.value, { caretLine: 0, problems: liveProblems(t.value) });
   return `<div class="ft">
     ${CHEAT}
@@ -141,8 +141,7 @@ export function viewText(f) {
     <div class="ft-ed"><div class="ft-gut" aria-hidden="true"><div class="ft-gutin">${pp.gut}</div></div><div class="ft-code"><div class="ft-hl" aria-hidden="true"><div class="ft-hlin">${pp.code}</div></div><textarea class="ft-in" data-ftext="1" spellcheck="false" autocapitalize="off" autocomplete="off" rows="${Math.min(40, Math.max(14, n + 2))}" aria-label="Fields as text" wrap="off">${esc(t.value)}</textarea></div></div>
     ${errs.length ? `<div class="panel am-warn ft-errs" role="alert"><b>${errs.length === 1 ? '1 thing to fix' : errs.length + ' things to fix'}</b><ul>${errs.map((e) => `<li><button type="button" class="linkbtn" data-fv="line" data-line="${e.line}">Line ${e.line}</button>: ${esc(e.msg)}</li>`).join('')}</ul></div>` : ''}
     ${!errs.length && warns.length ? `<div class="panel ft-warns" role="note"><ul>${warns.map((e) => `<li><button type="button" class="linkbtn" data-fv="line" data-line="${e.line}">Line ${e.line}</button>: ${esc(e.msg)}</li>`).join('')}</ul></div>` : ''}
-    ${t.preview ? `<div class="panel ft-preview" role="region" aria-label="Changes to apply"><b>Apply these changes?</b><ul>${t.preview.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p class="help">They go into the designer. Nothing is live until you press Save form (or Save as draft).</p><div class="actions"><button type="button" class="btn ghost" data-fv="keep">Keep editing</button><button type="button" class="btn primary" data-fv="confirm" id="ft-confirm">Apply</button></div></div>` : ''}
-    <div class="actions ft-acts"><span class="help grow">${t.dirty ? 'Changes not applied yet.' : 'Matches the designer.'}</span><button type="button" class="btn ghost" data-fv="reset"${t.dirty ? '' : ' disabled'}>Reset</button><button type="button" class="btn primary" data-fv="apply"${t.dirty ? '' : ' disabled'}>Apply changes</button></div>
+    <p class="ft-acts help${t.risk === t.value && t.dirty ? ' ft-risk' : ''}" id="ft-status" role="status" aria-live="polite">${statusText()}</p>
   </div>`;
 }
 
@@ -190,28 +189,72 @@ if (typeof document !== 'undefined') {
   document.addEventListener('focusout', (e) => { if (e.target?.dataset?.ftext) setTimeout(() => repaint(e.target), 0); });
 }
 
-function applyText(f) {
-  const t = V.text; if (!t) return;
-  const saved = H.formById(f.id);
+/** The text read against the designer: { r (parse), lines (what changes), risky (lines needing a yes) }. */
+function readText(f) {
+  const t = V.text, saved = H.formById(f.id);
   const r = textToFields(t.value, { fields: f.fields, known: (saved?.fields || []).map((x) => x.id), forms: H.forms().filter((x) => x.id !== f.id).concat([{ id: f.id, name: f.name }]), newId: H.newId });
-  t.result = r;
-  if (r.errors.length) { t.preview = null; H.renderMain(); setTimeout(() => document.querySelector('.ft-errs')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 0); return; }
-  const lines = changeLines(fieldChanges(f.fields, r.fields, countValues(f.id)));
-  (r.given || []).forEach((g) => { const l = `${g.label}: system name set to “${g.sysName}”, since another field is called that. Rename it with system name "…" if you like.`; if (!lines.includes(l)) lines.push(l); });
-  if (!lines.length) { t.result = null; t.preview = null; t.base = t.value; t.dirty = false; H.renderMain(); H.toast('Nothing changed.'); return; }
-  t.preview = { fields: r.fields, lines, warnings: r.warnings };
-  H.renderMain();
-  setTimeout(() => { const b = document.getElementById('ft-confirm'); b?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); b?.focus({ preventScroll: true }); }, 0);
+  if (r.errors.length) return { r, lines: [], risky: [] };
+  const ch = fieldChanges(f.fields, r.fields, countValues(f.id));
+  const lines = changeLines(ch);
+  (r.given || []).forEach((g) => { const l = `${g.label}: system name set to “${g.sysName}”, since another field is called that`; if (!lines.includes(l)) lines.push(l); });
+  const risky = [
+    ...ch.removed.filter((x) => x.values).map((x) => `removes ${x.label} (${x.values} record${x.values === 1 ? ' has' : 's have'} a value; kept hidden, and Version history can bring it back)`),
+    ...ch.retyped.map((l) => `changes the type of ${l}`),
+  ];
+  return { r, lines, risky };
 }
-function confirmText(f) {
-  const t = V.text; if (!t?.preview) return;
-  f.fields = t.preview.fields;
-  if (f.titleField && !f.fields.some((x) => x.id === f.titleField)) f.titleField = '';
-  H.setFdirty();
+/** The line under the editor: what Save form will do, what to fix, or what it asks first. */
+function statusText() {
+  const t = V.text, f = H.fdraft();
+  if (!t || !f || !t.dirty) return 'No changes in the text.';
+  if (t.result?.errors?.length) { const e = t.result.errors[0]; return `Fix line ${e.line} first: ${e.msg}`; }
+  const x = t.summary;
+  if (!x) return 'Checking…';
+  if (t.risk === t.value && x.risky.length) return `This ${x.risky.join(' and ')}. Press Save form again to save, or change the text.`;
+  return x.lines.length ? x.lines.join(' · ') + '. Save form to put it live.' : 'No changes to the fields.';
+}
+let sumTimer = 0;
+function summarize() {
+  clearTimeout(sumTimer);
+  sumTimer = setTimeout(() => {
+    const t = V.text, f = H.fdraft(); if (!t || !f) return;
+    if (!t.dirty) { t.summary = null; t.result = null; } else { const x = readText(f); t.summary = { lines: x.lines, risky: x.risky }; t.result = x.r.errors.length ? x.r : null; }
+    if (!t.result?.errors?.length) document.querySelector('.ft-errs')?.setAttribute('hidden', '');
+    const el = document.getElementById('ft-status'); if (el) { el.textContent = statusText(); el.classList.toggle('ft-risk', t.risk === t.value && !!t.summary?.risky.length); }
+  }, 250);
+}
+/**
+ * Put the text into the designer (Save form, Save as draft and switching to Visual call this).
+ * true when the designer now matches the text; false when there's something to fix, or a removal
+ * or type change to confirm (pressing again confirms).
+ */
+export function commitText() {
+  const t = V.text, f = H.fdraft();
+  if (!t || !f || !t.dirty) return true;
+  const x = readText(f);
+  t.result = x.r;
+  if (x.r.errors.length) {
+    H.renderMain();
+    setTimeout(() => document.querySelector('.ft-errs')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 0);
+    H.toast(`Fix line ${x.r.errors[0].line} first.`);
+    return false;
+  }
+  t.summary = { lines: x.lines, risky: x.risky };
+  if (x.risky.length && t.risk !== t.value) {
+    t.risk = t.value;
+    H.renderMain();
+    setTimeout(() => document.getElementById('ft-status')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 0);
+    H.toast('This ' + x.risky.join(' and ') + '. Press again to go ahead.', { duration: 8000 });
+    return false;
+  }
+  if (x.lines.length) {
+    f.fields = x.r.fields;
+    if (f.titleField && !f.fields.some((y) => y.id === f.titleField)) f.titleField = '';
+    H.setFdirty();
+  }
   const txt = textOf(f);
-  V.text = { value: txt, base: txt, dirty: false, result: null, preview: null };
-  H.renderMain();
-  H.toast('Applied. Press Save form to put it live, or Save as draft.');
+  V.text = { value: txt, base: txt, dirty: false, result: null, summary: null, risk: null };
+  return true;
 }
 function goLine(n, top = false) {
   const ta = document.querySelector('[data-ftext]'); if (!ta) return;
@@ -301,15 +344,12 @@ export function onClick(el) {
   switch (a) {
     case 'visual':
       if (V.view === 'visual') return true;
-      if (V.text?.dirty) { H.toast('Apply your text changes, or press Reset, before switching to Visual.'); return true; }
+      if (!commitText()) return true; // something to fix, or to confirm first: stay on Text
       V.view = 'visual'; V.text = null; H.renderMain(); return true;
     case 'text':
       if (V.view === 'text') return true;
       V.view = 'text'; V.text = null; H.closeField(); H.renderMain(); setTimeout(() => document.querySelector('[data-ftext]')?.focus({ preventScroll: true }), 0); return true;
-    case 'apply': applyText(f); return true;
-    case 'keep': if (V.text) V.text.preview = null; H.renderMain(); setTimeout(() => document.querySelector('[data-ftext]')?.focus(), 0); return true;
-    case 'confirm': confirmText(f); return true;
-    case 'reset': V.text = { value: textOf(f), base: textOf(f), dirty: false, result: null, preview: null }; H.renderMain(); return true;
+    case 'reset': V.text = { value: textOf(f), base: textOf(f), dirty: false, result: null, summary: null, risk: null }; H.renderMain(); return true;
     case 'line': goLine(+el.dataset.line); return true;
     case 'jump': goLine(+el.dataset.line, true); return true;
     case 'draft-skip': V.bannerOff = true; H.renderMain(); return true;
@@ -336,7 +376,7 @@ export function onClick(el) {
 }
 export async function saveAsDraft() {
   const f = H.fdraft(); if (!f) return;
-  if (textPending()) { H.toast('Apply your text changes first (or press Reset).'); return; }
+  if (textPending() && !commitText()) return;
   if (!String(f.name || '').trim()) { H.toast('Give the form a name first.'); return; }
   const v = await saveDraft(f);
   if (!v) return;
@@ -348,13 +388,9 @@ export function onInput(el) {
   if (!el.dataset?.ftext || !V.text) return false;
   V.text.value = el.value;
   repaint(el);
-  const was = V.text.dirty;
   V.text.dirty = el.value !== V.text.base;
   if (V.text.dirty) H.setFdirty();
-  if (was !== V.text.dirty) {
-    const r = document.querySelector('[data-fv="apply"]'), s = document.querySelector('[data-fv="reset"]'), h = document.querySelector('.ft-acts .help');
-    if (r) r.disabled = !V.text.dirty; if (s) s.disabled = !V.text.dirty; if (h) h.textContent = V.text.dirty ? 'Changes not applied yet.' : 'Matches the designer.';
-  }
+  summarize();
   return true;
 }
 export function onChange(el) {

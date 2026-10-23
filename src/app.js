@@ -2297,7 +2297,7 @@ function setFdirty(){fdraft.dirty=true;const n=$('#fdirty');if(n)n.textContent='
 async function saveForm(meta){
   const f=fdraft;
   if(meta)ui.saveMeta=meta;
-  if(fv.textPending()){ui.saveMeta=null;toast('Apply your text changes first (or press Reset).');return;}
+  if(fv.textPending()&&!fv.commitText()){ui.saveMeta=null;return;} // the text goes into the form first (or says what to fix)
   if(!f.name.trim()){toast('Give the form a name first.');$('.title-in')?.focus();return;}
   {const wp=checkWorkflow(f,{people:new Set(store.users.map(u=>u.id)),groups:new Set(store.groups.map(g=>g.id)),roles:new Set((store.roles||[]).map(r=>r.id))});if(wp.length){ui.tab='workflow';renderMain();toast('Workflow: '+wp[0]);return;}}
   if(f.workflow?.stages){f.workflow.stages.forEach(x=>{x.name=String(x.name||'').trim();x.moves=(x.moves||[]).filter(m=>m.label&&m.label.trim()&&f.workflow.stages.some(y=>y.id===m.to));});}
