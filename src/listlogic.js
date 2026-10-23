@@ -16,11 +16,16 @@ import { cleanLayout } from './layoutlogic.js';
 import { shownName } from './fieldnames.js';
 import { richBlocks, cellRichHTML } from './richtext.js';
 import { titleFieldOf } from './reportlogic.js';
+import { isReadOnly } from './fixedlogic.js';
 
 export const NOCOL = new Set(['heading', 'instructions', 'signature']);
 export const NUMERIC = new Set(['number', 'decimal', 'currency', 'percent', 'range', 'rating']);
 export const FILTERABLE = new Set(['select', 'radio', 'multiselect', 'checkbox']);
-export const SETTABLE = new Set(['select', 'radio', 'checkbox']);
+export const SETTABLE = new Set(['select', 'radio', 'checkbox']); // the quick one-click choices
+/** Set field (several records): every field people can edit; not read only, lookups, calculations, auto numbers, files. */
+const BULK_TYPES = new Set(['text', 'textarea', 'email', 'phone', 'url', 'number', 'decimal', 'currency', 'percent', 'rating', 'range', 'date', 'time', 'datetime', 'checkbox', 'select', 'radio', 'multiselect', 'relation', 'color']);
+export const bulkFields = (form) => (form?.fields || []).filter((f) => BULK_TYPES.has(f.type) && !isReadOnly(f) && (!['select', 'radio', 'multiselect'].includes(f.type) || optionsOf(f).length));
+
 export const DEFAULT_PREFIX = 'dflt-';
 export const MAX_COLS = 30;
 const SUMMABLE = new Set(['number', 'decimal', 'currency']);
@@ -317,3 +322,21 @@ export function toCsv(headers, rows) {
   };
   return [headers, ...rows].map((r) => r.map(q).join(',')).join('\r\n');
 }
+
+/** What Set field writes for a typed value, or { error }. */
+export function parseBulk(f, raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return { error: f.type === 'relation' ? 'Choose a record first.' : 'Enter a value first, or use Clear.' };
+  if (['number', 'decimal', 'currency', 'percent', 'range', 'rating'].includes(f.type)) {
+    const n = Number(s); if (!Number.isFinite(n)) return { error: 'Enter a number.' };
+    if (f.type === 'number' && !Number.isInteger(n)) return { error: 'Enter a whole number.' };
+    if (f.min != null && f.min !== '' && n < f.min) return { error: `Must be ${f.min} or more.` };
+    if (f.max != null && f.max !== '' && f.type !== 'rating' && n > f.max) return { error: `Must be ${f.max} or less.` };
+    return { value: n };
+  }
+  if (f.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return { error: 'Enter an email like name@example.com.' };
+  if (f.type === 'phone' && (!/^[+()\-.\s\d]+$/.test(s) || s.replace(/\D/g, '').length < 7)) return { error: 'Enter a phone number with at least 7 digits.' };
+  return { value: s };
+}
+/** A multiple choice with one option added or removed (the record's others kept). */
+export const multiWith = (cur, opt, op) => { const l = Array.isArray(cur) ? cur.slice() : []; if (op === 'add') { if (!l.includes(opt)) l.push(opt); } else { const i = l.indexOf(opt); if (i >= 0) l.splice(i, 1); } return l; };

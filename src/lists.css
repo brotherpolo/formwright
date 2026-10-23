@@ -288,3 +288,14 @@ body:has(.bd-ghost){cursor:grabbing;user-select:none}
   .bd-more{width:34px;height:34px}
   .tl-pop{left:8px;right:8px}
 }
+
+/* Set field: pick a field, then its value */
+.lv-setpop{min-width:260px;max-width:min(360px,92vw);max-height:min(70vh,520px);overflow:auto}
+.lv-setpop .lv-back{color:var(--accent);font-weight:600}
+.lv-setbox,.lv-setrow{display:flex;gap:8px;align-items:center;padding:6px 8px}
+.lv-setbox .in,.lv-setrow .in{flex:1;min-width:0}
+.lv-setbox .lv-setrow{padding:0;flex:1}
+.lv-mrow{display:flex;align-items:center;gap:6px;padding:4px 8px}
+.lv-mrow span{flex:1;min-width:0}
+.lv-n{color:var(--muted);font-size:12px;margin-left:6px}
+.lv-clear{color:var(--muted)}

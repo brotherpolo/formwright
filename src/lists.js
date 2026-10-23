@@ -2,7 +2,8 @@
 // height, and selecting several records to change, export or delete together.
 // Column and view logic lives in listlogic.js; app.js passes in its formatting helpers.
 import './lists.css';
-import { store, saveListView, deleteListView, deleteRecords, setRecordsValue, setRecordsValues, attachRecords, setOwner } from './store.js';
+import { store, saveListView, deleteListView, deleteRecords, setRecordsValue, setRecordsValues, setValuesEach, attachRecords, setOwner, moveStage } from './store.js';
+import { wfOn, stagesOf, stageById, stageIndex, stageName, canWork, assigneeFor, movesOf, missingToMove } from './workflow.js';
 import { bindLayouts, layoutSeg, layoutTools, boardHTML, timelineHTML, afterLayout, onClick as llClick, onChange as llChange, onKey as llKey, closeMenus as llClose } from './listlayouts.js';
 import { cleanLayout } from './layoutlogic.js';
 import { openPickParent } from './attach.js';
@@ -14,7 +15,7 @@ import { importButton } from './imports.js';
 import {
   columnCatalog, defaultConfig, cleanConfig, sameConfig, cellOf, filterRecords, searchRows, sortRows, firstDir,
   columnTotal, viewsFor, canSaveView, canDeleteView, viewDoc, toCsv, optionsOf, defaultViewId, filterCount,
-  FILTERABLE, SETTABLE, MAX_COLS,
+  FILTERABLE, MAX_COLS, bulkFields, parseBulk, multiWith,
 } from './listlogic.js';
 
 let H = { ruleImpact: null, applyRuleChange: null, fmt: null, valOf: null, recTitle: null, titleFieldOf: null, parentsOf: null, formById: null, recById: null, recordsOf: null, renderMain: null, withFormulas: (f, r, ch) => ch, search: () => '' };
@@ -127,7 +128,7 @@ export function viewRecords(form) {
   const lay = cfg.layout?.kind || 'table';
   bindLayouts(layEnv(form, shown, cfg));
   const filterable = (form.fields || []).filter((f) => FILTERABLE.has(f.type) && optionsOf(f).length);
-  const settable = (form.fields || []).filter((f) => SETTABLE.has(f.type) && optionsOf(f).length);
+  const settable = bulkFields(form);
 
   const scope = lvl.view === 'own'
     ? `<p class="scope-note"><span class="chip acc">Only yours</span> You see the ${esc(form.name.toLowerCase())} you created.${lvl.edit === 'none' ? ' Read only.' : ''}</p>`
@@ -160,7 +161,7 @@ export function viewRecords(form) {
     ${LV.sel.size && lay === 'table' ? bulkBar(form, selRecs, editable, selHidden, settable) : ''}
     ${rows.length && lay === 'board' ? boardHTML(form, rows, cfg, layEnv(form, shown, cfg)) : rows.length && lay === 'timeline' ? timelineHTML(form, rows, cfg, layEnv(form, shown, cfg)) : rows.length ? table(form, c, shown, rows, allOn, someOn, cfg) + cards(form, shown, rows, allOn, `${rows.length} of ${all.length}`, cfg.density) : `<div class="panel empty"><p>No ${esc(form.name.toLowerCase())} match ${H.search().trim() ? `“${esc(H.search())}”` : 'these filters'}.</p>${filterCount(cfg) ? '<button class="btn" data-lv="filter-clear">Clear filters</button>' : ''}</div>`}
     ${LV.sheet ? sheetHTML(form, c, shown, cfg, filterable, all, view, admin, dirty) : ''}
-    ${LV.confirm ? confirmDialog(form, selRecs, editable) : ''}${LV.setAsk && LV.setAsk.form.id === form.id ? setAskDialog() : ''}
+    ${LV.confirm ? confirmDialog(form, selRecs, editable) : ''}${LV.setAsk && LV.setAsk.form.id === form.id ? setAskDialog() : ''}${LV.stageAsk && LV.stageAsk.formId === form.id ? stageAskDialog(form) : ''}
   </div>`;
 }
 
@@ -276,14 +277,11 @@ function bulkBar(form, selRecs, editable, selHidden, settable) {
   const none = !editable.length;
   const skipped = selRecs.length - editable.length;
   let setPop = '';
-  if (LV.pop === 'set' && !none) {
-    setPop = `<div class="lv-pop right"><p class="lv-hint">Applies to ${plural(editable.length, form)}${skipped ? ` (${skipped} you can’t edit ${skipped === 1 ? 'is' : 'are'} skipped)` : ''}.</p>
-      ${settable.map((f) => `<div class="lv-sec">${esc(f.label)}</div>${optionsOf(f).map((o) => `<button type="button" class="lv-opt" data-lv="set" data-f="${esc(f.id)}" data-v="${esc(o)}">${esc(o)}</button>`).join('')}`).join('')}</div>`;
-  }
+  if (LV.pop === 'set' && !none) setPop = `<div class="lv-pop right lv-setpop">${setPopHTML(form, selRecs, editable, skipped, settable)}</div>`;
   return `<div class="lv-bulk" role="region" aria-label="Selected records">
     <b>${selRecs.length} selected</b>${selHidden ? `<span class="lv-note">${selHidden} hidden by filters</span>` : ''}${none ? '<span class="lv-note">You can’t change these</span>' : ''}
     <span class="lv-grow"></span>
-    ${settable.length ? `<div class="lv-anchor"><button type="button" class="btn" data-lv="pop" data-v="set"${none || LV.busy ? ' disabled' : ''}>Set field</button>${setPop}</div>` : ''}
+    ${settable.length || wfOn(form) ? `<div class="lv-anchor"><button type="button" class="btn" data-lv="pop" data-v="set"${(none && !wfOn(form)) || LV.busy ? ' disabled' : ''}>Set field</button>${setPop}</div>` : ''}
     ${isAdmin(store.me) ? ownerAnchor(selRecs) : ''}
     ${H.parentsOf(form.id).some((pf) => canViewForm(store.me, pf.id)) ? `<button type="button" class="btn" data-lv="attach-to"${none || LV.busy ? ' disabled' : ''}>Attach to…</button>` : ''}
     <button type="button" class="btn" data-lv="export">Export CSV</button>
@@ -515,12 +513,157 @@ function selectedEditable() {
   return { form, all: recs, recs: recs.filter((r) => canEditRecord(store.me, r)) };
 }
 
+/* ---------- Set field on the selected records ----------
+   Any field people can edit (not read only, lookups, calculations or auto numbers): a value for
+   all of them, Clear, Add or Remove one option of a multiple choice; for workflow forms, Move to
+   stage and (admins) Person responsible. Only the field itself is written on each record. The
+   form's rules are checked first: when they'd empty other fields it asks, and that change goes in
+   Import history (Undo, administrators). The audit trail has every change. */
+const blankV = (v) => v == null || v === '' || (Array.isArray(v) && !v.length);
+const todayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+function setPopHTML(form, selRecs, editable, skipped, settable) {
+  const applies = `<p class="lv-hint">Applies to ${plural(editable.length, form)}${skipped ? ` (${skipped} you can’t edit ${skipped === 1 ? 'is' : 'are'} skipped)` : ''}.</p>`;
+  const k = LV.setF;
+  if (!k) {
+    const wf = wfOn(form);
+    return applies + (settable.length ? `<div class="lv-sec">Fields</div>${settable.map((f) => `<button type="button" class="lv-opt" data-lv="set-pick" data-f="${esc(f.id)}">${esc(f.label || 'Untitled')}</button>`).join('')}` : '')
+      + (wf ? `<div class="lv-sec">Workflow</div><button type="button" class="lv-opt" data-lv="set-pick" data-f="_stage">Move to stage…</button>${isAdmin(store.me) ? '<button type="button" class="lv-opt" data-lv="set-pick" data-f="_assignee">Person responsible…</button>' : ''}` : '');
+  }
+  const back = `<button type="button" class="lv-opt lv-back" data-lv="set-pick" data-f="">‹ All fields</button>`;
+  if (k === '_stage') {
+    const opts = stagesOf(form).map((st) => { const n = stageMovable(form, selRecs, st).ok.length; return `<button type="button" class="lv-opt" data-lv="stage-ask" data-v="${esc(st.id)}"${n ? '' : ' disabled'}>${esc(st.name)} <span class="lv-n">${n ? n + ' can move' : 'none can move'}</span></button>`; }).join('');
+    return back + `<div class="lv-sec">Move to stage</div><p class="lv-hint">${isAdmin(store.me) ? 'As an administrator you can move them to any stage.' : 'Only records you’re responsible for, along the form’s moves.'}</p>${opts}`;
+  }
+  if (k === '_assignee') {
+    const people = [...store.users].map((u) => ({ id: u.id, name: store.profiles[u.id]?.displayName || u.displayName || (u.email || '').split('@')[0] || 'Unnamed user' })).sort((a, b) => a.name.localeCompare(b.name));
+    const n = selRecs.filter((r) => r.stage).length;
+    return back + `<div class="lv-sec">Person responsible</div><p class="lv-hint">For the ${plural(n, form)} at a stage; it’s noted in each one’s stage history.</p>${people.map((p) => `<button type="button" class="lv-opt" data-lv="set-assignee" data-v="${esc(p.id)}"${n ? '' : ' disabled'}>${esc(p.name)}</button>`).join('')}`;
+  }
+  const f = (form.fields || []).find((x) => x.id === k); if (!f) return back;
+  const clear = f.required ? '' : `<button type="button" class="lv-opt lv-clear" data-lv="set-clear" data-f="${esc(f.id)}">Clear ${esc(f.label)}</button>`;
+  const head = back + `<div class="lv-sec">${esc(f.label)}</div>`;
+  if (f.type === 'select' || f.type === 'radio') return head + optionsOf(f).map((o) => `<button type="button" class="lv-opt" data-lv="set" data-f="${esc(f.id)}" data-v="${esc(o)}">${esc(o)}</button>`).join('') + clear;
+  if (f.type === 'checkbox') return head + ['Yes', 'No'].map((o) => `<button type="button" class="lv-opt" data-lv="set" data-f="${esc(f.id)}" data-v="${o}">${o}</button>`).join('');
+  if (f.type === 'multiselect') return head + `<p class="lv-hint">Adds or removes one choice and keeps the others each record has.</p>` + optionsOf(f).map((o) => `<div class="lv-mrow"><span>${esc(o)}</span><button type="button" class="btn sm" data-lv="set-multi" data-op="add" data-f="${esc(f.id)}" data-v="${esc(o)}">Add</button><button type="button" class="btn sm ghost" data-lv="set-multi" data-op="remove" data-f="${esc(f.id)}" data-v="${esc(o)}">Remove</button></div>`).join('') + clear;
+  let ctl;
+  const mm = (f.min != null && f.min !== '' ? ` min="${f.min}"` : '') + (f.max != null && f.max !== '' && f.type !== 'rating' ? ` max="${f.max}"` : '');
+  switch (f.type) {
+    case 'relation': { const recs = (H.recordsOf(f.relForm) || []).map((r) => ({ r, t: H.recTitle(r, H.formById(f.relForm)) })).sort((a, b) => a.t.localeCompare(b.t)).slice(0, 1000); ctl = `<select class="in" id="lv-setval" aria-label="${esc(f.label)}"><option value="">Choose…</option>${recs.map(({ r, t }) => `<option value="${esc(r.id)}">${esc(t)}</option>`).join('')}</select>`; break; }
+    case 'date': ctl = `<div class="lv-setrow"><input class="in" type="date" id="lv-setval" aria-label="${esc(f.label)}"><button type="button" class="btn sm" data-lv="set-today">Today</button></div>`; break;
+    case 'time': ctl = `<input class="in" type="time" id="lv-setval" aria-label="${esc(f.label)}">`; break;
+    case 'datetime': ctl = `<input class="in" type="datetime-local" id="lv-setval" aria-label="${esc(f.label)}">`; break;
+    case 'number': case 'decimal': case 'currency': case 'percent': case 'range': ctl = `<input class="in" type="number" step="any" inputmode="decimal" id="lv-setval"${mm} aria-label="${esc(f.label)}">`; break;
+    case 'rating': { const mx = f.max || 5; ctl = `<select class="in" id="lv-setval" aria-label="${esc(f.label)}">${Array.from({ length: mx }, (_, i) => `<option value="${i + 1}">${'★'.repeat(i + 1)}</option>`).join('')}</select>`; break; }
+    case 'color': ctl = `<input type="color" id="lv-setval" value="#3346c8" aria-label="${esc(f.label)}">`; break;
+    case 'email': ctl = `<input class="in" type="email" inputmode="email" id="lv-setval" aria-label="${esc(f.label)}">`; break;
+    case 'url': ctl = `<input class="in" type="url" inputmode="url" id="lv-setval" placeholder="https://" aria-label="${esc(f.label)}">`; break;
+    case 'phone': ctl = `<input class="in" type="tel" inputmode="tel" id="lv-setval" aria-label="${esc(f.label)}">`; break;
+    default: ctl = `<input class="in" type="text" id="lv-setval" aria-label="${esc(f.label)}">`;
+  }
+  return head + `<div class="lv-setbox">${ctl}<button type="button" class="btn primary sm" data-lv="set-apply" data-f="${esc(f.id)}">Set</button></div>` + clear;
+}
+
+/** Set (or change) one field on each selected record; setFor(rec) → the value, or undefined to leave it. */
+async function bulkSet(form, recs, setFor, what, hist = what) {
+  const rows = recs.map((r) => ({ r, set: setFor(r) })).filter((x) => x.set);
+  LV.pop = null; LV.setF = null;
+  if (!rows.length) { toast('Nothing to change: they already have that.'); repaint(); return; }
+  const im = form.rules?.length && H.ruleImpact ? H.ruleImpact(form, rows.map((x) => ({ ...x.r, values: { ...(x.r.values || {}), ...x.set } }))) : { rows: [] };
+  if (im.rows.length) { LV.setAsk = { form, recs: rows.map((x) => x.r), sets: new Map(rows.map((x) => [x.r.id, x.set])), what, many: true, hist: ('Set field: ' + hist).slice(0, 80), im, busy: false }; repaint(); setTimeout(() => $('#lv-set-go')?.focus(), 0); return; }
+  LV.busy = true; repaint();
+  // only the field itself is written on each record, so someone else's edit to another field (or one made offline) is never overwritten
+  try { await setValuesEach(rows.map((x) => [x.r, x.set])); toast(`${what} on ${plural(rows.length, form)}`); }
+  catch (e) { console.error('[formwright] set field', e); toast(e?.code === 'permission-denied' ? 'You can’t change some of those. Nothing was changed.' : 'Couldn’t change those records. Check your connection and try again.'); }
+  LV.busy = false; repaint();
+}
 async function setField(fid, opt) {
   const { form, recs } = selectedEditable(); if (!form || !recs.length) return;
   const f = (form.fields || []).find((x) => x.id === fid); if (!f) return;
   const value = f.type === 'checkbox' ? opt === 'Yes' : opt;
-  LV.pop = null;
-  await applySet(form, recs, { [fid]: value }, `Set ${f.label} to ${opt}`, true, `Set field: ${f.label} → ${opt}`);
+  await bulkSet(form, recs, (r) => (JSON.stringify(r.values?.[fid] ?? null) === JSON.stringify(value) ? undefined : { [fid]: value }), `Set ${f.label} to ${opt}`, `${f.label} → ${opt}`);
+}
+async function setTyped(fid) {
+  const { form, recs } = selectedEditable(); if (!form || !recs.length) return;
+  const f = (form.fields || []).find((x) => x.id === fid); if (!f) return;
+  const el = document.getElementById('lv-setval');
+  const p = parseBulk(f, el?.value); if (p.error) { toast(p.error); el?.focus(); return; }
+  const shown = f.type === 'relation' ? (() => { const r = H.recById(p.value); return r ? H.recTitle(r, H.formById(r.formId)) : 'a record'; })() : f.type === 'rating' ? '★'.repeat(p.value) : String(p.value);
+  await bulkSet(form, recs, (r) => (JSON.stringify(r.values?.[fid] ?? null) === JSON.stringify(p.value) ? undefined : { [fid]: p.value }), `Set ${f.label} to ${shown}`, `${f.label} → ${shown}`);
+}
+async function clearField(fid) {
+  const { form, recs } = selectedEditable(); if (!form || !recs.length) return;
+  const f = (form.fields || []).find((x) => x.id === fid); if (!f) return;
+  await bulkSet(form, recs, (r) => (blankV(r.values?.[fid]) ? undefined : { [fid]: f.type === 'multiselect' ? [] : null }), `Cleared ${f.label}`, `${f.label} cleared`);
+}
+async function setMulti(fid, opt, op) {
+  const { form, recs } = selectedEditable(); if (!form || !recs.length) return;
+  const f = (form.fields || []).find((x) => x.id === fid); if (!f) return;
+  await bulkSet(form, recs, (r) => { const cur = Array.isArray(r.values?.[fid]) ? r.values[fid] : []; const next = multiWith(cur, opt, op); return next.length === cur.length ? undefined : { [fid]: next }; }, `${op === 'add' ? 'Added' : 'Removed'} ${opt} ${op === 'add' ? 'to' : 'from'} ${f.label}`, `${f.label} ${op === 'add' ? '+' : '−'} ${opt}`);
+}
+
+/** Which selected records can move to a stage, and why the others can't: { ok, skip: { why: n } }. */
+function stageMovable(form, recs, st) {
+  const admin = isAdmin(store.me), ok = [], skip = {};
+  const no = (why) => { skip[why] = (skip[why] || 0) + 1; };
+  recs.forEach((r) => {
+    if (r.stage === st.id) return no('already there');
+    if (!admin) {
+      if (!canWork(r, store.me)) return no('you’re not responsible for');
+      const m = movesOf(form, r.stage).find((x) => x.to === st.id);
+      if (!m) return no('can’t move there from their stage');
+      if (stageIndex(form, st.id) > stageIndex(form, r.stage) && missingToMove(form, r.stage, r.values || {}, blankV).length) return no('need fields filled in first');
+      ok.push({ r, label: m.label || 'Moved', comment: !!m.comment }); return;
+    }
+    ok.push({ r, label: 'Moved by an administrator', comment: false });
+  });
+  return { ok, skip };
+}
+function stageAskDialog(form) {
+  const a = LV.stageAsk, st = stageById(form, a.to); if (!st) return '';
+  const m = stageMovable(form, a.recs, st), need = m.ok.some((x) => x.comment);
+  const skips = Object.entries(m.skip).map(([why, n]) => `${n} ${why}`).join(', ');
+  return `<div class="lv-scrim" data-lv="stage-cancel"><div class="lv-dlg" role="dialog" aria-modal="true" aria-labelledby="lv-st-h">
+    <h2 id="lv-st-h">Move ${plural(m.ok.length, form)} to ${esc(st.name)}?</h2>
+    ${skips ? `<p>Skipped: ${esc(skips)}.</p>` : ''}
+    <p class="help">Each one goes to whoever the stage says, and the move is in its stage history.</p>
+    <label class="prop full"><span>Comment${need ? '' : ' (optional)'}</span><textarea class="in" id="lv-st-comment" rows="2" maxlength="2000" placeholder="${need ? 'This move needs a comment' : 'Why, for the stage history'}"></textarea></label>
+    <div class="lv-dlgacts"><button class="btn" type="button" data-lv="stage-cancel"${a.busy ? ' disabled' : ''}>Cancel</button><button class="btn primary" type="button" data-lv="stage-go" id="lv-st-go"${a.busy || !m.ok.length ? ' disabled' : ''}>${a.busy ? 'Moving…' : `Move ${m.ok.length}`}</button></div>
+  </div></div>`;
+}
+async function stageGo() {
+  const a = LV.stageAsk, form = formNow(); if (!a || a.busy || !form) return;
+  const st = stageById(form, a.to); if (!st) return;
+  const m = stageMovable(form, a.recs, st);
+  const comment = String(document.getElementById('lv-st-comment')?.value || '').trim();
+  if (m.ok.some((x) => x.comment) && !comment) { toast('This move needs a comment.'); document.getElementById('lv-st-comment')?.focus(); return; }
+  a.busy = true; repaint();
+  let done = 0, failed = 0;
+  for (const { r, label } of m.ok) {
+    const next = assigneeFor(st, r, store.user?.uid);
+    try {
+      await moveStage(r.id, { stage: st.id, assignee: next.assignee || null, assigneeGroup: next.assigneeGroup || null, assigneeRole: next.assigneeRole || null, stageAt: Date.now() },
+        { from: r.stage || null, fromName: r.stage ? stageName(form, r) : null, to: st.id, toName: st.name, label: String(label).slice(0, 80), comment: comment.slice(0, 2000), assignee: next.assignee || null, assigneeGroup: next.assigneeGroup || null, assigneeRole: next.assigneeRole || null });
+      done++;
+    } catch (e) { console.error('[formwright] bulk move', e); failed++; }
+  }
+  LV.stageAsk = null; LV.busy = false; repaint();
+  toast(`Moved ${plural(done, form)} to ${st.name}${failed ? `. ${failed} couldn’t be moved.` : ''}`);
+}
+async function setAssignee(uidTo) {
+  const form = formNow(); if (!form || !isAdmin(store.me)) return;
+  const recs = H.recordsOf(form.id).filter((r) => LV.sel.has(r.id) && r.stage && r.assignee !== uidTo);
+  LV.pop = null; LV.setF = null;
+  if (!recs.length) { toast('Nothing to change.'); repaint(); return; }
+  const name = store.profiles[uidTo]?.displayName || 'them';
+  LV.busy = true; repaint();
+  let done = 0;
+  for (const r of recs) {
+    try { await moveStage(r.id, { assignee: uidTo, assigneeGroup: null, assigneeRole: null }, { from: r.stage, fromName: stageName(form, r), to: r.stage, toName: stageName(form, r), label: 'Person responsible changed', comment: '', assignee: uidTo, assigneeGroup: null, assigneeRole: null }); done++; }
+    catch (e) { console.error('[formwright] bulk assignee', e); }
+  }
+  LV.busy = false; repaint();
+  toast(`${name} is now responsible for ${plural(done, form)}${done < recs.length ? `. ${recs.length - done} couldn’t be changed.` : ''}`);
 }
 
 /**
@@ -556,7 +699,7 @@ async function setAskGo() {
   const a = LV.setAsk; if (!a || a.busy) return;
   a.busy = true; repaint();
   const clear = new Map(a.im.rows.map((r) => [r.id, r.clear]));
-  const rows = a.recs.map((r) => ({ id: r.id, set: { ...a.set }, clear: clear.get(r.id) || [] }));
+  const rows = a.recs.map((r) => ({ id: r.id, set: { ...(a.sets ? a.sets.get(r.id) : a.set) }, clear: clear.get(r.id) || [] }));
   try { await H.applyRuleChange(a.form, rows, a.hist || a.what); toast(a.many ? `${a.what} on ${plural(a.recs.length, a.form)}` : a.what); LV.setAsk = null; }
   catch (e) { console.error('[formwright] bulk set', e); a.busy = false; toast('Couldn’t change those records. Check your connection and try again.'); }
   repaint();
@@ -675,7 +818,7 @@ document.addEventListener('click', async (e) => {
     case 'sheet': LV.sheet = true; LV.pop = null; repaint(); setTimeout(() => document.querySelector('#lv .lv-sheet [data-lv="sheet-close"]')?.focus(), 0); break;
     case 'sheet-close': case 'sheet-bg': LV.sheet = false; LV.pop = null; repaint(); setTimeout(() => document.querySelector('#lv [data-lv="sheet"]')?.focus(), 0); break;
     case 'view': pickView(v); break;
-    case 'pop': LV.pop = LV.pop === v ? null : v; repaint(); break;
+    case 'pop': LV.pop = LV.pop === v ? null : v; LV.setF = null; repaint(); break;
     case 'pop-close': LV.pop = null; repaint(); break;
     case 'density': setCfg({ density: v }); break;
     case 'sortdir': {
@@ -709,6 +852,15 @@ document.addEventListener('click', async (e) => {
     case 'name-cancel': LV.naming = null; repaint(); break;
     case 'name-save': saveNamed(); break;
     case 'set': setField(el.dataset.f, v); break;
+    case 'set-pick': LV.setF = el.dataset.f || null; repaint(); setTimeout(() => (document.getElementById('lv-setval') || document.querySelector('#lv .lv-setpop .lv-opt:not(.lv-back)'))?.focus(), 0); break;
+    case 'set-today': { const i = document.getElementById('lv-setval'); if (i) i.value = todayKey(); break; }
+    case 'set-apply': setTyped(el.dataset.f); break;
+    case 'set-clear': clearField(el.dataset.f); break;
+    case 'set-multi': setMulti(el.dataset.f, v, el.dataset.op); break;
+    case 'set-assignee': setAssignee(v); break;
+    case 'stage-ask': { const form = formNow(); if (!form) break; LV.stageAsk = { formId: form.id, to: v, recs: H.recordsOf(form.id).filter((r) => LV.sel.has(r.id)), busy: false }; LV.pop = null; LV.setF = null; repaint(); setTimeout(() => document.getElementById('lv-st-comment')?.focus(), 0); break; }
+    case 'stage-cancel': if (el.classList.contains('lv-scrim') && e.target !== el) return; if (LV.stageAsk && !LV.stageAsk.busy) { LV.stageAsk = null; repaint(); } break;
+    case 'stage-go': stageGo(); break;
     case 'set-cancel': if (el.classList.contains('lv-scrim') && e.target !== el) return; if (LV.setAsk && !LV.setAsk.busy) { LV.setAsk = null; repaint(); } break;
     case 'set-go': setAskGo(); break;
     case 'owner': setOwnerOf(v); break;
@@ -767,6 +919,7 @@ document.addEventListener('input', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (document.getElementById('lv') && llKey(e)) return;
+  if (e.target.id === 'lv-setval' && e.key === 'Enter' && e.target.tagName !== 'SELECT') { e.preventDefault(); const b = document.querySelector('#lv [data-lv="set-apply"]'); if (b) setTyped(b.dataset.f); return; }
   if (e.target.id === 'lv-name') {
     if (e.key === 'Enter') { e.preventDefault(); saveNamed(); }
     else if (e.key === 'Escape') { LV.naming = null; repaint(); }

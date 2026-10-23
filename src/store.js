@@ -637,6 +637,16 @@ export async function setRecordsValues(recs, set) {
   }));
 }
 
+/** Set fields record by record (Set field on several, a multiple choice's Add / Remove): pairs [[rec, { fieldId: value }]]. Only those fields are written. */
+export async function setValuesEach(pairs) {
+  const me = store.user.uid, now = Date.now();
+  await commitOps(pairs.map(([r, set]) => (b) => {
+    const data = { updatedAt: now, updatedBy: me };
+    Object.entries(set || {}).forEach(([k, v]) => { data['values.' + k] = plain(v); });
+    b.update(doc(db, 'records', r.id), data);
+  }));
+}
+
 /** Replace records' values (rules emptying fields, a bulk set): changes [{ id, values }]. Auto numbers are untouched. */
 export async function rewriteValues(changes) {
   const me = store.user.uid, now = Date.now();
