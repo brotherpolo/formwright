@@ -7,7 +7,8 @@ import { readTheme, applyTheme, nextTheme, themeLabel, readScheme, applyScheme, 
 import { viewProblems, onClick as pbClick, onChange as pbChange, freshCount, enterProblems, initProblems } from './problemsview.js';
 import { dayKeyOf, getCalendar } from './cal.js';
 import { noteRecent, toggleStar } from './palettelogic.js';
-import { saveStars, fileSrc } from './store.js';
+import { saveStars, fileSrc, watchRecTemplates, recTemplatesOf, saveRecTemplate } from './store.js';
+import { templateFrom, fromTemplate } from './templatelogic.js';
 import { offlineReady } from './offline.js';
 import { recentDelHTML, onClick as rdClick, onKey as rdKey, initRecentDel, closeRecentDel } from './recentdel.js';
 import { qrDialogHTML, recordUrl, printLabel, downloadPng, copyText } from './qrlabel.js';
@@ -23,7 +24,7 @@ import { effectiveHome, viewStarterHome, applyShared } from './dash.js';
 import { afterDashRender } from './dashanim.js';
 import { nounOf as nounOfForm } from './dashlogic.js';
 import { initReports, closeCatalogPop, viewReportsList, viewReport, reportName, leaveReport, reportBusy, viewDashboards, viewDashboard, dashName, maybeMigrate, reportDirty, dashDirty, forgetDrafts, counts, drillNav, fitTiles, thinAxes } from './dash.js';
-import { initLists, viewRecords, afterRecords, resetLists, useView } from './lists.js';
+import { initLists, viewRecords, afterRecords, resetLists, useView, closeListMenus } from './lists.js';
 import { initAttach, openPickChildren, closeAttach } from './attach.js';
 import { titleSortOf, columnCatalog, defaultConfig, cellOf, defaultViewId } from './listlogic.js';
 import { storeKey as subStoreKey, readSubs, prefsOf, setPrefs, colsFor, toggleCol as subToggle, moveCol as subMove, nextSort as subNext, limitRows, sortByVal, TASK_COLS, TASK_DEFAULT, taskCell } from './sublogic.js';
@@ -210,7 +211,7 @@ const ui={search:'',openField:null,tab:'fields',palette:false,confirm:null,leave
 function dirty(){return (view.name==='record'&&rdraft?.dirty)||(view.name==='formEdit'&&fdraft?.dirty)||(view.name==='report'&&reportDirty(view.reportId))||(view.name==='dashboard'&&dashDirty(view.dashboardId))||admin.isDirty(view)}
 function guard(){if(importRunning()){toast('The import is still running. Wait for it to finish.');return false;}if(dirty()&&!ui.leaveOk){ui.leaveOk=true;toast('You have unsaved changes. Tap again to leave without saving.');setTimeout(()=>ui.leaveOk=false,4000);return false;}ui.leaveOk=true;return true;}
 export function goRec(draft,v){if(!guard())return;rdraft=draft;go(v);}
-export function go(v,push=true){ui.subPop=null;ui.recMore=false;ui.qr=null;closeRecentDel();if(v.name==='record'&&v.recordId)noteOpened(v.recordId);if(v.name==='record'&&v.recordId!==view.recordId)ui.rsTab='comments';ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
+export function go(v,push=true){closeListMenus();ui.subPop=null;ui.recMore=false;ui.qr=null;closeRecentDel();if(v.name==='record'&&v.recordId)noteOpened(v.recordId);if(v.name==='record'&&v.recordId!==view.recordId)ui.rsTab='comments';ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
   if(ADMIN_VIEWS.has(v.name)&&!isAdmin(store.me)){toast('Only administrators can open that.');return false;}
   if((v.name==='records'||v.name==='record')&&!canViewForm(store.me,v.formId)){toast('You don’t have access to that form.');return false;}
   if(!guard())return false;
@@ -796,6 +797,7 @@ function viewRecord(form){
   const more=[];
   if(rec&&isAdmin(store.me))more.push(`<button type="button" role="menuitem" class="rb-item" data-act="rec-history">History</button>`);
   if(rec&&canCreate(store.me,form.id))more.push(`<button type="button" role="menuitem" class="rb-item" data-act="rec-duplicate">Duplicate</button>`);
+  if(rec&&isAdmin(store.me))more.push(`<button type="button" role="menuitem" class="rb-item" data-act="tpl-save-open">Save as template…</button>`);
   if(rec)more.push(`<button type="button" role="menuitem" class="rb-item" data-act="rec-qr">QR code</button>`);
   if(rec&&isAdmin(store.me))more.push(`<button type="button" role="menuitem" class="rb-item" data-act="email-pdf">Email PDF</button>`);
   if(rec&&!ro)more.push(`<button type="button" role="menuitem" class="rb-item danger${ui.confirm===delKey?' armed':''}" data-act="del-record">${ui.confirm===delKey?(kids?`Tap again to delete (${kids} child record${kids>1?'s':''} stay)`:'Tap again to delete'):'Delete'}</button>`);
@@ -812,7 +814,7 @@ function viewRecord(form){
     ${ro||reading?'':`<button class="btn primary" data-act="save-record">${rec?'Save':'Save '+esc(itemName(form).toLowerCase())}</button>`}
   </div>
   <div class="crumbs">${crumbs}</div>
-  <div class="head"><div class="ttl">${badge(form,1)}<div><h1>${esc(title)}${rec&&rec.stage&&wfOn(form)&&stageById(form,rec.stage)?` <span class="stage-chip">${esc(stageName(form,rec))}</span>`:''}</h1>${rec?`<p class="sub">${recordMeta(rec)}</p>`:''}${!rec&&rdraft.duplicateOf?`<p class="sub dupnote">A copy of <b>${esc(rdraft.duplicateTitle||'')}</b>${rdraft.dupRows?` with its ${rdraft.dupRows} row${rdraft.dupRows>1?'s':''}`:''}. Nothing is saved until you click Save${rdraft.dupKids?`; its ${esc(rdraft.dupKids)} aren’t copied`:''}.</p>`:''}${!rec&&rdraft.copied?`<p class="sub">${rdraft.copied} field${rdraft.copied>1?'s':''} copied from the ${esc(itemName(pform||{}).toLowerCase())}.</p>`:''}</div></div>${foldAllBtn}</div>
+  <div class="head"><div class="ttl">${badge(form,1)}<div><h1>${esc(title)}${rec&&rec.stage&&wfOn(form)&&stageById(form,rec.stage)?` <span class="stage-chip">${esc(stageName(form,rec))}</span>`:''}</h1>${rec?`<p class="sub">${recordMeta(rec)}</p>`:''}${!rec&&rdraft.fromTemplate?`<p class="sub dupnote"><span class="tplnote">From template: <b>${esc(rdraft.fromTemplate)}</b></span>${rdraft.tplRows?` with ${rdraft.tplRows} row${rdraft.tplRows>1?'s':''}`:''}. Nothing is saved until you click Save; the template doesn’t change.</p>`:''}${!rec&&rdraft.duplicateOf?`<p class="sub dupnote">A copy of <b>${esc(rdraft.duplicateTitle||'')}</b>${rdraft.dupRows?` with its ${rdraft.dupRows} row${rdraft.dupRows>1?'s':''}`:''}. Nothing is saved until you click Save${rdraft.dupKids?`; its ${esc(rdraft.dupKids)} aren’t copied`:''}.</p>`:''}${!rec&&rdraft.copied?`<p class="sub">${rdraft.copied} field${rdraft.copied>1?'s':''} copied from the ${esc(itemName(pform||{}).toLowerCase())}.</p>`:''}</div></div>${foldAllBtn}</div>
   <div class="rec-layout${asideHTML?' has-aside':''}"><div class="rec-main">
   ${rec&&isAdmin(store.me)?pendingBanner(rec.id):''}
   ${parentPick}
@@ -823,7 +825,7 @@ function viewRecord(form){
   ${sectionsHTML}${backHTML}
   ${!rec&&children.length?`<p class="help">Save this ${esc(itemName(form).toLowerCase())} to add ${children.map(c=>esc(c.cf.name.toLowerCase())).join(' and ')}.</p>`:''}
   </div>${asideHTML}</div>
-  ${cellPopup()}${ui.qr&&ui.qr===rec?.id?qrDialogHTML({url:recordUrl(rec.id),title:recTitle(rec,form),formName:form.name||'Record',item:itemName(form),badgeHTML:badge(form)}):''}${ui.mail&&ui.mail.rec===rec?.id?mailDialog(form,rec):''}${ui.cascade&&ui.cascade.parentId===rec?.id?cascadeDialog():''}${ui.mailView&&ui.mailView.rec===rec?.id?mailViewDialog():''}${ui.mailDelAll?.stage===2&&ew.recordId===rec?.id&&ew.list.length?delAllDialog():''}${ui.wfAsk&&ui.wfAsk.recId===rec?.id?wfAskDialog(form,rec):''}${ui.modeAsk&&rec?modeAskDialog(form):''}`;
+  ${cellPopup()}${ui.tplSave&&rec&&ui.tplSave.recId===rec.id?tplSaveDialog(form,rec):''}${ui.qr&&ui.qr===rec?.id?qrDialogHTML({url:recordUrl(rec.id),title:recTitle(rec,form),formName:form.name||'Record',item:itemName(form),badgeHTML:badge(form)}):''}${ui.mail&&ui.mail.rec===rec?.id?mailDialog(form,rec):''}${ui.cascade&&ui.cascade.parentId===rec?.id?cascadeDialog():''}${ui.mailView&&ui.mailView.rec===rec?.id?mailViewDialog():''}${ui.mailDelAll?.stage===2&&ew.recordId===rec?.id&&ew.list.length?delAllDialog():''}${ui.wfAsk&&ui.wfAsk.recId===rec?.id?wfAskDialog(form,rec):''}${ui.modeAsk&&rec?modeAskDialog(form):''}`;
 }
 /** Leaving Edit view with unsaved changes: Save, Discard or Keep editing. */
 function modeAskDialog(form){
@@ -1738,6 +1740,39 @@ async function onFile(t){
     if(val?.pending)toast(`No signal: the ${f.type==='image'?'photo':'file'} is kept on this device and uploads when you’re back. Save as usual.`,{duration:7000});
   }catch(e){fb.classList.remove('pending');toast(e?.code==='storage/unauthorized'?'You don’t have permission to upload files to this form.':'The upload failed. Check your connection and try again.');console.error(e);}
 }
+/* ---------- Record templates (templatelogic.js) ----------
+   Admins: ⋯ More → Save as template… on a saved record. Anyone who can add records starts from
+   one with + New ▾ on the form's list (lists.js). */
+function tplGrids(form,rec){return gridRels(form).map(({cf})=>({form:cf,rows:store.records.filter(r=>r.parentId===rec.id&&r.formId===cf.id).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))}));}
+function tplSaveDialog(form,rec){
+  const t=ui.tplSave,tpls=recTemplatesOf(form.id);
+  const name=document.getElementById('tpl-name')?.value??t.name;
+  const pv=templateFrom(form,rec,tplGrids(form,rec),{keepDates:t.keepDates,titleId:titleFieldOf(form)?.id});
+  const gridsSay=Object.entries(pv.grids).map(([cid,rows])=>`${rows.length} ${esc((rows.length===1?itemName(formById(cid)):formById(cid)?.name||'rows').toLowerCase())}`).join(' and ');
+  const hasDates=(form.fields||[]).some(f=>['date','datetime','time'].includes(f.type));
+  return `<div class="lv-scrim" data-act="tpl-scrim"><div class="lv-dlg" role="dialog" aria-modal="true" aria-labelledby="tpl-h" data-stop-scrim="1">
+    <h2 id="tpl-h">Save as template</h2>
+    <label class="prop full"><span>Name</span><input class="in" id="tpl-name" maxlength="80" value="${esc(name)}"></label>
+    ${tpls.length?`<div class="tpl-modes"><label class="opt"><input type="radio" name="tpl-mode" value="new" data-tpl="mode"${t.mode==='new'?' checked':''}> New template</label><label class="opt"><input type="radio" name="tpl-mode" value="replace" data-tpl="mode"${t.mode==='replace'?' checked':''}> Replace <select class="in tpl-rep" data-tpl="replace" aria-label="Template to replace"><option value="">choose…</option>${tpls.map(x=>`<option value="${esc(x.id)}"${x.id===t.replaceId?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div>`:''}
+    <p class="help"><b>Kept:</b> ${pv.fields} field${pv.fields===1?'':'s'} (what’s typed and chosen, links, files and photos)${gridsSay?`, and ${gridsSay}`:''}.<br><b>Left out:</b> the ${esc((titleFieldOf(form)?.label||'title').toLowerCase())} (typed fresh each time), auto numbers, signatures, calculations, ${t.keepDates?'':'dates, '}the ${esc(itemName(form).toLowerCase())} it’s under, child records and tasks.</p>
+    ${hasDates?`<label class="opt"><input type="checkbox" data-tpl="keep"${t.keepDates?' checked':''}> Keep dates too</label>`:''}
+    <div class="lv-dlgacts"><button class="btn" type="button" data-act="tpl-cancel"${t.busy?' disabled':''}>Cancel</button><button class="btn primary" type="button" data-act="tpl-save"${t.busy?' disabled':''}>${t.busy?'Saving…':t.mode==='replace'?'Replace template':'Save template'}</button></div>
+  </div></div>`;
+}
+async function tplSaveGo(){
+  const t=ui.tplSave;if(!t||t.busy)return;
+  const rec=recById(t.recId),form=rec&&formById(rec.formId);if(!rec||!form)return;
+  const name=String(document.getElementById('tpl-name')?.value||'').trim();
+  if(!name){toast('Give the template a name.');document.getElementById('tpl-name')?.focus();return;}
+  if(t.mode==='replace'&&!t.replaceId){toast('Choose the template to replace.');return;}
+  const same=t.mode==='new'&&recTemplatesOf(form.id).find(x=>x.name.trim().toLowerCase()===name.toLowerCase());
+  if(same&&!t.dupOk){t.dupOk=true;toast(`There’s already a template called “${same.name}”. Save again to keep both, or choose Replace.`);return;}
+  const data=templateFrom(form,rec,tplGrids(form,rec),{keepDates:t.keepDates,titleId:titleFieldOf(form)?.id});
+  t.busy=true;t.name=name;renderMain();
+  try{await saveRecTemplate(t.mode==='replace'?t.replaceId:uid('tpl'),{formId:form.id,name,values:data.values,grids:data.grids,keepDates:!!t.keepDates,fields:data.fields,rows:data.rows});ui.tplSave=null;toast(`Template “${name}” saved. It’s in + New ▾ on the ${form.name} list.`);}
+  catch(err){console.error('[formwright] template',err);t.busy=false;toast(err?.code==='permission-denied'?'Templates need the latest security rules deployed.':'Couldn’t save the template. Try again.');}
+  renderMain();
+}
 /* ---------- Rollup fields (rolluplogic.js) ----------
    Count, total, latest or a list from the records under this one, or that link here (one more
    step allowed), with optional conditions. Always current; never stored. */
@@ -2550,6 +2585,21 @@ document.addEventListener('click',async e=>{
     case 'nav-schedules':go({name:'schedules'});break;
     case 'nav-settings':go({name:'settings'});break;
     case 'nav-dates':if(view.name!=='dates')calLeave();go({name:'dates'});break;
+    case 'tpl-save-open':{const rec=view.recordId?recById(view.recordId):null,form=rec&&formById(rec.formId);if(!rec||!form||!isAdmin(store.me))return;ui.recMore=false;watchRecTemplates(form.id);ui.tplSave={recId:rec.id,name:recTitle(rec,form),mode:'new',replaceId:'',keepDates:false,busy:false};renderMain();setTimeout(()=>{const i=document.getElementById('tpl-name');if(i){i.focus();i.select();}},0);break;}
+    case 'tpl-scrim':if(e.target===el&&ui.tplSave&&!ui.tplSave.busy){ui.tplSave=null;renderMain();}break;
+    case 'tpl-cancel':if(ui.tplSave&&!ui.tplSave.busy){ui.tplSave=null;renderMain();}break;
+    case 'tpl-save':await tplSaveGo();break;
+    case 'new-from-tpl':{
+      const form=formById(el.dataset.form),tpl=recTemplatesOf(el.dataset.form).find(t=>t.id===el.dataset.id);
+      if(!form||!tpl||!canCreate(store.me,form.id))return;
+      if(view.name==='record'&&rdraft?.dirty){toast('Save or discard your changes first.');return;}
+      const d=newRecordDraft(form,null),ft=fromTemplate(form,tpl,id=>formById(id));
+      d.values={...d.values,...ft.values};d.grids={};let nRows=0;
+      gridRels(form).forEach(({cf})=>{const rows=canCreate(store.me,cf.id)?(ft.grids[cf.id]||[]):[];nRows+=rows.length;d.grids[cf.id]={rows:rows.map(v=>({id:uid('r'),values:{...newRowValues(cf,d,form),...v},ownerId:store.user.uid,isNew:true,dirty:true,errors:{}})),removed:[],detached:[],sort:null};});
+      Object.assign(d,{dirty:true,fromTemplate:tpl.name,tplRows:nRows});
+      goRec(d,{name:'record',formId:form.id,recordId:null});
+      setTimeout(()=>{const t=document.getElementById('in-record-'+(titleFieldOf(form)?.id||''));if(t){t.focus();try{t.select();}catch(err){}}},0);
+      break;}
     case 'rec-duplicate':{
       const rec=view.recordId?recById(view.recordId):null,form=rec?formById(rec.formId):null;
       if(!rec||!form||!canCreate(store.me,form.id))return;
@@ -2788,6 +2838,7 @@ document.addEventListener('input',e=>{
   admin.onInput(t);
 });
 document.addEventListener('change',async e=>{
+  if(ui.tplSave&&e.target.dataset?.tpl){const k=e.target.dataset.tpl;if(k==='keep')ui.tplSave.keepDates=e.target.checked;else if(k==='mode'){ui.tplSave.mode=e.target.value;}else if(k==='replace'){ui.tplSave.replaceId=e.target.value;ui.tplSave.mode='replace';}renderMain();return;}
   if(ui.mail&&e.target.dataset?.mailto){const v=e.target.dataset.mailto;if(e.target.checked)ui.mail.to.add(v);else ui.mail.to.delete(v);return;}
   if(e.target.dataset?.wfJump){const v=e.target.value;e.target.value='';if(v)wfMove(null,v);return;}
   if(ui.mail&&e.target.dataset?.mail==='copyMe'){ui.mail.copyMe=e.target.checked;return;}

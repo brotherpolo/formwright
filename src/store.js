@@ -70,6 +70,7 @@ export const store = {
   me: null, // users/{uid} document + uid
   forms: [],
   records: [],
+  templates: {}, // formId → record templates (watchRecTemplates)
   profiles: {},
   groups: [],
   roles: [], // job roles (Settings → Roles): who does the work, separate from access
@@ -250,6 +251,7 @@ export function stopData() {
   adminUnsubs = [];
   recordSubs.forEach((s) => s.unsub());
   recordSubs.clear();
+  tplSubs.forEach((u) => u()); tplSubs.clear(); store.templates = {};
   recordsByForm.clear();
   if (assignedSub) { assignedSub(); assignedSub = null; }
   roleSubs.forEach((u) => u()); roleSubs.clear(); roleRecs.clear();
@@ -421,6 +423,26 @@ export async function setHomeDashboard(id) {
 }
 
 /* ---------- Starred records (yours) ---------- */
+/* ---------- Record templates (+ New ▾; templatelogic.js) ----------
+   recordTemplates/{id}: { formId, name, values, grids, keepDates, fields, rows, by, at }. Read one
+   form at a time (the rules let anyone who can add records to that form read its templates). */
+const tplSubs = new Map();
+/** Start listening to a form's record templates (once); store.templates[formId] fills in. */
+export function watchRecTemplates(formId) {
+  if (!formId || tplSubs.has(formId) || !store.user) return;
+  if (!store.templates) store.templates = {};
+  tplSubs.set(formId, onSnapshot(query(collection(db, 'recordTemplates'), where('formId', '==', formId)),
+    (s) => { store.templates[formId] = s.docs.map((d) => ({ ...d.data(), id: d.id })).sort((a, b) => String(a.name).localeCompare(String(b.name))); changed(); },
+    () => { store.templates[formId] = []; changed(); }));
+}
+export const recTemplatesOf = (formId) => (store.templates && store.templates[formId]) || [];
+/** Admins: make or replace a template. */
+export async function saveRecTemplate(id, data) {
+  await setDoc(doc(db, 'recordTemplates', id), plain({ ...data, by: store.user.uid, at: Date.now() }));
+}
+export async function renameRecTemplate(id, name) { await updateDoc(doc(db, 'recordTemplates', id), { name: String(name).slice(0, 80), by: store.user.uid, at: Date.now() }); }
+export async function deleteRecTemplate(id) { await deleteDoc(doc(db, 'recordTemplates', id)); }
+
 export async function saveStars(ids) {
   await setDoc(doc(db, 'stars', store.user.uid), { ids: (ids || []).slice(0, 100), updatedAt: Date.now() });
 }

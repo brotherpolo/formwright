@@ -2,6 +2,8 @@
 // height, and selecting several records to change, export or delete together.
 // Column and view logic lives in listlogic.js; app.js passes in its formatting helpers.
 import './lists.css';
+import { watchRecTemplates, recTemplatesOf, renameRecTemplate, deleteRecTemplate } from './store.js';
+import { templateMeta } from './templatelogic.js';
 import { store, saveListView, deleteListView, deleteRecords, setRecordsValue, setRecordsValues, setValuesEach, attachRecords, setOwner, moveStage } from './store.js';
 import { wfOn, stagesOf, stageById, stageIndex, stageName, canWork, assigneeFor, movesOf, missingToMove } from './workflow.js';
 import { bindLayouts, layoutSeg, layoutTools, boardHTML, timelineHTML, afterLayout, onClick as llClick, onChange as llChange, onKey as llKey, closeMenus as llClose } from './listlayouts.js';
@@ -101,6 +103,8 @@ export function viewRecords(form) {
   const cfg = LV.cfg;
   const admin = isAdmin(store.me);
   const lvl = formLevel(store.me, form.id), mayCreate = canCreate(store.me, form.id);
+  if (mayCreate) watchRecTemplates(form.id);
+  const tsplit = (which, cls) => (mayCreate ? newSplit(form, which, cls, admin) : '');
   const hidden = pending && pending.formId === form.id ? pending.ids : null;
   const all = H.recordsOf(form.id).filter((r) => !hidden || !hidden.has(r.id));
   const shown = cfg.cols.map((k) => c.byKey.get(k)).filter(Boolean);
@@ -138,7 +142,7 @@ export function viewRecords(form) {
   const head = `
   <div class="head">
     <div class="ttl">${badge(form, 1)}<div><h1>${esc(form.name)}</h1>${form.description ? `<p class="sub">${esc(form.description)}</p>` : ''}</div></div>
-    <div class="actions">${admin ? `<button class="btn ghost ph-hide" data-act="edit-form" data-id="${form.id}">Edit form</button>` : ''}${admin ? `<span class="ph-hide">${importButton(form)}</span>` : ''}${mayCreate ? `<button class="btn primary${all.length ? ' ph-only' : ''}" data-act="new-record" data-id="${form.id}" aria-label="New ${esc(itemName(form).toLowerCase())}">+ New<span class="ph-hide"> ${esc(itemName(form).toLowerCase())}</span></button>` : ''}</div>
+    <div class="actions">${admin ? `<button class="btn ghost ph-hide" data-act="edit-form" data-id="${form.id}">Edit form</button>` : ''}${admin ? `<span class="ph-hide">${importButton(form)}</span>` : ''}${mayCreate ? `<button class="btn primary${all.length ? ' ph-only' : ''}${hasSplit(form, admin) ? ' split-l' : ''}" data-act="new-record" data-id="${form.id}" aria-label="New ${esc(itemName(form).toLowerCase())}">+ New<span class="ph-hide"> ${esc(itemName(form).toLowerCase())}</span></button>${tsplit('h', all.length ? 'ph-only' : '')}` : ''}</div>
   </div>${scope}`;
 
   if (!all.length) {
@@ -147,7 +151,7 @@ export function viewRecords(form) {
 
   return head + `
   <div class="lv" id="lv">
-    ${viewsBar(c, view, dirty, admin, mayCreate ? `<button class="btn primary lv-new ph-hide" data-act="new-record" data-id="${form.id}">+ New ${esc(itemName(form).toLowerCase())}</button>` : '')}
+    ${viewsBar(c, view, dirty, admin, mayCreate ? `<span class="lv-newwrap ph-hide"><button class="btn primary lv-new${hasSplit(form, admin) ? ' split-l' : ''}" data-act="new-record" data-id="${form.id}">+ New ${esc(itemName(form).toLowerCase())}</button>${tsplit('v', '')}</span>` : '')}
     <div class="lv-tools">
       ${layoutSeg(cfg, 'll-wide')}
       <input class="in lv-search" id="search" type="search" placeholder="Search ${esc(form.name.toLowerCase())}" value="${esc(H.search())}" aria-label="Search records">
@@ -271,6 +275,24 @@ function columnsTool(c, shown) {
       <div class="lv-popfoot"><button class="btn ghost" type="button" data-lv="cols-reset">Reset columns</button><button class="btn" type="button" data-lv="pop-close">Done</button></div></div>`;
   }
   return `<div class="lv-anchor"><button class="btn${open ? ' on' : ''}" type="button" data-lv="pop" data-v="cols" aria-expanded="${open}">${ICON.cols}Columns<span class="lv-n">${shown.length + 1}</span></button>${pop}</div>`;
+}
+
+/* ---------- + New ▾: start from a template (templatelogic.js) ---------- */
+const hasSplit = (form, admin) => admin || recTemplatesOf(form.id).length > 0;
+function newSplit(form, which, cls, admin) {
+  if (!hasSplit(form, admin)) return '';
+  const k = 'new-' + which, open = LV.pop === k, item = itemName(form).toLowerCase(), tpls = recTemplatesOf(form.id);
+  const gridName = (cid, n) => { const cf = H.formById(cid); return cf ? (n === 1 ? itemName(cf) : cf.name).toLowerCase() : 'rows'; };
+  const when = (t) => (t.at ? new Date(t.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
+  const row = (t) => LV.tplRen === t.id
+    ? `<div class="lv-tplrow lv-tplren"><input class="in" id="lv-tplname" value="${esc(t.name)}" maxlength="80" aria-label="Template name"><button type="button" class="btn sm primary" data-lv="tpl-ren-save" data-v="${esc(t.id)}">Save</button><button type="button" class="btn sm ghost" data-lv="tpl-ren" data-v="">Cancel</button></div>`
+    : `<div class="lv-tplrow"><button type="button" class="lv-opt lv-tpl" data-act="new-from-tpl" data-id="${esc(t.id)}" data-form="${esc(form.id)}"><b>${esc(t.name)}</b><small>${esc(templateMeta(t, gridName))}${t.by ? ` · by ${esc(store.profiles[t.by]?.displayName || 'someone')}${t.at ? ', ' + when(t) : ''}` : ''}</small></button>${admin ? `<button type="button" class="ibtn" data-lv="tpl-ren" data-v="${esc(t.id)}" aria-label="Rename ${esc(t.name)}" title="Rename">✎</button><button type="button" class="ibtn${LV.tplDel === t.id ? ' armed' : ''}" data-lv="tpl-del" data-v="${esc(t.id)}" aria-label="${LV.tplDel === t.id ? 'Tap again to delete' : 'Delete ' + esc(t.name)}" title="Delete">${LV.tplDel === t.id ? 'Delete?' : '✕'}</button>` : ''}</div>`;
+  const pop = open ? `<div class="lv-pop right lv-tplpop" role="menu">
+      <button type="button" class="lv-opt" data-act="new-record" data-id="${esc(form.id)}"><b>Blank ${esc(item)}</b></button>
+      <div class="lv-sec">From a template</div>
+      ${tpls.length ? tpls.map(row).join('') : `<p class="lv-hint">No templates yet. ${admin ? `Open a saved ${esc(item)} and choose <b>⋯ More → Save as template</b>.` : 'An administrator can make some.'}</p>`}
+    </div>` : '';
+  return `<div class="lv-anchor lv-newsplit ${cls}"><button type="button" class="btn primary split-r" data-lv="pop" data-v="${k}" aria-haspopup="menu" aria-expanded="${open}" aria-label="New ${esc(item)} from a template">▾</button>${pop}</div>`;
 }
 
 function bulkBar(form, selRecs, editable, selHidden, settable) {
@@ -790,6 +812,9 @@ export function useView(formId, viewId) {
   if (LV.formId === formId) LV.formId = null; // pick it up on the next draw
 }
 
+/** Leaving the list: its menus close (so they aren't open when you come back). */
+export function closeListMenus() { LV.pop = null; LV.setF = null; LV.tplRen = null; LV.tplDel = null; }
+
 export function resetLists() {
   if (pending) { clearTimeout(pending.timer); pending = null; undoBar(null); }
   Object.assign(LV, { formId: null, viewId: null, cfg: null, base: null, pop: null, sel: new Set(), naming: null, confirm: false, confirmView: false, awaitId: null, busy: false, sheet: false });
@@ -802,7 +827,8 @@ document.addEventListener('click', async (e) => {
   const ll = e.target.closest('#lv [data-ll]');
   if (ll && await llClick(ll.dataset.ll, ll, e)) return;
   const el = e.target.closest('[data-lv]');
-  const inLv = e.target.closest('#lv') || e.target.closest('#lv-undo');
+  const inLv = e.target.closest('#lv') || e.target.closest('#lv-undo') || e.target.closest('.lv-newsplit');
+  if (e.target.closest('.lv-tplpop [data-act]')) { LV.pop = null; LV.tplRen = null; LV.tplDel = null; } // starting a record closes the menu
   // A click anywhere outside an open menu closes it.
   if (LV.pop && document.getElementById('lv') && !e.target.closest('.lv-anchor')) {
     LV.pop = null;
@@ -818,7 +844,7 @@ document.addEventListener('click', async (e) => {
     case 'sheet': LV.sheet = true; LV.pop = null; repaint(); setTimeout(() => document.querySelector('#lv .lv-sheet [data-lv="sheet-close"]')?.focus(), 0); break;
     case 'sheet-close': case 'sheet-bg': LV.sheet = false; LV.pop = null; repaint(); setTimeout(() => document.querySelector('#lv [data-lv="sheet"]')?.focus(), 0); break;
     case 'view': pickView(v); break;
-    case 'pop': LV.pop = LV.pop === v ? null : v; LV.setF = null; repaint(); break;
+    case 'pop': LV.pop = LV.pop === v ? null : v; LV.setF = null; LV.tplRen = null; LV.tplDel = null; repaint(); break;
     case 'pop-close': LV.pop = null; repaint(); break;
     case 'density': setCfg({ density: v }); break;
     case 'sortdir': {
@@ -852,6 +878,9 @@ document.addEventListener('click', async (e) => {
     case 'name-cancel': LV.naming = null; repaint(); break;
     case 'name-save': saveNamed(); break;
     case 'set': setField(el.dataset.f, v); break;
+    case 'tpl-ren': LV.tplRen = v || null; LV.tplDel = null; repaint(); setTimeout(() => { const i = document.getElementById('lv-tplname'); if (i) { i.focus(); i.select(); } }, 0); break;
+    case 'tpl-ren-save': { const name = String(document.getElementById('lv-tplname')?.value || '').trim(); if (!name) { toast('Give the template a name.'); break; } try { await renameRecTemplate(v, name); toast(`Renamed to “${name}”.`); } catch (err) { console.error(err); toast('Couldn’t rename it. Try again.'); } LV.tplRen = null; repaint(); break; }
+    case 'tpl-del': if (LV.tplDel !== v) { LV.tplDel = v; repaint(); break; } try { await deleteRecTemplate(v); toast('Template deleted. Records made from it stay as they are.'); } catch (err) { console.error(err); toast('Couldn’t delete it. Try again.'); } LV.tplDel = null; repaint(); break;
     case 'set-pick': LV.setF = el.dataset.f || null; repaint(); setTimeout(() => (document.getElementById('lv-setval') || document.querySelector('#lv .lv-setpop .lv-opt:not(.lv-back)'))?.focus(), 0); break;
     case 'set-today': { const i = document.getElementById('lv-setval'); if (i) i.value = todayKey(); break; }
     case 'set-apply': setTyped(el.dataset.f); break;

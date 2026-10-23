@@ -84,6 +84,7 @@ src/
   recentdel.js             Recently deleted under a form's list (admins): Restore
   offline.js               Working with no signal: the Offline / Syncing bar, back-online sync, late-error messages
   offlinequeue.js          Photos and files picked offline wait here (IndexedDB) until they upload (helpers unit-tested)
+  templatelogic.js         Record templates: what a template keeps, and a new record from one (unit-tested)
   rolluplogic.js           Rollup fields: sources, conditions, count/sum/latest/list, the record index (unit-tested)
   lookuplogic.js           Lookup fields: paths, the record reached, values, the designer's choices (unit-tested)
   fixedlogic.js            Default values, Read only fields and Instructions: what's fixed, today/now, stored or not (unit-tested)
@@ -547,6 +548,16 @@ Formwright keeps working on a phone, tablet or computer with no signal, once it 
 - **Print label** prints just the label (about 3.5 inches wide); **Download image** saves the code as a large PNG for label printers and documents; **Copy link** copies the record's address.
 - Scanning it with a phone's camera opens the record (`#/record/<id>`). Whoever scans it signs in first, and sees it only if they're allowed to; the code holds the address and nothing else.
 - Codes are made in the browser by `src/qr.js` (byte mode, error correction level M, so a scuffed or partly covered label still scans; sizes up to version 15), unit-tested and checked against a real decoder in the browser tests. The dialog is `src/qrlabel.js`.
+
+## Record templates (+ New ▾)
+
+A template is a saved starting point for new records: "Standard kitchen refit" with its usual stage, budget and 6 line items.
+
+- **Making one (administrators):** on a saved record, **⋯ More → Save as template…**: a name, then **Save template**, or **Replace** an existing one. It keeps what's typed and chosen, links, files and photos, and the **sub-form rows** (line items). It leaves out the title (typed fresh each time), auto numbers, signatures, calculations, lookups, rollups, the record it's under, child records and tasks, and dates unless **Keep dates too** is ticked. The dialog says what's kept, with counts.
+- **Using one:** **+ New ▾** on the form's list (the ▾ beside + New; on phones too): **Blank** or a template, each with what it fills ("9 fields · 6 line items · by Adam, Oct 20"). It opens an unsaved new record that says **From template: …**, with the cursor in the title. Nothing is saved until **Save**, and the template never changes. If the form has changed since, fields that are gone and choices that are no longer options are left out.
+- **Managing them (administrators):** **✎** renames and **✕** (tap twice) deletes, in the same menu. Records made from a template stay as they are.
+- **Who:** anyone who can add records to the form sees and uses its templates; only administrators make, rename, replace or delete them.
+- Stored in `recordTemplates/{id}`: `{ formId, name, values, grids: { <subFormId>: [values…] }, keepDates, fields, rows, by, at }`, read one form at a time. Logic in `src/templatelogic.js` (unit-tested). Needs the security rules in this update.
 
 ## Duplicating a record
 

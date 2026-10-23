@@ -299,3 +299,19 @@ body:has(.bd-ghost){cursor:grabbing;user-select:none}
 .lv-mrow span{flex:1;min-width:0}
 .lv-n{color:var(--muted);font-size:12px;margin-left:6px}
 .lv-clear{color:var(--muted)}
+
+/* + New ▾ (templates) */
+.lv-newwrap{display:inline-flex;align-items:stretch;flex:none;margin-right:4px}
+.lv-newwrap .lv-new{margin-right:0}
+.btn.split-l{border-top-right-radius:0;border-bottom-right-radius:0}
+.lv-newsplit{display:inline-flex}
+.lv-newsplit .split-r{border-top-left-radius:0;border-bottom-left-radius:0;border-left:1px solid rgba(255,255,255,.35);padding-left:10px;padding-right:10px;height:100%}
+.lv-tplpop{min-width:300px;max-width:min(380px,92vw);max-height:min(70vh,520px);overflow:auto}
+.lv-newwrap .lv-tplpop{left:0;right:auto}
+.lv-tplrow{display:flex;align-items:center;gap:2px}
+.lv-tplrow .lv-tpl{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;text-align:left}
+.lv-tpl small{color:var(--muted);font-size:12px;font-weight:400}
+.lv-tplren{gap:6px;padding:4px 6px}
+.lv-tplren .in{flex:1;min-width:0}
+.ibtn.armed{color:#b42335;font-weight:600;width:auto;padding:0 6px}
+.actions > .lv-newsplit{margin-left:-8px} /* sits against + New */
