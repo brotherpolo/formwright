@@ -366,3 +366,8 @@ body.pd-on .pgrip{cursor:grabbing}
 .sc-ok{color:var(--ok,#0f7a5c)}
 .sc-bad{color:var(--danger,#b42318);font-weight:500}
 @media (max-width:640px){.sc-card{grid-template-columns:auto minmax(0,1fr)}.sc-ctl{grid-column:1 / -1;justify-content:flex-start}}
+
+/* Workflow: Before saving (built in; a new record that hasn't been saved yet) */
+.wf-before-card{border-style:dashed;background:var(--sunk)}
+.wf-before-card .wf-sh{display:flex;align-items:center;gap:8px}
+.wf-ftbl .wf-bcol{background:color-mix(in srgb,var(--sunk) 60%,transparent)}

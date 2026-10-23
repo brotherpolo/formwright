@@ -28,6 +28,15 @@ export const stagesOf = (form) => (wfOn(form) ? form.workflow.stages : []);
 export const stageById = (form, id) => stagesOf(form).find((s) => s.id === id) || null;
 export const firstStage = (form) => stagesOf(form)[0] || null;
 export const stageIndex = (form, id) => stagesOf(form).findIndex((s) => s.id === id);
+/**
+ * "Before saving": built into every workflow, ahead of its stages. Only fields and sections, for a
+ * new record that hasn't been saved yet (form.workflow.before = { fields, sections }); nobody is
+ * responsible and nothing waits there. On Save the record goes to the first stage, as before.
+ * Required here means needed to save.
+ */
+export const BEFORE = '_before';
+export const BEFORE_NAME = 'Before saving';
+export const beforeStage = (form) => ({ id: BEFORE, name: BEFORE_NAME, fields: form?.workflow?.before?.fields || {}, sections: form?.workflow?.before?.sections || {} });
 
 /** The form with a "Stage" pseudo field, so rules and automations can use it in conditions. */
 export function withStageField(form) {
@@ -39,7 +48,7 @@ export const stageName = (form, rec) => stageById(form, rec?.stage)?.name || '';
 
 /** What a stage does to the record page: { hide, view, req: Set(field ids), keys: Set(section keys hidden) }. */
 export function stageView(form, stageId) {
-  const st = stageById(form, stageId);
+  const st = stageId === BEFORE ? (wfOn(form) ? beforeStage(form) : null) : stageById(form, stageId);
   const out = { hide: new Set(), view: new Set(), req: new Set(), keys: new Set() };
   if (!st) return out;
   const fields = form.fields || [];

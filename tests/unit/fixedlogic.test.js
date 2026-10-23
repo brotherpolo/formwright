@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { isLayout, canDefault, canReadOnly, hasDefault, isFixed, isReadOnly, defaultFor, withDefaults, withFixed, stripFixed, defaultText, clock } from '../../src/fixedlogic.js';
 import { makeKit } from '../../src/server/recordkit.js';
 import { skippedFields, templateColumns } from '../../src/importlogic.js';
-import { stageView } from '../../src/workflow.js';
+import { stageView, BEFORE, beforeStage } from '../../src/workflow.js';
 
 const now = new Date(2026, 9, 21, 9, 5);
 const F = {
@@ -89,4 +89,15 @@ test('imports skip fixed fields', () => {
 test('a workflow stage can hide Instructions', () => {
   const wf = { ...form, workflow: { on: true, stages: [{ id: 's1', name: 'One', fields: { i: 'hide' } }] } };
   assert.ok(stageView(wf, 's1').hide.has('i'));
+});
+
+test('Before saving: a built-in stage for a record not saved yet', () => {
+  const wf = { fields: [{ id: 'a', type: 'text' }, { id: 'b', type: 'text' }, { id: 'c', type: 'formula' }], workflow: { on: true, stages: [{ id: 's1', name: 'Draft', fields: { a: 'hide' } }], before: { fields: { a: 'req', b: 'hide', c: 'req' }, sections: { 'g:f_lines': 'hide' } } } };
+  const v = stageView(wf, BEFORE);
+  assert.ok(v.req.has('a') && v.hide.has('b') && !v.req.has('c'), 'Required and Hidden; calculations can’t be required');
+  assert.ok(v.keys.has('g:f_lines'), 'sections too');
+  assert.ok(stageView(wf, 's1').hide.has('a'), 'real stages unchanged');
+  assert.equal(stageView({ ...wf, workflow: { ...wf.workflow, on: false } }, BEFORE).req.size, 0, 'no workflow: nothing');
+  assert.equal(stageView({ fields: wf.fields, workflow: { on: true, stages: [{ id: 's1' }] } }, BEFORE).hide.size, 0, 'nothing set: nothing changes');
+  assert.equal(beforeStage(wf).name, 'Before saving');
 });

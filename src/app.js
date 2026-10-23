@@ -69,7 +69,7 @@ import { isRollup, rollupValue, rollupRecords, rollupTarget, rollupSources, roll
 import { opsFor, testCond as testCondUI } from './rules.js';
 import { isLookup, lookupValue, lookupRecord, lookupTarget, shownField, lookupSources, showable, pathOf } from './lookuplogic.js';
 import { isLayout, canDefault, canReadOnly, hasDefault, isFixed, isReadOnly, defaultFor, withDefaults, defaultText } from './fixedlogic.js';
-import { STAGE_FIELD, wfOn, stagesOf, stageById, stageIndex, firstStage, stageName, stageView, withStageField, canWork, assigneeFor, movesOf, missingToMove, waited, stageDue, dueState, dayKey } from './workflow.js';
+import { BEFORE, BEFORE_NAME, STAGE_FIELD, wfOn, stagesOf, stageById, stageIndex, firstStage, stageName, stageView, withStageField, canWork, assigneeFor, movesOf, missingToMove, waited, stageDue, dueState, dayKey } from './workflow.js';
 import { initRules, viewRules, rulesClick, rulesChange, rulesInput, rulesListHTML, parentUse, rulesCtx } from './rulesui.js';
 import { formatAuto, nextAuto, missingNumbers, autoSettings } from './autonum.js';
 import { signOutUser } from './auth.js';
@@ -907,7 +907,7 @@ function wfBar(form,rec){
   const chips=`<ol class="wf-steps">${stages.map((s,j)=>`<li class="${j<i?'done':j===i?'on':''}"${j===i?' aria-current="step"':''}>${j<i?'<span aria-hidden="true">✓</span> ':''}${esc(s.name)}</li>`).join('')}</ol>`;
   let line='',btns='';
   const admin=isAdmin(store.me);
-  if(!rec)line=`Starts at <b>${esc(stages[0].name)}</b> when you save it.`;
+  if(!rec)line=`<span class="wf-before">${esc(BEFORE_NAME)}</span> → <b>${esc(stages[0].name)}</b> when you save it.`;
   else if(!cur&&Date.now()-(rec.createdAt||0)<90000){
     line=`Starting at <b>${esc(stages[0].name)}</b>…`; // the server puts new records at the first stage
   }else if(!cur){
@@ -1645,15 +1645,17 @@ function withStage(st,form,stage){
   const sv=stageView(form,stage);
   if(!sv.hide.size&&!sv.view.size&&!sv.req.size&&!sv.keys.size)return st;
   const hidden=new Set([...st.hidden,...sv.keys,...[...sv.hide].map(id=>'f:'+id)]);
+  if(stage===BEFORE)return {...st,hidden,hiddenFields:new Set([...st.hiddenFields,...sv.hide]),view:sv.view,moveReq:new Set(),
+    required:f=>!sv.hide.has(f.id)&&!sv.view.has(f.id)&&(st.required(f)||sv.req.has(f.id))}; // Before saving: Required = needed to save
   return {...st,hidden,hiddenFields:new Set([...st.hiddenFields,...sv.hide]),view:sv.view,moveReq:sv.req,
     required:f=>!sv.hide.has(f.id)&&!sv.view.has(f.id)&&st.required(f)};
 }
 /** The rules for a draft on screen: the record being edited, or the designer's Try it. */
 function draftRules(d){
   if(!d||d===cdraft)return NO_RULES;
-  if(d===pdraft)return fdraft?withStage(rulesOf(fdraft,{id:null,formId:fdraft.id,values:d.values,stage:d._stage||null},d._parent||null),fdraft,d._stage||null):NO_RULES;
+  if(d===pdraft){const ps=d._stage||(wfOn(fdraft)?BEFORE:null);return fdraft?withStage(rulesOf(fdraft,{id:null,formId:fdraft.id,values:d.values,stage:ps===BEFORE?null:ps},d._parent||null),fdraft,ps):NO_RULES;}
   const form=formById(d.formId);
-  const stage=d.recordId?recById(d.recordId)?.stage||null:null;
+  const stage=d.recordId?recById(d.recordId)?.stage||null:(wfOn(form)?BEFORE:null);
   return withStage(rulesOf(form,{...draftRec(d),stage},d.parentId?recById(d.parentId):null),form,stage);
 }
 /** A grid row's rules: its own form's, with the record on screen as its parent. */

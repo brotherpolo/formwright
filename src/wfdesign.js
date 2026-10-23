@@ -2,7 +2,7 @@
 // The logic lives in workflow.js; this file draws the editor and handles its events.
 import { esc, uid } from './ui.js';
 import { shownName } from './fieldnames.js';
-import { FIELD_MODES, defaultMoves, checkWorkflow } from './workflow.js';
+import { FIELD_MODES, defaultMoves, checkWorkflow, beforeStage, BEFORE_NAME } from './workflow.js';
 
 let H = { setFdirty: null, renderMain: null, people: () => [], groups: () => [], roles: () => [], sections: () => [], ui: () => ({}) };
 export function initWfDesign(helpers) { H = { ...H, ...helpers }; }
@@ -60,7 +60,8 @@ function overdueRows(s, at) {
 }
 
 function fieldTable(f) {
-  const st = f.workflow.stages;
+  // "Before saving" comes first: a new record that hasn't been saved yet (si 'b')
+  const cols = [[beforeStage(f), 'b'], ...f.workflow.stages.map((s, i) => [s, i])];
   const rows = [];
   (f.fields || []).forEach((x) => rows.push({ key: x.id, label: x.type === 'heading' ? `Section: ${x.label}` : x.type === 'instructions' ? `Instructions${x.label ? ': ' + x.label : ''}` : shownName(f, x), heading: x.type === 'heading' || x.type === 'instructions', calc: ['formula', 'autonumber'].includes(x.type) }));
   H.sections(f).forEach((x) => rows.push({ key: x.key, label: x.label, section: true }));
@@ -73,8 +74,9 @@ function fieldTable(f) {
     return `<select class="in wf-cell m-${v}" data-si="${si}" data-wfd="fmode" data-k="${esc(r.key)}" aria-label="${esc(r.label)} at ${esc(s.name)}">${FIELD_MODES.filter((m) => !(r.calc && (m.key === 'req'))).map((m) => `<option value="${m.key}"${m.key === v ? ' selected' : ''}>${esc(r.calc && m.key === 'edit' ? 'Shown' : m.label)}</option>`).join('')}</select>`;
   };
   return `<section class="panel wf-fields"><h2 class="dz-h">Fields at each stage</h2><p class="help"><b>Required</b> fields must be filled before moving on to a later stage. <b>View only</b> shows the value without letting it change. <b>Hidden</b> hides it at that stage only; its value is kept. Hiding a section hides every field under it.</p>
-    <div class="tblwrap"><table class="tbl wf-ftbl"><thead><tr><th>Field</th>${st.map((s) => `<th>${esc(s.name || 'Untitled')}</th>`).join('')}</tr></thead>
-    <tbody>${rows.map((r) => `<tr class="${r.heading || r.section ? 'wf-secrow' : ''}"><td>${esc(r.label)}</td>${st.map((s, si) => `<td>${cell(r, s, si)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`;
+    <div class="tblwrap"><table class="tbl wf-ftbl"><thead><tr><th>Field</th>${cols.map(([s, si]) => `<th${si === 'b' ? ' class="wf-bcol" title="A new record that hasn’t been saved yet"' : ''}>${esc(s.name || 'Untitled')}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((r) => `<tr class="${r.heading || r.section ? 'wf-secrow' : ''}"><td>${esc(r.label)}</td>${cols.map(([s, si]) => `<td${si === 'b' ? ' class="wf-bcol"' : ''}>${cell(r, s, si)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="help"><b>${esc(BEFORE_NAME)}</b> is built in: a new record that hasn’t been saved yet. There, <b>Required</b> means needed to save. Nobody is responsible and there are no buttons; on Save the record goes to ${esc(f.workflow.stages[0]?.name || 'the first stage')}.</p></section>`;
 }
 
 export function viewWorkflow(f) {
@@ -85,7 +87,7 @@ export function viewWorkflow(f) {
     <section class="panel am-sec"><label class="switch"><input type="checkbox" data-wfd="on"${on ? ' checked' : ''}><span class="tr"></span><span>Use a workflow for ${esc((f.name || 'this form').toLowerCase())}</span></label>
       <p class="help">Records move through stages, like Draft → Review → Approved. At each stage one person (or a security group) is responsible: only they and administrators can change the record, and it shows in their <b>My work</b>. Each stage has its own buttons to move on, and decides which fields show, can change, or must be filled first. Records already saved join the workflow when someone starts them.</p></section>
     ${on ? `${probs.length ? `<div class="panel am-warn" role="note"><b>To fix</b><ul>${probs.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
-      <div class="wf-stages">${w.stages.map((s, i) => stageCard(f, s, i, w.stages.length)).join('')}</div>
+      <div class="wf-stages"><div class="panel wf-stage wf-before-card"><div class="wf-sh"><b>${esc(BEFORE_NAME)}</b><span class="chip acc">Built in</span></div><p class="help">A new record that hasn’t been saved yet. Set what it shows in the table below; on Save it goes to ${esc(w.stages[0]?.name || 'the first stage')}.</p></div>${w.stages.map((s, i) => stageCard(f, s, i, w.stages.length)).join('')}</div>
       <div class="rl-adds"><button type="button" class="btn" data-wfa="add">+ Stage</button><button type="button" class="btn ghost" data-wfa="defaults" title="Replace every stage's buttons with Next and Send back">Standard buttons</button></div>
       ${w.stages.length ? fieldTable(f) : ''}
       <p class="help">The Stage can be used in show/hide rules and automations (“when the Stage becomes Approved…”).</p>` : ''}
@@ -123,6 +125,12 @@ export function wfInput(f, el) {
 export function wfChange(f, el) {
   const d = el.dataset.wfd;
   if (d === 'on') { if (el.checked) f.workflow = f.workflow?.stages?.length ? { ...f.workflow, on: true } : starter(); else f.workflow = { ...(f.workflow || { stages: [] }), on: false }; changed(); return true; }
+  if (el.dataset.si === 'b' && f.workflow && (d === 'fmode' || d === 'sec')) { // Before saving
+    const b = (f.workflow.before = { fields: { ...(f.workflow.before?.fields || {}) }, sections: { ...(f.workflow.before?.sections || {}) } });
+    if (d === 'fmode') { if (el.value === 'edit' || el.value === 'show') delete b.fields[el.dataset.k]; else b.fields[el.dataset.k] = el.value; }
+    else if (el.value === 'show') delete b.sections[el.dataset.k]; else b.sections[el.dataset.k] = 'hide';
+    changed(); return true;
+  }
   const s = f.workflow?.stages?.[+el.dataset.si];
   if (!s) return false;
   switch (d) {
