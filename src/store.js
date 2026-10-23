@@ -26,6 +26,7 @@ import { ref, uploadBytes, getDownloadURL, getBlob, deleteObject } from 'firebas
 import { isAdmin, formLevel, effectiveAccess, withInherited } from './access.js';
 import { clone } from './util.js';
 import { withFixed, stripFixed } from './fixedlogic.js';
+import { withLookups, stripLookups } from './lookuplogic.js';
 import { queuePut, queueAll, queueGet, queueDel, findPending, fillUploaded, stale } from './offlinequeue.js';
 
 /* ---------- working with no signal ----------
@@ -392,10 +393,16 @@ function flattenRecords() {
   if (extra.length) { const have = new Set(all.map((r) => r.id)); extra.forEach((r) => { if (!have.has(r.id)) { have.add(r.id); all.push(r); } }); }
   // read-only fields with a value set in the designer show the form's value (fixedlogic.js)
   const forms = new Map(store.forms.map((f) => [f.id, f]));
-  store.records = all.map((r) => withFixed(r, forms.get(r.formId)));
+  const fixed = all.map((r) => withFixed(r, forms.get(r.formId)));
+  // lookup fields show the linked record's value (lookuplogic.js; the app works out calculations)
+  if ([...forms.values()].some((f) => (f.fields || []).some((x) => x.type === 'lookup'))) {
+    const byId = new Map(fixed.map((r) => [r.id, r]));
+    const h = { recById: (id) => byId.get(id), formById: (id) => forms.get(id) };
+    store.records = fixed.map((r) => withLookups(r, forms.get(r.formId), h));
+  } else store.records = fixed;
 }
 /** Values as they're stored: without fixed fields (those come from the form). */
-const storeVals = (values, formId) => stripFixed(values, store.forms.find((f) => f.id === formId));
+const storeVals = (values, formId) => { const form = store.forms.find((f) => f.id === formId); return stripLookups(stripFixed(values, form), form); };
 
 /** Update the display name other people see. */
 export async function saveProfileName(userId, displayName) {

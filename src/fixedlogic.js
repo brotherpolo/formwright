@@ -17,7 +17,7 @@ export const isLayout = (f) => !!f && LAYOUT.has(f.type);
 export const DEFAULT_TYPES = new Set(['text', 'textarea', 'email', 'phone', 'url', 'number', 'decimal', 'currency', 'percent', 'rating', 'range', 'date', 'time', 'datetime', 'checkbox', 'select', 'radio', 'multiselect', 'color']);
 export const canDefault = (f) => !!f && DEFAULT_TYPES.has(f.type);
 /** Types that can be switched to Read only (calculations and auto numbers already are). */
-export const canReadOnly = (f) => !!f && !isLayout(f) && f.type !== 'formula' && f.type !== 'autonumber';
+export const canReadOnly = (f) => !!f && !isLayout(f) && !['formula', 'autonumber', 'lookup'].includes(f.type);
 
 const NUMS = new Set(['number', 'decimal', 'currency', 'percent', 'rating', 'range']);
 const blank = (v) => v == null || v === '' || (Array.isArray(v) && !v.length);

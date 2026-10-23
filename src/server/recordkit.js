@@ -10,6 +10,7 @@ import { FX } from '../formulas.js';
 import { fieldItem } from '../pdfdoc.js';
 import { filesText, fileNames, fileLines } from '../filelist.js';
 import { withFixed, isFixed, defaultFor, isLayout } from '../fixedlogic.js';
+import { lookupValue, lookupRecord, lookupTarget, shownField, withLookups } from '../lookuplogic.js';
 import { evaluate, NO_RULES } from '../rules.js';
 import { fieldByName } from '../fieldnames.js';
 import { richBlocks } from '../richtext.js';
@@ -24,7 +25,10 @@ export const itemName = (f) => (f?.itemName || '').trim() || (f?.name || 'Record
 export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', timeZone = 'America/Toronto' } = {}) {
   const formMap = new Map(forms.map((f) => [f.id, f]));
   // read-only fields with a value set in the designer: every record shows the form's value
-  const records = stored.map((r) => withFixed(r, formMap.get(r.formId), new Date(), timeZone));
+  const fixed = stored.map((r) => withFixed(r, formMap.get(r.formId), new Date(), timeZone));
+  // and lookups filled in, so conditions and lists read them like any value (calculations: valOf)
+  const fixedMap = new Map(fixed.map((r) => [r.id, r]));
+  const records = fixed.map((r) => withLookups(r, formMap.get(r.formId), { recById: (id) => fixedMap.get(id), formById: (id) => formMap.get(id) }));
   const recMap = new Map(records.map((r) => [r.id, r]));
   const kids = new Map();
   records.forEach((r) => { if (r.parentId) { if (!kids.has(r.parentId)) kids.set(r.parentId, []); kids.get(r.parentId).push(r); } });
@@ -52,7 +56,9 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
       }
     } catch (e) { return String(v); }
   }
+  const fieldForm = new Map(); forms.forEach((fm) => (fm.fields || []).forEach((x) => fieldForm.set(x, fm)));
   function fmt(f, v) {
+    if (f.type === 'lookup') { const g = fieldForm.has(f) && shownField(fieldForm.get(f), f, formById); return g ? fmt(g, v) : v == null ? '' : String(v); }
     if (f.type !== 'formula' && isEmpty(v)) return '';
     try {
       switch (f.type) {
@@ -80,6 +86,7 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
   // by system name, ID, or a caption only one field has (fieldnames.js)
   function rawFor(f, rec, form, depth) {
     if (f.type === 'formula') return evalFormula(form, f, rec, depth + 1);
+    if (f.type === 'lookup') { const t = lookupTarget(form, f, formById), r = t && lookupRecord(rec, f, recById); return r && depth < 20 ? rawFor(t.field, r, t.form, depth + 1) : null; }
     const v = f.type === 'autonumber' ? rec.nums?.[f.id] : rec.values?.[f.id];
     if (f.type === 'relation') { const r = v && recById(v); return r ? recTitle(r) : ''; }
     if (f.type === 'location') return v?.address || '';
@@ -111,6 +118,7 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
     if (f.id === STAGE_FIELD) return stageName(form || formById(rec.formId), rec);
     if (f.type === 'autonumber') return rec.nums?.[f.id] ?? null;
     if (isFixed(f)) return defaultFor(f, new Date(), timeZone);
+    if (f.type === 'lookup') return lookupValue(rec, f, { recById, formById, valOf });
     if (f.type !== 'formula') return rec.values?.[f.id];
     form = form || formById(rec.formId);
     try { const v = evalFormula(form, f, rec); return typeof v === 'number' && !isFinite(v) ? null : v; } catch (e) { return null; }

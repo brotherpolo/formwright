@@ -216,6 +216,12 @@ textarea.in{min-height:96px;resize:vertical;line-height:1.45}
 .dflt-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .dflt-row .in{flex:1;min-width:150px}
 .fedit-ins .rte{width:100%}
+/* Lookup fields: the value, then where it's from */
+.fld.lk .rdv{flex-direction:column;align-items:flex-start;justify-content:center;gap:1px}
+.lk-v{font-weight:500}
+.lk-src{font-size:12px;color:var(--muted)}
+.lk-src .rd-link{font-size:12px}
+.lk-path{color:var(--muted)}
 /* Attachments fields (any number of files): a drop area, then one card per file */
 .attw{display:flex;flex-direction:column;gap:10px;min-width:0}
 .att-drop{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:10px;padding:18px;border:2px dashed var(--line-strong);border-radius:12px;background:var(--sunk);color:var(--muted);text-align:center;transition:border-color .15s,background .15s}

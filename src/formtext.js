@@ -37,6 +37,7 @@ const TYPE_WORDS = [
   ['file', 'file', ['file upload']],
   ['attachments', 'attachments', ['files', 'attachment list']],
   ['instructions', 'instructions', ['note', 'notes block']],
+  ['lookup', 'lookup', ['look up']],
   ['image', 'photo', ['image', 'picture']],
   ['signature', 'signature', []],
   ['color', 'color', ['colour']],

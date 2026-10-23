@@ -96,7 +96,7 @@ export function valueOf(ctx, rec, ref) {
   const form = ctx.formById(ref.form);
   const f = form && (form.fields || []).find((x) => x.id === ref.id);
   if (!f) return undefined;
-  if (f.type === 'formula') {
+  if (f.type === 'formula' || f.type === 'lookup') {
     const saved = r.values && r.values[f.id];
     if (saved !== undefined && saved !== null && saved !== '') return saved;
     return ctx.valOf ? ctx.valOf(f, r, form) : undefined;

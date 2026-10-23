@@ -84,6 +84,7 @@ src/
   recentdel.js             Recently deleted under a form's list (admins): Restore
   offline.js               Working with no signal: the Offline / Syncing bar, back-online sync, late-error messages
   offlinequeue.js          Photos and files picked offline wait here (IndexedDB) until they upload (helpers unit-tested)
+  lookuplogic.js           Lookup fields: paths, the record reached, values, the designer's choices (unit-tested)
   fixedlogic.js            Default values, Read only fields and Instructions: what's fixed, today/now, stored or not (unit-tested)
   filelist.js              Attachments fields: the list of files, tiles, "3 files", what was added or removed (unit-tested)
   layoutlogic.js           Board and Timeline: columns, moves, spans, the axis (pure, unit-tested)
@@ -553,6 +554,16 @@ Formwright keeps working on a phone, tablet or computer with no signal, once it 
 - **Not copied:** auto numbers (the copy gets its own when saved), signatures (they belong to one record), calculations (worked out again), child records and Tasks.
 - **Sub-form grids:** their rows are copied as new rows of the copy.
 - Nothing is saved until you click **Save**; Back without saving leaves no trace. A line under the title says what it's a copy of.
+
+## Lookup fields (a field type under Relations)
+
+A **Lookup** shows a value from another record, always current. A Site visit shows its contact's phone and email, its client's office, or its project's budget, without typing them again.
+
+- **Look up from:** a **Link to record** field on the form, or **the record it's under** (a Site visit's Project), or **one step further** (Project → Client, or Contact on site → Client). **Show its:** any field there, calculations and other lookups included.
+- **On the record:** the value (a phone is still a link to call, an address still has Map ↗) with **⇢ Lookup** and **from Dana Okafor ↗**, which opens that record. Nobody types into it. Pick a different contact and it changes straight away, before saving; change the contact's phone and every visit shows the new number.
+- **Nothing is stored** on the record (`values` never holds it); the app and the server work it out. A linked record you can't see isn't in your data, so the lookup is empty rather than showing its value.
+- **Works in** lists (columns, sorting, filters), PDFs, Email PDF, Word templates (`{Contact phone}`), dashboards, sub-form grids and calculations (`{Client discount} * {Budget}`). Imports skip it, automations can't set it, and rule conditions don't offer it.
+- Stored on the field as `{ type: 'lookup', via: ['f:<linkFieldId>' | 'p:<parentFormId>', …], show: '<fieldId>' }`. Logic in `src/lookuplogic.js` (unit-tested); the server kit (Cadence `functions/fwkit.cjs`) does the same.
 
 ## Default values, Read only and Instructions (Form designer → a field's settings)
 

@@ -64,6 +64,7 @@ import * as allwork from './allwork.js';
 import { typeColors, categoryStyle, canvasRows, blockOf, moveBefore, stepTarget, sectionOf, snapBefore, sectionStep } from './dzlogic.js';
 import { richEditorHTML, richViewHTML, initRichUI } from './richui.js';
 import { fromEditor, richBlocks, RICH_KEY, editorHTML } from './richtext.js';
+import { isLookup, lookupValue, lookupRecord, lookupTarget, shownField, lookupSources, showable, pathOf } from './lookuplogic.js';
 import { isLayout, canDefault, canReadOnly, hasDefault, isFixed, isReadOnly, defaultFor, withDefaults, defaultText } from './fixedlogic.js';
 import { STAGE_FIELD, wfOn, stagesOf, stageById, stageIndex, firstStage, stageName, stageView, withStageField, canWork, assigneeFor, movesOf, missingToMove, waited, stageDue, dueState, dayKey } from './workflow.js';
 import { initRules, viewRules, rulesClick, rulesChange, rulesInput, rulesListHTML, parentUse, rulesCtx } from './rulesui.js';
@@ -75,7 +76,7 @@ import examples from './examples.json';
 const ADMIN_VIEWS = new Set(['settings', 'dates', 'problems', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 
 // other words people search field types by
-const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',attachments:'attachments files documents many multiple upload drag drop pdf photos',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',heading:'section heading title divider group fold',instructions:'instructions note guidance help explanation text block read only'};
+const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',attachments:'attachments files documents many multiple upload drag drop pdf photos',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',lookup:'lookup look up value from linked related record parent pull show',heading:'section heading title divider group fold',instructions:'instructions note guidance help explanation text block read only'};
 const TYPES=[
  ['text','Short text','Aa','Text'],['textarea','Long text','¶','Text'],
  ['email','Email','@','Contact'],['phone','Phone','+1','Contact'],['url','Website','//','Contact'],['location','Location','⌖','Contact'],
@@ -83,7 +84,7 @@ const TYPES=[
  ['date','Date','D','Date & time'],['time','Time','T','Date & time'],['datetime','Date & time','DT','Date & time'],
  ['checkbox','Yes / No','✓','Choices'],['select','Dropdown','▾','Choices'],['radio','Single choice','◉','Choices'],['multiselect','Multiple choice','☰','Choices'],
  ['file','File upload','⇪','Media'],['attachments','Attachments','⧉','Media'],['image','Photo','▣','Media'],['signature','Signature','✎','Media'],['color','Color','◐','Media'],
- ['relation','Link to record','↗','Relations'],['heading','Section heading','§','Layout'],['instructions','Instructions','ℹ','Layout']];
+ ['relation','Link to record','↗','Relations'],['lookup','Lookup','⇢','Relations'],['heading','Section heading','§','Layout'],['instructions','Instructions','ℹ','Layout']];
 const T=Object.fromEntries(TYPES.map(t=>[t[0],{label:t[1],glyph:t[2],group:t[3]}]));
 const TYCOL=typeColors(TYPES); // each type's shade of its category's colour
 const gly=(type,cls='glyph')=>`<span class="${cls}${TYCOL[type]?' tc':type==='heading'||type==='instructions'?' tsec':''}"${TYCOL[type]?` style="${TYCOL[type].style}"`:''} title="${esc(T[type]?.label||'')}">${T[type]?.glyph||'?'}</span>`;
@@ -121,6 +122,7 @@ const parentsOf=formId=>store.forms.filter(f=>(f.children||[]).some(c=>c.formId=
 const recordsOf=formId=>store.records.filter(r=>r.formId===formId);
 
 function fmt(f,v){
+  if(f.type==='lookup'){const g=lkShown(f);return g?fmt(g,v):(v==null?'':String(v));}
   if(f.type!=='formula'&&isEmpty(v))return '';
   try{switch(f.type){
     case 'formula':return fmtCalc(f,v);
@@ -152,6 +154,7 @@ function mapUrl(v){if(!v)return '';if(v.lat!=null&&v.lng!=null&&v.lat!==''&&v.ln
 const lc=s=>String(s||'').trim().toLowerCase();
 function rawFor(f,rec,form,depth,check){
   if(f.type==='formula')return evalFormula(form,f,rec,depth+1,check);
+  if(f.type==='lookup'){const t=lookupTarget(form,f,formById),r=t&&lookupRecord(rec,f,recById);return r&&depth<20?rawFor(t.field,r,t.form,depth+1,check):null;}
   const v=rec.values?.[f.id];
   if(f.type==='relation'){const r=v&&recById(v);return r?recTitle(r):'';}
   if(f.type==='location')return v?.address||'';
@@ -181,7 +184,7 @@ function evalFormula(form,f,rec,depth=0,check=false){
   return FX.ev(ast,ctx);
 }
 function calc(form,f,rec){try{const v=evalFormula(form,f,rec);return (typeof v==='number'&&!isFinite(v))?{e:'The result is too large or undefined.'}:{v}}catch(e){return {e:e.fx?e.message:'This formula could not be worked out.'}}}
-function valOf(f,rec,form){if(f.type!=='formula')return rec.values?.[f.id];form=form||formById(rec.formId);const r=calc(form,f,rec);return r.e?null:r.v;}
+function valOf(f,rec,form){if(f.type==='lookup')return lookupValue(rec,f,LK_H);if(f.type!=='formula')return rec.values?.[f.id];form=form||formById(rec.formId);const r=calc(form,f,rec);return r.e?null:r.v;}
 function fmtCalc(f,v){
   if(v==null||v==='')return '';
   if(typeof v==='boolean')return v?'Yes':'No';
@@ -1408,6 +1411,7 @@ function gridCell(cf,row,f,d,ro){
   if(cf.rules?.length){const st=row._rs||(row._rs=rowRules(cf,row,d));if(st.blank.has(f.id))return `<span class="gcalc rule-na" title="${st.cleared.has(f.id)?'Cleared':'Hidden'} by a rule">—</span>`;}
   const ids=`data-grid="${cf.id}" data-row="${row.id}" data-gf="${f.id}"`,v=row.values[f.id],val=v==null?'':esc(v),dis=ro?' disabled':'';
   const lab=` aria-label="${esc(f.label)}"`;
+  if(f.type==='lookup'){let t='';try{t=fmt(f,valOf(f,rowRec(row,cf,d),cf))}catch(e){}return `<span class="gcalc" title="Lookup">${esc(t||'—')}</span>`;}
   if(isReadOnly(f)){const rv=isFixed(f)?defaultFor(f):v;let t='';try{t=isEmpty(rv)?'':fmt(f,rv)}catch(e){t=String(rv??'')}if(f.type==='url'&&t)return `<a class="gcalc" href="${esc(/^https?:\/\//i.test(t)?t:'https://'+t)}" target="_blank" rel="noopener">${esc(f.linkText||t)} ↗</a>`;return `<span class="gcalc" title="Read only">${esc(t||'—')}</span>`;}
   if(f.type==='autonumber'){const live=row.isNew?null:recById(row.id);const t=live?.nums?.[f.id];return `<span class="gcalc gauto">${esc(t||(row.isNew?'On save':'…'))}</span>`;}
   if(f.type==='formula'){const r=calc(cf,f,rowRec(row,cf,d));return `<span class="gcalc" id="gc-${cf.id}-${row.id}-${f.id}">${esc(r.e?'—':fmtCalc(f,r.v))}</span>`;}
@@ -1529,6 +1533,7 @@ function fieldBlock(f,v,err,scope,locked){
   if(f.type==='heading')return `<div class="fsec" id="fb-${scope}-${f.id}"><h3>${esc(f.label)}</h3>${f.help?`<p class="help">${esc(f.help)}</p>`:''}</div>`;
   const id=`in-${scope}-${f.id}`;
   if(f.type==='instructions')return instrBlock(f,scope);
+  if(f.type==='lookup')return lkBlock(f,scope,id);
   if(f.type==='attachments'&&attOwn(f,scope))return attSection(f,v,err,scope,locked,id);
   if(isReadOnly(f)&&locked!==true)return roBlock(f,isFixed(f)?defaultFor(f):v,id,scope);
   if(scope==='record'&&rdraft?.reading&&locked!==true)return `<div class="fld rd w-${f.width==='half'?'half':'full'}" id="fb-${scope}-${f.id}"><span class="flabel">${esc(f.label)}</span><div class="rdv">${readValue(f,v,id,scope)}</div></div>`;
@@ -1550,6 +1555,7 @@ function readValue(f,v,id,scope){
       if(f.type==='image'&&src)return `<a class="rd-pic" href="${esc(src)}" target="_blank" rel="noopener"><img src="${esc(src)}" alt="${nm}"></a>`;
       return src?`<a href="${esc(src)}" target="_blank" rel="noopener">${nm}</a>${v.size?` <span class="help">${fsize(v.size)}</span>`:''}`:nm;}
     case 'attachments':return attFilesHTML(f,v,scope,false);
+    case 'lookup':{const g=lkShown(f);return g&&g.type!=='lookup'?readValue(g,v,id,scope):esc(fmt(f,v));}
     case 'signature':return typeof v==='string'&&v.startsWith('data:image')?`<img class="rd-sig" src="${esc(v)}" alt="Signature">`:'Signed';
     case 'location':{const u=mapUrl(v);const t=esc(fmt(f,v));return u?`${t} <a href="${esc(u)}" target="_blank" rel="noopener">Map ↗</a>`:t;}
     case 'relation':{const r=recById(v),tf=r&&formById(r.formId);return r&&tf?`<button type="button" class="rd-link" data-act="open-record" data-id="${esc(r.id)}">${esc(recTitle(r,tf))}</button>`:'(removed)';}
@@ -1690,7 +1696,7 @@ function refreshRowRules(d){
 }
 const scopeOf=d=>d===pdraft?'preview':d===cdraft&&cdraft?'cell':'record';
 const draftFor=scope=>scope==='record'?rdraft:scope==='cell'?cdraft:scope==='preview'?pdraft:null;
-function refreshCalcs(d){const form=formOfDraft(d);const scope=scopeOf(d);(form?.fields||[]).filter(f=>f.type==='formula').forEach(f=>{const el=document.getElementById(`calc-${scope}-${f.id}`);if(!el)return;const r=calc(form,f,d===cdraft?rowRec(cdraft._row,form,rdraft):draftRec(d));el.textContent=r.e||fmtCalc(f,r.v)||'—';el.classList.toggle('bad',!!r.e);});}
+function refreshCalcs(d){const form=formOfDraft(d);const scope=scopeOf(d);(form?.fields||[]).filter(isLookup).forEach(f=>{const el=document.getElementById(`lk-${scope}-${f.id}`);if(el)el.innerHTML=lkInner(f,d,scope);});(form?.fields||[]).filter(f=>f.type==='formula').forEach(f=>{const el=document.getElementById(`calc-${scope}-${f.id}`);if(!el)return;const r=calc(form,f,d===cdraft?rowRec(cdraft._row,form,rdraft):draftRec(d));el.textContent=r.e||fmtCalc(f,r.v)||'—';el.classList.toggle('bad',!!r.e);});}
 function draftOf(el){return draftFor(el.closest('[data-scope]')?.dataset.scope);}
 function formOfDraft(d){return d===pdraft?fdraft:formById(d.formId);}
 function repaint(d,f){const scope=scopeOf(d);const el=document.getElementById(`fb-${scope}-${f.id}`);if(!el)return;const hid=el.hidden;el.outerHTML=fieldOut(d,f,scope,scope==='cell'?NO_RULES:d._rs);if(hid){const n=document.getElementById(`fb-${scope}-${f.id}`);if(n)n.hidden=true;}const c=document.querySelector(`#fb-${scope}-${f.id} canvas[data-sig]`);if(c)initSig(c);}
@@ -1725,6 +1731,42 @@ async function onFile(t){
     d.values[f.id]=val;markDirty(d);repaint(d,f);
     if(val?.pending)toast(`No signal: the ${f.type==='image'?'photo':'file'} is kept on this device and uploads when you’re back. Save as usual.`,{duration:7000});
   }catch(e){fb.classList.remove('pending');toast(e?.code==='storage/unauthorized'?'You don’t have permission to upload files to this form.':'The upload failed. Check your connection and try again.');console.error(e);}
+}
+/* ---------- Lookup fields (lookuplogic.js) ----------
+   A value from the record a Link to record field points at, or the record this one sits under
+   (one more step allowed). Always current; never stored. */
+const LK_H={recById:id=>recById(id),formById:id=>id===fdraft?.id?fdraft:formById(id),valOf:(f,r,fm)=>valOf(f,r,fm)};
+function lkForm(f){if(fdraft&&(fdraft.fields||[]).includes(f))return fdraft;return store.forms.find(fm=>(fm.fields||[]).includes(f))||store.forms.find(fm=>(fm.fields||[]).some(x=>x.id===f.id))||null;}
+/** The field a lookup shows (for formatting), or null when it isn't set up. */
+function lkShown(f){const fm=lkForm(f);return fm?shownField(fm,f,LK_H.formById):null;}
+function lkRecOf(d){return d===cdraft?rowRec(cdraft._row,formOfDraft(d),rdraft):draftRec(d);}
+function lkInner(f,d,scope){
+  const form=formOfDraft(d);if(!form)return '';
+  const t=lookupTarget(form,f,LK_H.formById);
+  if(!t)return `<span class="help">Choose what to look up in the Form designer.</span>`;
+  const rec=lkRecOf(d),r=lookupRecord(rec,f,recById);
+  if(!r)return '<span class="rd-empty" aria-label="Empty">–</span>';
+  const v=lookupValue(rec,f,LK_H),g=lkShown(f)||t.field,id=`lkv-${scope}-${f.id}`;
+  const shown=isEmpty(v)&&g.type!=='checkbox'?'<span class="rd-empty" aria-label="Empty">–</span>':(g.type==='formula'?esc(fmt(g,v)):readValue(g,v,id,scope));
+  const rf=formById(r.formId),steps=pathOf(f).length>1?` <span class="lk-path">(${esc(lkPathLabel(form,f))})</span>`:'';
+  return `<span class="lk-v">${shown}</span><span class="lk-src">from <button type="button" class="rd-link" data-act="open-record" data-id="${esc(r.id)}">${esc(recTitle(r,rf))} <span aria-hidden="true">↗</span></button>${steps}</span>`;
+}
+function lkPathLabel(form,f){const src=lookupSources(form,store.forms,p=>itemName(p)).find(x=>x.via.join('|')===pathOf(f).join('|'));return src?src.label:'';}
+function lkBlock(f,scope,id){
+  const d=draftFor(scope);if(!d)return '';
+  const reading=scope==='record'&&rdraft?.reading;
+  return `<div class="fld rd ro lk w-${f.width==='half'?'half':'full'}" id="fb-${scope}-${f.id}"><span class="flabel" id="lb-${id}">${esc(f.label)}${reading?'':`<span class="ro-tag" title="Looked up from another record">⇢ Lookup</span>`}</span><div class="rdv" id="lk-${scope}-${f.id}">${lkInner(f,d,scope)}</div>${f.help&&!reading?`<p class="help">${esc(f.help)}</p>`:''}</div>`;
+}
+/** Designer: Look up from, and Show its. */
+function lkEditor(x){
+  const srcs=lookupSources(fdraft,[...store.forms.filter(o=>o.id!==fdraft.id),fdraft],p=>itemName(p));
+  const cur=pathOf(x).join('|'),one=srcs.filter(s=>s.via.length===1),two=srcs.filter(s=>s.via.length===2);
+  const opt=s=>`<option value="${esc(s.via.join('|'))}"${s.via.join('|')===cur?' selected':''}>${esc(s.label)} (${esc(s.form.name)})</option>`;
+  const links=one.filter(s=>s.via[0].startsWith('f:')),ups=one.filter(s=>s.via[0].startsWith('p:'));
+  let h=`<div class="prop full"><span>Look up from</span>${srcs.length?`<select class="in" data-prop="via" data-kind="via"><option value="">Choose…</option>${links.length?`<optgroup label="Link to record fields">${links.map(opt).join('')}</optgroup>`:''}${ups.length?`<optgroup label="The record it’s under">${ups.map(opt).join('')}</optgroup>`:''}${two.length?`<optgroup label="One step further">${two.map(opt).join('')}</optgroup>`:''}</select>`:'<p class="help">Nothing to look up from yet. Add a <b>Link to record</b> field to this form, or put this form under another one (Relationships).</p>'}</div>`;
+  const src=srcs.find(s=>s.via.join('|')===cur);
+  if(src){const fs=showable(src.form).filter(o=>!(o.type==='lookup'&&o.id===x.id));h+=`<div class="prop full"><span>Show its</span><select class="in" data-prop="show"><option value="">Choose a field…</option>${fs.map(o=>`<option value="${o.id}"${o.id===x.show?' selected':''}>${esc(o.label||'Untitled')}${o.type==='formula'?' (calculated)':o.type==='lookup'?' (lookup)':''}</option>`).join('')}</select><small class="help">Always shows that field’s current value on the ${esc(itemName(src.form).toLowerCase())}. Nothing is copied, so it can’t be typed over.</small></div>`;}
+  return h;
 }
 /* ---------- Read only fields and Instructions (fixedlogic.js) ---------- */
 const LOCK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
@@ -1837,7 +1879,7 @@ function initSig(c){
 function validate(form,vals,st){
   const errs={};st=st||NO_RULES;
   (form.fields||[]).forEach(f=>{
-    if(isLayout(f)||f.type==='formula'||f.type==='autonumber'||isReadOnly(f))return;const v=vals[f.id];
+    if(isLayout(f)||f.type==='formula'||f.type==='autonumber'||f.type==='lookup'||isReadOnly(f))return;const v=vals[f.id];
     if(st.blank.has(f.id)||st.hiddenFields.has(f.id)||st.view?.has(f.id))return; // hidden, cleared or view only: nothing to check
     if(st.required(f)&&(f.type==='checkbox'?!v:isEmpty(v))){errs[f.id]=f.type==='checkbox'?'This must be switched on.':f.type==='attachments'?'Add at least one file.':'This field is required.';return;}
     if(isEmpty(v))return;
@@ -1955,6 +1997,7 @@ function viewDesigner(){
 function newField(type){
   const f={id:uid('x'),type,label:T[type].label,required:false,inList:false,width:['heading','instructions','textarea','location','multiselect','file','signature','attachments'].includes(type)?'full':'half',help:''};
   if(type==='instructions'){f.label='';f.width='full';f.text='';f.html=null;}
+  if(type==='lookup'){f.via=[];f.show='';}
   if(CHOICE.has(type))f.options=['Option 1','Option 2','Option 3'];
   if(type==='decimal')f.decimals=2;
   if(type==='currency')f.currency='CAD';
@@ -2055,7 +2098,7 @@ function dzCanvasHTML(f){
     return `<div class="crow${r.section?' in-sec':''}${r.last?' sec-last':''}" data-feid="${x.id}">
           ${grip(x)}
           ${gly(x.type)}
-          <div class="crow-m"><b id="frl-${x.id}">${esc(x.label||(x.type==='instructions'?'Instructions':'Untitled field'))}${x.required&&!x.readOnly?'<span class="req">*</span>':''}</b><small>${x.type==='instructions'?esc(String(x.text||'No text yet').replace(/\s+/g,' ').slice(0,60)):esc(T[x.type].label)}${x.readOnly&&canReadOnly(x)?' · read only':''}${hasDefault(x)?` · default ${esc(defaultText(x).slice(0,30))}`:''}${String(x.sysName||'').trim()&&String(x.sysName).trim()!==x.label?` · <span class="sysn" title="System name">${esc(String(x.sysName).trim())}</span>`:''}${x.type==='relation'&&formById(x.relForm)?' → '+esc(formById(x.relForm).name):''}${x.inList?' · in list':''}${f.titleField===x.id?' · title':''}${ruleTag(f,x.id)}</small></div>
+          <div class="crow-m"><b id="frl-${x.id}">${esc(x.label||(x.type==='instructions'?'Instructions':'Untitled field'))}${x.required&&!x.readOnly?'<span class="req">*</span>':''}</b><small>${x.type==='instructions'?esc(String(x.text||'No text yet').replace(/\s+/g,' ').slice(0,60)):esc(T[x.type].label)}${x.readOnly&&canReadOnly(x)?' · read only':''}${hasDefault(x)?` · default ${esc(defaultText(x).slice(0,30))}`:''}${String(x.sysName||'').trim()&&String(x.sysName).trim()!==x.label?` · <span class="sysn" title="System name">${esc(String(x.sysName).trim())}</span>`:''}${x.type==='relation'&&formById(x.relForm)?' → '+esc(formById(x.relForm).name):''}${x.type==='lookup'?(()=>{const t=lookupTarget(f,x,LK_H.formById);return t?' · '+esc(lkPathLabel(f,x))+' → '+esc(t.field.label):' · not set up';})():''}${x.inList?' · in list':''}${f.titleField===x.id?' · title':''}${ruleTag(f,x.id)}</small></div>
           <button class="ibtn dz-dots" data-act="open-field" data-id="${x.id}" aria-label="Options for ${esc(x.label||'field')}">⋯</button>
         </div>`;
   }).join('');
@@ -2203,10 +2246,11 @@ function fieldEditor(x){
   if(x.type==='range')h+=P('Step',num('step',x.step))+P('Unit after value',inp('suffix',x.suffix,'placeholder="e.g. %"'));
   if(x.type==='rating')h+=P('Number of stars',num('max',x.max));
   if(x.type==='autonumber')h+=autoEditor(x,P,inp,num,sw);
+  if(x.type==='lookup')h+=lkEditor(x);
   if(x.type==='relation')h+=P('Links to form',`<select class="in" data-prop="relForm"><option value="">Choose a form…</option>${[...store.forms].sort(byOrder).map(o=>`<option value="${o.id}"${o.id===x.relForm?' selected':''}>${esc(o.name)}</option>`).join('')}</select>`);
   if(canDefault(x))h+=defaultEditor(x);
   if(x.type==='url'&&x.readOnly)h+=P('Button text',inp('linkText',x.linkText,'maxlength="80" placeholder="e.g. Open the safety checklist"')+'<small class="help">A read-only website shows as a button with these words. Empty: the address.</small>','full');
-  if(x.type!=='heading')h+=`<div class="props-sw">${canReadOnly(x)?sw('readOnly','Read only'):''}${x.type==='formula'||x.type==='autonumber'||x.readOnly?'':sw('required','Required')}${NOLIST.has(x.type)?'':sw('inList','Column in the starting list')}${x.type==='date'||x.type==='datetime'?sw('calendar','Show on the calendar'):''}${x.type==='textarea'?`<label class="switch"><input type="checkbox" data-prop="plain" data-kind="neg"${x.plain?'':' checked'}><span class="tr"></span><span>Allow formatting</span></label>`:''}<label class="switch"><input type="checkbox" data-prop="width" data-kind="half"${x.width==='half'?' checked':''}><span class="tr"></span><span>Half width on wide screens</span></label></div>`;
+  if(x.type!=='heading')h+=`<div class="props-sw">${canReadOnly(x)?sw('readOnly','Read only'):''}${x.type==='formula'||x.type==='autonumber'||x.type==='lookup'||x.readOnly?'':sw('required','Required')}${NOLIST.has(x.type)?'':sw('inList','Column in the starting list')}${x.type==='date'||x.type==='datetime'?sw('calendar','Show on the calendar'):''}${x.type==='textarea'?`<label class="switch"><input type="checkbox" data-prop="plain" data-kind="neg"${x.plain?'':' checked'}><span class="tr"></span><span>Allow formatting</span></label>`:''}<label class="switch"><input type="checkbox" data-prop="width" data-kind="half"${x.width==='half'?' checked':''}><span class="tr"></span><span>Half width on wide screens</span></label></div>`;
   h+=`<div class="prop full"><span class="keyline">Field ID ${esc(x.id)}</span></div>`;
   return `<div class="fedit">${h}</div>`;
 }
@@ -2693,13 +2737,14 @@ document.addEventListener('change',async e=>{
   if(t.dataset.prop){
     const f=fdraft.fields.find(x=>x.id===t.closest('[data-feid]').dataset.feid);const p=t.dataset.prop,k=t.dataset.kind;
     if(k==='bool')f[p]=t.checked;else if(k==='neg'){if(t.checked)delete f[p];else f[p]=true;}else if(k==='half')f.width=t.checked?'half':'full';
+    else if(k==='via'){f.via=t.value?t.value.split('|'):[];f.show='';}
     else if(k==='tok'){f.defaultValue=t.checked?t.dataset.v:null;}
     else if(k==='multi'){const l=[...t.closest('.dflt-multi').querySelectorAll('input:checked')].map(i=>i.value);f.defaultValue=l.length?l:null;}
     else if(k==='yn'){f.defaultValue=t.value===''?null:t.value==='yes';}
     else if(p==='type'){delete f.defaultValue;delete f.linkText;if(!canReadOnly({type:t.value}))delete f.readOnly;const nf=newField(t.value);Object.assign(f,{type:t.value},Object.fromEntries(Object.entries(nf).filter(([key])=>!['id','label','required','inList','help','width'].includes(key)&&f[key]==null)));if(NOLIST.has(f.type))f.inList=false;}
     else if(t.tagName==='SELECT')f[p]=t.value;
     setFdirty();
-    if(['type','relForm','required','inList','format'].includes(p)||k==='bool'||k==='tok')renderMain();
+    if(['type','relForm','required','inList','format','via','show'].includes(p)||k==='bool'||k==='tok')renderMain();
     return;
   }
   if(t.dataset.crel!=null){const c=fdraft.children[+t.dataset.crel];const p=t.dataset.cprop;
