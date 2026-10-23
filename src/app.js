@@ -64,6 +64,8 @@ import * as allwork from './allwork.js';
 import { typeColors, categoryStyle, canvasRows, blockOf, moveBefore, stepTarget, sectionOf, snapBefore, sectionStep } from './dzlogic.js';
 import { richEditorHTML, richViewHTML, initRichUI } from './richui.js';
 import { fromEditor, richBlocks, RICH_KEY, editorHTML } from './richtext.js';
+import { isRollup, rollupValue, rollupRecords, rollupTarget, rollupSources, rollupOf, rollupSummary, ofFields, recordIndex, AGGS, MAX_WHERE } from './rolluplogic.js';
+import { opsFor, testCond as testCondUI } from './rules.js';
 import { isLookup, lookupValue, lookupRecord, lookupTarget, shownField, lookupSources, showable, pathOf } from './lookuplogic.js';
 import { isLayout, canDefault, canReadOnly, hasDefault, isFixed, isReadOnly, defaultFor, withDefaults, defaultText } from './fixedlogic.js';
 import { STAGE_FIELD, wfOn, stagesOf, stageById, stageIndex, firstStage, stageName, stageView, withStageField, canWork, assigneeFor, movesOf, missingToMove, waited, stageDue, dueState, dayKey } from './workflow.js';
@@ -76,7 +78,7 @@ import examples from './examples.json';
 const ADMIN_VIEWS = new Set(['settings', 'dates', 'problems', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 
 // other words people search field types by
-const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',attachments:'attachments files documents many multiple upload drag drop pdf photos',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',lookup:'lookup look up value from linked related record parent pull show',heading:'section heading title divider group fold',instructions:'instructions note guidance help explanation text block read only'};
+const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',attachments:'attachments files documents many multiple upload drag drop pdf photos',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',lookup:'lookup look up value from linked related record parent pull show',rollup:'rollup roll up count sum total average min max latest earliest list children child records summary aggregate',heading:'section heading title divider group fold',instructions:'instructions note guidance help explanation text block read only'};
 const TYPES=[
  ['text','Short text','Aa','Text'],['textarea','Long text','¶','Text'],
  ['email','Email','@','Contact'],['phone','Phone','+1','Contact'],['url','Website','//','Contact'],['location','Location','⌖','Contact'],
@@ -84,7 +86,7 @@ const TYPES=[
  ['date','Date','D','Date & time'],['time','Time','T','Date & time'],['datetime','Date & time','DT','Date & time'],
  ['checkbox','Yes / No','✓','Choices'],['select','Dropdown','▾','Choices'],['radio','Single choice','◉','Choices'],['multiselect','Multiple choice','☰','Choices'],
  ['file','File upload','⇪','Media'],['attachments','Attachments','⧉','Media'],['image','Photo','▣','Media'],['signature','Signature','✎','Media'],['color','Color','◐','Media'],
- ['relation','Link to record','↗','Relations'],['lookup','Lookup','⇢','Relations'],['heading','Section heading','§','Layout'],['instructions','Instructions','ℹ','Layout']];
+ ['relation','Link to record','↗','Relations'],['lookup','Lookup','⇢','Relations'],['rollup','Rollup','Σ','Relations'],['heading','Section heading','§','Layout'],['instructions','Instructions','ℹ','Layout']];
 const T=Object.fromEntries(TYPES.map(t=>[t[0],{label:t[1],glyph:t[2],group:t[3]}]));
 const TYCOL=typeColors(TYPES); // each type's shade of its category's colour
 const gly=(type,cls='glyph')=>`<span class="${cls}${TYCOL[type]?' tc':type==='heading'||type==='instructions'?' tsec':''}"${TYCOL[type]?` style="${TYCOL[type].style}"`:''} title="${esc(T[type]?.label||'')}">${T[type]?.glyph||'?'}</span>`;
@@ -123,6 +125,7 @@ const recordsOf=formId=>store.records.filter(r=>r.formId===formId);
 
 function fmt(f,v){
   if(f.type==='lookup'){const g=lkShown(f);return g?fmt(g,v):(v==null?'':String(v));}
+  if(f.type==='rollup')return ruText(f,v);
   if(f.type!=='formula'&&isEmpty(v))return '';
   try{switch(f.type){
     case 'formula':return fmtCalc(f,v);
@@ -155,6 +158,7 @@ const lc=s=>String(s||'').trim().toLowerCase();
 function rawFor(f,rec,form,depth,check){
   if(f.type==='formula')return evalFormula(form,f,rec,depth+1,check);
   if(f.type==='lookup'){const t=lookupTarget(form,f,formById),r=t&&lookupRecord(rec,f,recById);return r&&depth<20?rawFor(t.field,r,t.form,depth+1,check):null;}
+  if(f.type==='rollup'){const v=rollupValue(rec,f,ruH());return Array.isArray(v)?v.join(', '):v;}
   const v=rec.values?.[f.id];
   if(f.type==='relation'){const r=v&&recById(v);return r?recTitle(r):'';}
   if(f.type==='location')return v?.address||'';
@@ -184,7 +188,7 @@ function evalFormula(form,f,rec,depth=0,check=false){
   return FX.ev(ast,ctx);
 }
 function calc(form,f,rec){try{const v=evalFormula(form,f,rec);return (typeof v==='number'&&!isFinite(v))?{e:'The result is too large or undefined.'}:{v}}catch(e){return {e:e.fx?e.message:'This formula could not be worked out.'}}}
-function valOf(f,rec,form){if(f.type==='lookup')return lookupValue(rec,f,LK_H);if(f.type!=='formula')return rec.values?.[f.id];form=form||formById(rec.formId);const r=calc(form,f,rec);return r.e?null:r.v;}
+function valOf(f,rec,form){if(f.type==='lookup')return lookupValue(rec,f,LK_H);if(f.type==='rollup')return rollupValue(rec,f,ruH());if(f.type!=='formula')return rec.values?.[f.id];form=form||formById(rec.formId);const r=calc(form,f,rec);return r.e?null:r.v;}
 function fmtCalc(f,v){
   if(v==null||v==='')return '';
   if(typeof v==='boolean')return v?'Yes':'No';
@@ -1411,7 +1415,7 @@ function gridCell(cf,row,f,d,ro){
   if(cf.rules?.length){const st=row._rs||(row._rs=rowRules(cf,row,d));if(st.blank.has(f.id))return `<span class="gcalc rule-na" title="${st.cleared.has(f.id)?'Cleared':'Hidden'} by a rule">—</span>`;}
   const ids=`data-grid="${cf.id}" data-row="${row.id}" data-gf="${f.id}"`,v=row.values[f.id],val=v==null?'':esc(v),dis=ro?' disabled':'';
   const lab=` aria-label="${esc(f.label)}"`;
-  if(f.type==='lookup'){let t='';try{t=fmt(f,valOf(f,rowRec(row,cf,d),cf))}catch(e){}return `<span class="gcalc" title="Lookup">${esc(t||'—')}</span>`;}
+  if(f.type==='lookup'||f.type==='rollup'){let t='';try{t=fmt(f,valOf(f,rowRec(row,cf,d),cf))}catch(e){}return `<span class="gcalc" title="${f.type==='lookup'?'Lookup':'Rollup'}">${esc(t||'—')}</span>`;}
   if(isReadOnly(f)){const rv=isFixed(f)?defaultFor(f):v;let t='';try{t=isEmpty(rv)?'':fmt(f,rv)}catch(e){t=String(rv??'')}if(f.type==='url'&&t)return `<a class="gcalc" href="${esc(/^https?:\/\//i.test(t)?t:'https://'+t)}" target="_blank" rel="noopener">${esc(f.linkText||t)} ↗</a>`;return `<span class="gcalc" title="Read only">${esc(t||'—')}</span>`;}
   if(f.type==='autonumber'){const live=row.isNew?null:recById(row.id);const t=live?.nums?.[f.id];return `<span class="gcalc gauto">${esc(t||(row.isNew?'On save':'…'))}</span>`;}
   if(f.type==='formula'){const r=calc(cf,f,rowRec(row,cf,d));return `<span class="gcalc" id="gc-${cf.id}-${row.id}-${f.id}">${esc(r.e?'—':fmtCalc(f,r.v))}</span>`;}
@@ -1534,6 +1538,7 @@ function fieldBlock(f,v,err,scope,locked){
   const id=`in-${scope}-${f.id}`;
   if(f.type==='instructions')return instrBlock(f,scope);
   if(f.type==='lookup')return lkBlock(f,scope,id);
+  if(f.type==='rollup')return ruBlock(f,scope,id);
   if(f.type==='attachments'&&attOwn(f,scope))return attSection(f,v,err,scope,locked,id);
   if(isReadOnly(f)&&locked!==true)return roBlock(f,isFixed(f)?defaultFor(f):v,id,scope);
   if(scope==='record'&&rdraft?.reading&&locked!==true)return `<div class="fld rd w-${f.width==='half'?'half':'full'}" id="fb-${scope}-${f.id}"><span class="flabel">${esc(f.label)}</span><div class="rdv">${readValue(f,v,id,scope)}</div></div>`;
@@ -1555,6 +1560,7 @@ function readValue(f,v,id,scope){
       if(f.type==='image'&&src)return `<a class="rd-pic" href="${esc(src)}" target="_blank" rel="noopener"><img src="${esc(src)}" alt="${nm}"></a>`;
       return src?`<a href="${esc(src)}" target="_blank" rel="noopener">${nm}</a>${v.size?` <span class="help">${fsize(v.size)}</span>`:''}`:nm;}
     case 'attachments':return attFilesHTML(f,v,scope,false);
+    case 'rollup':return ruRead(f,v);
     case 'lookup':{const g=lkShown(f);return g&&g.type!=='lookup'?readValue(g,v,id,scope):esc(fmt(f,v));}
     case 'signature':return typeof v==='string'&&v.startsWith('data:image')?`<img class="rd-sig" src="${esc(v)}" alt="Signature">`:'Signed';
     case 'location':{const u=mapUrl(v);const t=esc(fmt(f,v));return u?`${t} <a href="${esc(u)}" target="_blank" rel="noopener">Map ↗</a>`:t;}
@@ -1732,6 +1738,65 @@ async function onFile(t){
     if(val?.pending)toast(`No signal: the ${f.type==='image'?'photo':'file'} is kept on this device and uploads when you’re back. Save as usual.`,{duration:7000});
   }catch(e){fb.classList.remove('pending');toast(e?.code==='storage/unauthorized'?'You don’t have permission to upload files to this form.':'The upload failed. Check your connection and try again.');console.error(e);}
 }
+/* ---------- Rollup fields (rolluplogic.js) ----------
+   Count, total, latest or a list from the records under this one, or that link here (one more
+   step allowed), with optional conditions. Always current; never stored. */
+let ruIdx=null,ruIdxOf=null;
+function ruH(){if(ruIdxOf!==store.records){ruIdx=recordIndex(store.records);ruIdxOf=store.records;}return {formById:LK_H.formById,childrenOf:ruIdx.childrenOf,linksTo:ruIdx.linksTo,valOf:(g,r,fm)=>valOf(g,r,fm),fmt:(g,v)=>fmt(g,v)};}
+const ruForms=()=>fdraft&&!store.forms.some(o=>o===fdraft)?[...store.forms.filter(o=>o.id!==fdraft.id),fdraft]:store.forms;
+function ruTargetForm(f){const fm=lkForm(f);const t=fm&&rollupTarget(fm,f,LK_H.formById);return t?t.form:null;}
+const ruShown=g=>g.type==='lookup'?lkShown(g):g;
+function ruText(f,v){
+  if(v==null||v==='')return '';
+  if(Array.isArray(v))return v.join(', ');
+  if(f.agg==='count'||!f.agg)return Number(v).toLocaleString();
+  const fm=lkForm(f),g=fm&&rollupOf(fm,f,LK_H.formById);if(!g)return String(v);
+  const s=ruShown(g)||g;
+  if(f.agg==='avg'&&(s.type==='number'||s.type==='rating'))return Number(v).toLocaleString(undefined,{maximumFractionDigits:2});
+  return fmt(s,v);
+}
+function ruRead(f,v){if(Array.isArray(v))return v.length?`<span class="ru-chips">${v.map(x=>`<span class="ru-chip">${esc(x)}</span>`).join('')}</span>`:'<span class="rd-empty" aria-label="Empty">–</span>';const t=ruText(f,v);return t?esc(t):'<span class="rd-empty" aria-label="Empty">–</span>';}
+function ruInner(f,d,scope){
+  const form=formOfDraft(d);if(!form)return '';
+  if(!rollupTarget(form,f,LK_H.formById))return `<span class="help">Choose what to roll up in the Form designer.</span>`;
+  const rec=lkRecOf(d);if(!rec.id)return '<span class="help">Worked out once it’s saved.</span>';
+  const v=rollupValue(rec,f,ruH());
+  const open=ui.ruOpen===scope+'|'+f.id,recs=open?ruMatching(rec,f):null;
+  const show=(f.agg==='count'||!f.agg)&&v>0?` <button type="button" class="rd-link ru-show" data-act="ru-show" data-id="${esc(f.id)}" aria-expanded="${open}">${open?'Hide':'Show them'}</button>`:'';
+  const list=open?`<ul class="ru-list">${recs.slice(0,50).map(r=>{const rf=formById(r.formId);return `<li><button type="button" class="rd-link" data-act="open-record" data-id="${esc(r.id)}">${esc(recTitle(r,rf))} <span aria-hidden="true">↗</span></button></li>`;}).join('')}${recs.length>50?`<li class="help">and ${recs.length-50} more</li>`:''}</ul>`:'';
+  return `<span class="lk-v">${ruRead(f,v)}${show}</span><span class="lk-src">${esc(rollupSummary(form,f,ruForms(),p=>itemName(p)))}</span>${list}`;
+}
+function ruMatching(rec,f){const form=formById(rec.formId);const t=rollupTarget(form,f,LK_H.formById);if(!t)return [];const h=ruH(),byId=new Map((t.form.fields||[]).map(x=>[x.id,x]));const conds=(f.where||[]).filter(c=>c&&byId.has(c.field));return rollupRecords(rec,f,h).filter(r=>conds.every(c=>{const g=byId.get(c.field);return testCondUI(c,valOf(g,r,t.form),g);}));}
+function ruBlock(f,scope,id){
+  const d=draftFor(scope);if(!d)return '';
+  const reading=scope==='record'&&rdraft?.reading;
+  return `<div class="fld rd ro lk ru w-${f.width==='half'?'half':'full'}" id="fb-${scope}-${f.id}"><span class="flabel" id="lb-${id}">${esc(f.label)}${reading?'':`<span class="ro-tag" title="Worked out from other records">Σ Rollup</span>`}</span><div class="rdv" id="ru-${scope}-${f.id}">${ruInner(f,d,scope)}</div>${f.help&&!reading?`<p class="help">${esc(f.help)}</p>`:''}</div>`;
+}
+/** Designer: From, Only where, Show, Of. */
+function ruEditor(x){
+  const srcs=rollupSources(fdraft,ruForms(),p=>itemName(p)),cur=(x.from||[]).join('|');
+  const one=srcs.filter(s=>s.from.length===1),two=srcs.filter(s=>s.from.length===2);
+  const opt=s=>`<option value="${esc(s.from.join('|'))}"${s.from.join('|')===cur?' selected':''}>${esc(s.label)}</option>`;
+  let h=`<div class="prop full"><span>From</span>${srcs.length?`<select class="in" data-prop="from" data-kind="rfrom"><option value="">Choose…</option>${one.length?`<optgroup label="Records under or linking to this one">${one.map(opt).join('')}</optgroup>`:''}${two.length?`<optgroup label="One step further">${two.map(opt).join('')}</optgroup>`:''}</select>`:'<p class="help">Nothing to roll up yet. Put a form under this one (Relationships), or add a <b>Link to record</b> field to another form that points here.</p>'}</div>`;
+  const src=srcs.find(s=>s.from.join('|')===cur);if(!src)return h;
+  const tf=src.form,fs=(tf.fields||[]).filter(g=>!['heading','instructions','signature','file','image','attachments'].includes(g.type));
+  const conds=x.where||[];
+  h+=`<div class="prop full"><span>Only where <span class="help">(optional; all must hold)</span></span><div class="ru-conds">${conds.map((c,i)=>{
+    const g=fs.find(z=>z.id===c.field),ops=g?(opsFor(g)||[]).filter(o=>o.value!=='many'):[],op=ops.find(o=>o.key===c.op);
+    let val='';
+    if(op&&op.value){
+      if(op.value==='one')val=`<select class="in" data-kind="rcond" data-prop="where" data-part="value" data-i="${i}"><option value="">Choose…</option>${(g.type==='checkbox'?['Yes','No']:(g.options||[])).map(o=>`<option${o===c.value?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
+      else if(op.value==='record'){const rf=formById(g.relForm);const rs=rf?recordsOf(rf.id).map(r=>({r,t:recTitle(r,rf)})).sort((a,b)=>a.t.localeCompare(b.t)).slice(0,500):[];val=`<select class="in" data-kind="rcond" data-prop="where" data-part="value" data-i="${i}"><option value="">Choose…</option>${rs.map(({r,t})=>`<option value="${esc(r.id)}"${r.id===c.value?' selected':''}>${esc(t)}</option>`).join('')}</select>`;}
+      else val=`<input class="in" data-kind="rcond" data-prop="where" data-part="value" data-i="${i}"${op.value==='num'?' type="number" step="any" data-vk="num"':op.value==='date'?' type="date"':op.value==='time'?' type="time"':''} value="${esc(c.value??'')}">`;
+    }
+    return `<div class="ru-cond"><select class="in" data-kind="rcond" data-prop="where" data-part="field" data-i="${i}"><option value="">Field…</option>${fs.map(z=>`<option value="${z.id}"${z.id===c.field?' selected':''}>${esc(z.label||'Untitled')}</option>`).join('')}</select>${g?`<select class="in" data-kind="rcond" data-prop="where" data-part="op" data-i="${i}"><option value="">…</option>${ops.map(o=>`<option value="${o.key}"${o.key===c.op?' selected':''}>${esc(o.label)}</option>`).join('')}</select>`:''}${val}<button type="button" class="ibtn" data-act="ru-cond-del" data-id="${x.id}" data-i="${i}" aria-label="Remove this condition">✕</button></div>`;
+  }).join('')}${conds.length<MAX_WHERE?`<button type="button" class="btn sm ghost" data-act="ru-cond-add" data-id="${x.id}">+ ${conds.length?'and':'Add a condition'}</button>`:''}</div></div>`;
+  h+=P2('Show',`<select class="in" data-prop="agg" data-kind="ragg">${AGGS.map(([k,l])=>`<option value="${k}"${(x.agg||'count')===k?' selected':''}>${l}</option>`).join('')}</select>`);
+  if((x.agg||'count')!=='count'){const ofs=ofFields(tf,x.agg,g=>ruShown(g));h+=P2('Of',ofs.length?`<select class="in" data-prop="of"><option value="">Choose a field…</option>${ofs.map(g=>`<option value="${g.id}"${g.id===x.of?' selected':''}>${esc(g.label||'Untitled')}</option>`).join('')}</select>`:`<p class="help">${esc(tf.name)} has no ${['latest','earliest'].includes(x.agg)?'date':'number'} fields.</p>`);}
+  h+=`<div class="prop full"><small class="help">${esc(rollupSummary(fdraft,x,ruForms(),p=>itemName(p)))}. Always current; nothing is copied.</small></div>`;
+  return h;
+}
+const P2=(l,h)=>`<label class="prop"><span>${l}</span>${h}</label>`;
 /* ---------- Lookup fields (lookuplogic.js) ----------
    A value from the record a Link to record field points at, or the record this one sits under
    (one more step allowed). Always current; never stored. */
@@ -1879,7 +1944,7 @@ function initSig(c){
 function validate(form,vals,st){
   const errs={};st=st||NO_RULES;
   (form.fields||[]).forEach(f=>{
-    if(isLayout(f)||f.type==='formula'||f.type==='autonumber'||f.type==='lookup'||isReadOnly(f))return;const v=vals[f.id];
+    if(isLayout(f)||f.type==='formula'||f.type==='autonumber'||f.type==='lookup'||f.type==='rollup'||isReadOnly(f))return;const v=vals[f.id];
     if(st.blank.has(f.id)||st.hiddenFields.has(f.id)||st.view?.has(f.id))return; // hidden, cleared or view only: nothing to check
     if(st.required(f)&&(f.type==='checkbox'?!v:isEmpty(v))){errs[f.id]=f.type==='checkbox'?'This must be switched on.':f.type==='attachments'?'Add at least one file.':'This field is required.';return;}
     if(isEmpty(v))return;
@@ -1998,6 +2063,7 @@ function newField(type){
   const f={id:uid('x'),type,label:T[type].label,required:false,inList:false,width:['heading','instructions','textarea','location','multiselect','file','signature','attachments'].includes(type)?'full':'half',help:''};
   if(type==='instructions'){f.label='';f.width='full';f.text='';f.html=null;}
   if(type==='lookup'){f.via=[];f.show='';}
+  if(type==='rollup'){f.from=[];f.where=[];f.agg='count';f.of='';}
   if(CHOICE.has(type))f.options=['Option 1','Option 2','Option 3'];
   if(type==='decimal')f.decimals=2;
   if(type==='currency')f.currency='CAD';
@@ -2098,7 +2164,7 @@ function dzCanvasHTML(f){
     return `<div class="crow${r.section?' in-sec':''}${r.last?' sec-last':''}" data-feid="${x.id}">
           ${grip(x)}
           ${gly(x.type)}
-          <div class="crow-m"><b id="frl-${x.id}">${esc(x.label||(x.type==='instructions'?'Instructions':'Untitled field'))}${x.required&&!x.readOnly?'<span class="req">*</span>':''}</b><small>${x.type==='instructions'?esc(String(x.text||'No text yet').replace(/\s+/g,' ').slice(0,60)):esc(T[x.type].label)}${x.readOnly&&canReadOnly(x)?' · read only':''}${hasDefault(x)?` · default ${esc(defaultText(x).slice(0,30))}`:''}${String(x.sysName||'').trim()&&String(x.sysName).trim()!==x.label?` · <span class="sysn" title="System name">${esc(String(x.sysName).trim())}</span>`:''}${x.type==='relation'&&formById(x.relForm)?' → '+esc(formById(x.relForm).name):''}${x.type==='lookup'?(()=>{const t=lookupTarget(f,x,LK_H.formById);return t?' · '+esc(lkPathLabel(f,x))+' → '+esc(t.field.label):' · not set up';})():''}${x.inList?' · in list':''}${f.titleField===x.id?' · title':''}${ruleTag(f,x.id)}</small></div>
+          <div class="crow-m"><b id="frl-${x.id}">${esc(x.label||(x.type==='instructions'?'Instructions':'Untitled field'))}${x.required&&!x.readOnly?'<span class="req">*</span>':''}</b><small>${x.type==='instructions'?esc(String(x.text||'No text yet').replace(/\s+/g,' ').slice(0,60)):esc(T[x.type].label)}${x.readOnly&&canReadOnly(x)?' · read only':''}${hasDefault(x)?` · default ${esc(defaultText(x).slice(0,30))}`:''}${String(x.sysName||'').trim()&&String(x.sysName).trim()!==x.label?` · <span class="sysn" title="System name">${esc(String(x.sysName).trim())}</span>`:''}${x.type==='relation'&&formById(x.relForm)?' → '+esc(formById(x.relForm).name):''}${x.type==='rollup'?' · '+esc(rollupSummary(f,x,[...store.forms.filter(o=>o.id!==f.id),f],p=>itemName(p))):''}${x.type==='lookup'?(()=>{const t=lookupTarget(f,x,LK_H.formById);return t?' · '+esc(lkPathLabel(f,x))+' → '+esc(t.field.label):' · not set up';})():''}${x.inList?' · in list':''}${f.titleField===x.id?' · title':''}${ruleTag(f,x.id)}</small></div>
           <button class="ibtn dz-dots" data-act="open-field" data-id="${x.id}" aria-label="Options for ${esc(x.label||'field')}">⋯</button>
         </div>`;
   }).join('');
@@ -2247,10 +2313,11 @@ function fieldEditor(x){
   if(x.type==='rating')h+=P('Number of stars',num('max',x.max));
   if(x.type==='autonumber')h+=autoEditor(x,P,inp,num,sw);
   if(x.type==='lookup')h+=lkEditor(x);
+  if(x.type==='rollup')h+=ruEditor(x);
   if(x.type==='relation')h+=P('Links to form',`<select class="in" data-prop="relForm"><option value="">Choose a form…</option>${[...store.forms].sort(byOrder).map(o=>`<option value="${o.id}"${o.id===x.relForm?' selected':''}>${esc(o.name)}</option>`).join('')}</select>`);
   if(canDefault(x))h+=defaultEditor(x);
   if(x.type==='url'&&x.readOnly)h+=P('Button text',inp('linkText',x.linkText,'maxlength="80" placeholder="e.g. Open the safety checklist"')+'<small class="help">A read-only website shows as a button with these words. Empty: the address.</small>','full');
-  if(x.type!=='heading')h+=`<div class="props-sw">${canReadOnly(x)?sw('readOnly','Read only'):''}${x.type==='formula'||x.type==='autonumber'||x.type==='lookup'||x.readOnly?'':sw('required','Required')}${NOLIST.has(x.type)?'':sw('inList','Column in the starting list')}${x.type==='date'||x.type==='datetime'?sw('calendar','Show on the calendar'):''}${x.type==='textarea'?`<label class="switch"><input type="checkbox" data-prop="plain" data-kind="neg"${x.plain?'':' checked'}><span class="tr"></span><span>Allow formatting</span></label>`:''}<label class="switch"><input type="checkbox" data-prop="width" data-kind="half"${x.width==='half'?' checked':''}><span class="tr"></span><span>Half width on wide screens</span></label></div>`;
+  if(x.type!=='heading')h+=`<div class="props-sw">${canReadOnly(x)?sw('readOnly','Read only'):''}${x.type==='formula'||x.type==='autonumber'||x.type==='lookup'||x.type==='rollup'||x.readOnly?'':sw('required','Required')}${NOLIST.has(x.type)?'':sw('inList','Column in the starting list')}${x.type==='date'||x.type==='datetime'?sw('calendar','Show on the calendar'):''}${x.type==='textarea'?`<label class="switch"><input type="checkbox" data-prop="plain" data-kind="neg"${x.plain?'':' checked'}><span class="tr"></span><span>Allow formatting</span></label>`:''}<label class="switch"><input type="checkbox" data-prop="width" data-kind="half"${x.width==='half'?' checked':''}><span class="tr"></span><span>Half width on wide screens</span></label></div>`;
   h+=`<div class="prop full"><span class="keyline">Field ID ${esc(x.id)}</span></div>`;
   return `<div class="fedit">${h}</div>`;
 }
@@ -2619,6 +2686,9 @@ document.addEventListener('click',async e=>{
     case 'del-record':{const k='rec-'+view.recordId;if(ui.confirm!==k){ui.confirm=k;renderMain();$('.rb-item.danger')?.focus();return;}ui.recMore=false;ui.confirm=null;const rid=view.recordId;rdraft.dirty=false;const delForm=formById(view.formId);try{await store.del('records',rid);toast(`Deleted. ${isAdmin(store.me)?'Administrators can also restore it from Recently deleted for 90 days.':'You can undo this for 10 minutes.'}`,{action:'Undo',duration:12000,onAction:()=>undoDel(rid,delForm)});}catch(err){toast('Delete failed. Try again.');}break;}
     case 'rate':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);const n=+el.dataset.n;d.values[f.id]=d.values[f.id]===n?0:n;markDirty(d);repaint(d,f);break;}
     case 'att-rm':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);const list=asFiles(d.values[f.id]);const x=list[+el.dataset.i];if(!x)break;list.splice(+el.dataset.i,1);d.values[f.id]=list.length?list:null;markDirty(d);repaint(d,f);toast(`Removed “${x.name||'File'}”. Save to keep the change.`);break;}
+    case 'ru-show':{const k=scopeOf(draftOf(el))+'|'+el.dataset.id;ui.ruOpen=ui.ruOpen===k?null:k;const d=draftOf(el),f=formOfDraft(d)?.fields.find(x=>x.id===el.dataset.id);if(f)repaint(d,f);break;}
+    case 'ru-cond-add':{const f=fdraft?.fields.find(x=>x.id===el.dataset.id);if(!f)break;f.where=[...(f.where||[]),{field:'',op:'',value:''}].slice(0,MAX_WHERE);setFdirty();renderMain();break;}
+    case 'ru-cond-del':{const f=fdraft?.fields.find(x=>x.id===el.dataset.id);if(!f)break;f.where=(f.where||[]).filter((_,i)=>i!==+el.dataset.i);setFdirty();renderMain();break;}
     case 'file-clear':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);d.values[f.id]=null;markDirty(d);repaint(d,f);break;}
     case 'sig-clear':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);d.values[f.id]=null;markDirty(d);repaint(d,f);break;}
     case 'edit-form':editForm(id);break;
@@ -2706,7 +2776,7 @@ document.addEventListener('input',e=>{
   if(t.id==='search'){ui.search=t.value;const pos=t.selectionStart;renderMain();const s=$('#search');if(s){s.focus();s.setSelectionRange(pos,pos);}return;}
   if(t.dataset.fid&&t.type!=='file'&&!(t.type==='radio'||t.type==='checkbox'))setVal(t);
   if(t.dataset.fprop&&t.dataset.kind!=='bool'){fdraft[t.dataset.fprop]=t.value;setFdirty();}
-  if(t.dataset.prop&&!['bool','half','neg','tok','multi','yn'].includes(t.dataset.kind)&&t.tagName!=='SELECT'){
+  if(t.dataset.prop&&!['bool','half','neg','tok','multi','yn','rcond'].includes(t.dataset.kind)&&t.tagName!=='SELECT'){
     const f=fdraft.fields.find(x=>x.id===t.closest('[data-feid]').dataset.feid);const p=t.dataset.prop,k=t.dataset.kind;
     f[p]=k==='num'?(t.value===''?null:Number(t.value)):k==='lines'?t.value.split('\n').map(s=>s.trim()):p==='currency'?t.value.toUpperCase():t.value;
     if(p==='expr')updateFxCheck(f);
@@ -2738,13 +2808,16 @@ document.addEventListener('change',async e=>{
     const f=fdraft.fields.find(x=>x.id===t.closest('[data-feid]').dataset.feid);const p=t.dataset.prop,k=t.dataset.kind;
     if(k==='bool')f[p]=t.checked;else if(k==='neg'){if(t.checked)delete f[p];else f[p]=true;}else if(k==='half')f.width=t.checked?'half':'full';
     else if(k==='via'){f.via=t.value?t.value.split('|'):[];f.show='';}
+    else if(k==='rfrom'){f.from=t.value?t.value.split('|'):[];f.where=[];f.of='';}
+    else if(k==='ragg'){f.agg=t.value;if(!ofFields(ruTargetForm(f),f.agg,g=>ruShown(g)).some(g=>g.id===f.of))f.of='';}
+    else if(k==='rcond'){const w=(f.where||[])[+t.dataset.i];if(w){const part=t.dataset.part;if(part==='field'){w.field=t.value;w.op='';w.value='';}else if(part==='op'){w.op=t.value;w.value='';}else w.value=t.dataset.vk==='num'?(t.value===''?'':Number(t.value)):t.value;}}
     else if(k==='tok'){f.defaultValue=t.checked?t.dataset.v:null;}
     else if(k==='multi'){const l=[...t.closest('.dflt-multi').querySelectorAll('input:checked')].map(i=>i.value);f.defaultValue=l.length?l:null;}
     else if(k==='yn'){f.defaultValue=t.value===''?null:t.value==='yes';}
     else if(p==='type'){delete f.defaultValue;delete f.linkText;if(!canReadOnly({type:t.value}))delete f.readOnly;const nf=newField(t.value);Object.assign(f,{type:t.value},Object.fromEntries(Object.entries(nf).filter(([key])=>!['id','label','required','inList','help','width'].includes(key)&&f[key]==null)));if(NOLIST.has(f.type))f.inList=false;}
     else if(t.tagName==='SELECT')f[p]=t.value;
     setFdirty();
-    if(['type','relForm','required','inList','format','via','show'].includes(p)||k==='bool'||k==='tok')renderMain();
+    if(['type','relForm','required','inList','format','via','show','of'].includes(p)||k==='bool'||k==='tok'||k==='rfrom'||k==='ragg'||(k==='rcond'&&t.dataset.part!=='value'))renderMain();
     return;
   }
   if(t.dataset.crel!=null){const c=fdraft.children[+t.dataset.crel];const p=t.dataset.cprop;

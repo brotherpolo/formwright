@@ -11,6 +11,7 @@ import { fieldItem } from '../pdfdoc.js';
 import { filesText, fileNames, fileLines } from '../filelist.js';
 import { withFixed, isFixed, defaultFor, isLayout } from '../fixedlogic.js';
 import { lookupValue, lookupRecord, lookupTarget, shownField, withLookups } from '../lookuplogic.js';
+import { rollupValue, rollupOf, recordIndex } from '../rolluplogic.js';
 import { evaluate, NO_RULES } from '../rules.js';
 import { fieldByName } from '../fieldnames.js';
 import { richBlocks } from '../richtext.js';
@@ -56,9 +57,22 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
       }
     } catch (e) { return String(v); }
   }
+  // rollups: children and records that link here, from the data loaded (rolluplogic.js)
+  const idx = recordIndex(records);
+  const RU = { formById, childrenOf: idx.childrenOf, linksTo: idx.linksTo, valOf: (g, r, fm) => valOf(g, r, fm), fmt: (g, v) => fmt(g, v) };
+  function rollupText(f, v) {
+    if (v == null || v === '') return '';
+    if (Array.isArray(v)) return v.join(', ');
+    if (f.agg === 'count' || !f.agg) return num(v);
+    const g = fieldForm.has(f) && rollupOf(fieldForm.get(f), f, formById);
+    if (!g) return String(v);
+    if (f.agg === 'avg' && g.type === 'number') return num(v, { maximumFractionDigits: 2 });
+    return fmt(g.type === 'lookup' ? (shownField(fieldForm.get(g) || fieldForm.get(f), g, formById) || g) : g, v);
+  }
   const fieldForm = new Map(); forms.forEach((fm) => (fm.fields || []).forEach((x) => fieldForm.set(x, fm)));
   function fmt(f, v) {
     if (f.type === 'lookup') { const g = fieldForm.has(f) && shownField(fieldForm.get(f), f, formById); return g ? fmt(g, v) : v == null ? '' : String(v); }
+    if (f.type === 'rollup') return rollupText(f, v);
     if (f.type !== 'formula' && isEmpty(v)) return '';
     try {
       switch (f.type) {
@@ -87,6 +101,7 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
   function rawFor(f, rec, form, depth) {
     if (f.type === 'formula') return evalFormula(form, f, rec, depth + 1);
     if (f.type === 'lookup') { const t = lookupTarget(form, f, formById), r = t && lookupRecord(rec, f, recById); return r && depth < 20 ? rawFor(t.field, r, t.form, depth + 1) : null; }
+    if (f.type === 'rollup') { const v = rollupValue(rec, f, RU); return Array.isArray(v) ? v.join(', ') : v; }
     const v = f.type === 'autonumber' ? rec.nums?.[f.id] : rec.values?.[f.id];
     if (f.type === 'relation') { const r = v && recById(v); return r ? recTitle(r) : ''; }
     if (f.type === 'location') return v?.address || '';
@@ -119,6 +134,7 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
     if (f.type === 'autonumber') return rec.nums?.[f.id] ?? null;
     if (isFixed(f)) return defaultFor(f, new Date(), timeZone);
     if (f.type === 'lookup') return lookupValue(rec, f, { recById, formById, valOf });
+    if (f.type === 'rollup') return rollupValue(rec, f, RU);
     if (f.type !== 'formula') return rec.values?.[f.id];
     form = form || formById(rec.formId);
     try { const v = evalFormula(form, f, rec); return typeof v === 'number' && !isFinite(v) ? null : v; } catch (e) { return null; }

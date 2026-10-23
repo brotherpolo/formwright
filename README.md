@@ -84,6 +84,7 @@ src/
   recentdel.js             Recently deleted under a form's list (admins): Restore
   offline.js               Working with no signal: the Offline / Syncing bar, back-online sync, late-error messages
   offlinequeue.js          Photos and files picked offline wait here (IndexedDB) until they upload (helpers unit-tested)
+  rolluplogic.js           Rollup fields: sources, conditions, count/sum/latest/list, the record index (unit-tested)
   lookuplogic.js           Lookup fields: paths, the record reached, values, the designer's choices (unit-tested)
   fixedlogic.js            Default values, Read only fields and Instructions: what's fixed, today/now, stored or not (unit-tested)
   filelist.js              Attachments fields: the list of files, tiles, "3 files", what was added or removed (unit-tested)
@@ -555,6 +556,18 @@ Formwright keeps working on a phone, tablet or computer with no signal, once it 
 - **Not copied:** auto numbers (the copy gets its own when saved), signatures (they belong to one record), calculations (worked out again), child records and Tasks.
 - **Sub-form grids:** their rows are copied as new rows of the copy.
 - Nothing is saved until you click **Save**; Back without saving leaves no trace. A line under the title says what it's a copy of.
+
+## Rollup fields (a field type under Relations)
+
+A **Rollup** works a value out from other records, always current: on a Client, **Projects in progress: 3**, **Open budget**, **Last site visit**, its **Contacts** as a list; on a Contact, how many site visits name them.
+
+- **From:** the records under this one (Projects under this client), records whose **Link to record** field points here (Site visits that link here (Contact on site)), or **one step further** (Projects → Site visits).
+- **Only where** (optional): up to three conditions on those records, like rules (Stage is In progress, Stage isn't Done); all must hold.
+- **Show:** **Count**, **Sum**, **Average**, **Min**, **Max** (of a number field, calculations and number lookups too), **Latest** or **Earliest** (of a date), or **List** (each different value, shown as chips).
+- **On the record:** the value with **Σ Rollup** and what it counts ("Count of Projects where Stage is In progress"). A count has **Show them**, which lists those records right there to open. Move a project to Done and the client's count drops straight away.
+- **Nothing is stored** on the record. It only counts records the viewer can see (like `CHILDSUM`). A record that hasn't been saved yet has nothing under it.
+- **Works in** lists (columns and sorting), PDFs, Email PDF, Word templates (`{Contacts|bullets}` for a list), dashboards, sub-form grids and calculations (`{Open budget} * 0.1`). Imports skip it, automations can't set it, and rule conditions don't offer it.
+- Stored on the field as `{ type: 'rollup', from: ['c:<formId>' | 'l:<formId>:<linkFieldId>', …], where: [{ field, op, value }], agg, of }`. Logic in `src/rolluplogic.js` (unit-tested); the server kit (Cadence `functions/fwkit.cjs`) does the same for emails, PDFs and automations.
 
 ## Lookup fields (a field type under Relations)
 

@@ -2,7 +2,7 @@
 
 // Never copied: a new number is given on save; a signature belongs to one record; calculations
 // are worked out again.
-export const NOT_COPIED = new Set(['autonumber', 'signature', 'formula', 'heading', 'instructions', 'lookup']);
+export const NOT_COPIED = new Set(['autonumber', 'signature', 'formula', 'heading', 'instructions', 'lookup', 'rollup']);
 
 /**
  * The values a copy starts with. The title (when it's typed text) gets " (copy)" added, so the

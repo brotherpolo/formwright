@@ -23,7 +23,7 @@ export const SET_MODES = [
   { key: 'copy', label: 'to the value of' },
   { key: 'clear', label: 'to empty' },
 ];
-export const NO_SET = new Set(['heading', 'instructions', 'lookup', 'formula', 'autonumber', 'file', 'image', 'signature', 'location', 'attachments']);
+export const NO_SET = new Set(['heading', 'instructions', 'lookup', 'rollup', 'formula', 'autonumber', 'file', 'image', 'signature', 'location', 'attachments']);
 export const MAX_ACTS = 10;
 
 const an = (w) => (/^[aeiou]/i.test(w) ? 'an ' : 'a ') + w;

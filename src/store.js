@@ -27,6 +27,7 @@ import { isAdmin, formLevel, effectiveAccess, withInherited } from './access.js'
 import { clone } from './util.js';
 import { withFixed, stripFixed } from './fixedlogic.js';
 import { withLookups, stripLookups } from './lookuplogic.js';
+import { stripRollups } from './rolluplogic.js';
 import { queuePut, queueAll, queueGet, queueDel, findPending, fillUploaded, stale } from './offlinequeue.js';
 
 /* ---------- working with no signal ----------
@@ -402,7 +403,7 @@ function flattenRecords() {
   } else store.records = fixed;
 }
 /** Values as they're stored: without fixed fields (those come from the form). */
-const storeVals = (values, formId) => { const form = store.forms.find((f) => f.id === formId); return stripLookups(stripFixed(values, form), form); };
+const storeVals = (values, formId) => { const form = store.forms.find((f) => f.id === formId); return stripRollups(stripLookups(stripFixed(values, form), form), form); };
 
 /** Update the display name other people see. */
 export async function saveProfileName(userId, displayName) {
