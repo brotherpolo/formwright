@@ -74,7 +74,7 @@ src/
   homelogic.js             Dashboard shortcut tiles and which dashboard Home shows (pure, unit-tested)
   workflow.js              Workflow stages: what each shows, who works on it, checks (pure, unit-tested)
   wfdesign.js              Form designer → Workflow tab
-  route.js                 Web addresses for records, form lists and reports (pure)
+  route.js                 Web addresses for every page, # and clean (pure, unit-tested)
   sharelink.js             Dashboard links that carry the period, live filter picks and a chart click (pure, unit-tested)
   qr.js                    QR codes for record labels (pure, unit-tested)
   qrlabel.js               A record's QR code dialog: print, download, copy link
@@ -744,12 +744,15 @@ Every saved record has a **Comments** section right under **Tasks** (it folds li
 
 ## Links and Cadence tasks
 
-Each record and form list has its own address, so links and refreshes open the right screen:
+Every page has its own address, so a refresh keeps your place, Back and Forward work (designer tabs too), and links in bookmarks, emails, QR codes and Cadence tasks open the right page (`src/route.js`, unit-tested):
 
-- `#/record/<recordId>`: one record. Back goes to its form's list.
-- `#/form/<formId>`: a form's records.
-- `#/reports` and `#/report/<reportId>`: the Reports list and one report.
-- `#/dashboards` and `#/dashboard/<id>`: the Dashboards list and one dashboard.
+- `#/home`, `#/mywork`, `#/calendar`, `#/reports` and `#/report/<id>`, `#/dashboards` and `#/dashboard/<id>`.
+- `#/form/<formId>`: a form's records. `#/form/<formId>/new`: a new record (anyone who can add them).
+- `#/record/<recordId>`: one record (Back goes to its form's list). `#/record/<recordId>/history`: its audit trail (administrators).
+- `#/designer` and `#/designer/<formId>`, with a tab: `/relationships`, `/rules`, `/workflow`, `/settings`, `/preview`, `/history`. Moving between tabs (Back and Forward too) never asks about unsaved changes; they're kept.
+- `#/settings`, and `#/settings/users`, `/groups` (and `/groups/<id>`), `/roles` (and `/roles/<id>`), `/automations` (and `/automations/<id>`), `/schedules`, `/dates`, `/imports`, `/exports`, `/audit`, `/problems` (also `#/problems`). Administrators only: anyone else is told so.
+- A page that's still loading opens when it arrives; one that isn't there (deleted, or not yours to see) says so after a few seconds.
+- **Clean addresses, step 1:** the same address without the `#` (`/settings/users`) opens the same page and is tidied to the `#` form. Hosting already sends every address to the app (`firebase.json` rewrites), and page addresses are never cached (`Cache-Control: no-cache`), so an update shows at once. Step 2 will switch to writing the clean form, with `#` links still working.
 
 Cadence links to records this way, from the record chip on a task.
 

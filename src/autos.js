@@ -78,7 +78,7 @@ export function openAutomation(id, formId) {
   AM.draft = a ? clone(a) : blankAutomation(formId || H.forms()[0]?.id || '');
   AM.dirty = !a; AM.busy = false; AM.armed = false; AM.problems = null; AM.leaveArmed = false;
   AM.runs = null; AM.test = { recordId: '', busy: false, out: null, err: null }; AM.prev = { busy: false, out: null, err: null };
-  H.go({ name: 'automation', autoId: AM.id });
+  H.go({ name: 'automation', autoId: AM.id, isNew: !a }); // a new one's address is the list (it isn't saved yet)
   if (a) refreshRuns();
 }
 async function refreshRuns() {

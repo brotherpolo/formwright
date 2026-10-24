@@ -11,9 +11,10 @@ test('record and form addresses round-trip', () => {
   assert.equal(routeFor({ name: 'records', formId: 'f_x' }), '#/form/f_x');
 });
 
-test('other screens and bad addresses get no route', () => {
-  assert.equal(routeFor({ name: 'record', formId: 'f', recordId: null }), '');
-  assert.equal(routeFor({ name: 'designer' }), '');
+test('bad addresses get no route; every screen has one', () => {
+  assert.equal(routeFor({ name: 'record', formId: 'f', recordId: null }), '#/form/f/new');
+  assert.equal(routeFor({ name: 'designer' }), '#/designer');
+  assert.equal(routeFor({ name: 'loading' }), '');
   assert.equal(parseRoute(''), null);
   assert.equal(parseRoute('#/record/'), null);
   assert.equal(parseRoute('#/users/x'), null);

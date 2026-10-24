@@ -19,7 +19,7 @@ import { runImport, rewriteValues, moveStage, watchStages } from './store.js';
 import { canUseTasks } from './store.js';
 import { store, uploadFile, deleteFormCascade, loadExamples as writeExamples, watchTasks, setTaskDone, saveRecordBundle, recomputeAllAccess, attachRecords } from './store.js';
 import { cadenceUrl } from './firebase.js';
-import { parseRoute, routeFor } from './route.js';
+import { parseRoute, routeFor, routeOf, parsePath } from './route.js';
 import { effectiveHome, viewStarterHome, applyShared } from './dash.js';
 import { afterDashRender } from './dashanim.js';
 import { nounOf as nounOfForm } from './dashlogic.js';
@@ -214,7 +214,8 @@ export function goRec(draft,v){if(!guard())return;rdraft=draft;go(v);}
 export function go(v,push=true){closeListMenus();ui.subPop=null;ui.recMore=false;ui.qr=null;closeRecentDel();if(v.name==='record'&&v.recordId)noteOpened(v.recordId);if(v.name==='record'&&v.recordId!==view.recordId)ui.rsTab='comments';ui.anEdit=null;if(!ui.cascade?.busy)ui.cascade=null;if(!ui.mail?.busy)ui.mail=null;
   if(ADMIN_VIEWS.has(v.name)&&!isAdmin(store.me)){toast('Only administrators can open that.');return false;}
   if((v.name==='records'||v.name==='record')&&!canViewForm(store.me,v.formId)){toast('You don’t have access to that form.');return false;}
-  if(!guard())return false;
+  const sameForm=v.name==='formEdit'&&view.name==='formEdit'&&v.formId===view.formId&&!!fdraft; // another tab of the form being designed
+  if(!sameForm&&!guard())return false;
   if((v.name==='records'||v.name==='record')&&v.formId)noteRecentForm(v.formId);
   ui.leaveOk=false;ui.confirm=null;
   if(view.name==='report')leaveReport();
@@ -225,7 +226,8 @@ export function go(v,push=true){closeListMenus();ui.subPop=null;ui.recMore=false
   if(pushed){hist.push(view);fwd=[];}
   view=v;closeMenu();syncHash(pushed);
   if(v.name==='records'){ui.search='';}
-  if(v.name==='formEdit'){ui.tab=v.tab||'fields';ui.openField=null;ui.palette=false;ui.dzq='';ui.iconPick=false;ui.iconQ='';}
+  if(v.name==='formEdit'&&sameForm){ui.tab=v.tab||'fields';ui.openField=null;if(ui.tab==='history')fv.refresh();if(ui.tab==='preview'||ui.tab==='rules')pdraft=null;}
+  else if(v.name==='formEdit'){ui.tab=v.tab||'fields';ui.openField=null;ui.palette=false;ui.dzq='';ui.iconPick=false;ui.iconQ='';}
   render();window.scrollTo(0,0);return true;
 }
 // The in-app Back button goes through the browser's history, so it and the phone's back button always agree
@@ -262,7 +264,7 @@ export function home(){
   else if(isAdmin(store.me))go({name:'designer'},false);
   else go({name:'welcome'},false);
 }
-let booted=false,pendingRoute=null,homeCheck=false;
+let booted=false,pendingRoute=null,pendingAt=0,homeCheck=false;
 /* ---------- Web addresses (#/record/<id>, #/form/<id>) and the back button ----------
    Each screen you open is a step in the browser's history ({fw: how many screens are behind it}),
    so the phone's or browser's Back goes one screen back, like the in-app Back button.
@@ -271,7 +273,7 @@ let booted=false,pendingRoute=null,homeCheck=false;
 let fwd=[],exitArmed=false,exitTimer=null,popIgnore=0,backPending=false;
 const BOOT=Date.now().toString(36); // steps from an earlier page load are left to the browser
 const st=fw=>({fw,b:BOOT});
-const urlFor=v=>location.pathname+location.search+routeFor(v);
+const urlFor=v=>(parsePath(location.pathname)?'/':location.pathname)+location.search+routeFor(v); // step 1: the app writes # addresses (a clean /path typed in is tidied to /#/path)
 function rearm(){if(!exitArmed)return;exitArmed=false;clearTimeout(exitTimer);history.pushState(st(hist.length),'',urlFor(view));}
 function syncHash(push){
   rearm();
@@ -305,8 +307,10 @@ window.addEventListener('popstate',e=>{
   const here=hist.length;
   if(n<here||n===-1){
     // Back: close a pop-up if one is open; otherwise step back, asking first if there are unsaved changes
-    if(closeOverlay()||!guard()){history.pushState(st(here),'',urlFor(view));return;}
-    const to=Math.max(0,n);let v=null;
+    const to=Math.max(0,n),tgt=hist[to];
+    const tabOnly=view.name==='formEdit'&&tgt&&tgt.name==='formEdit'&&tgt.formId===view.formId&&!!fdraft; // another tab of the form being designed: nothing to lose
+    if(closeOverlay()||(!tabOnly&&!guard())){history.pushState(st(here),'',urlFor(view));return;}
+    let v=null;
     while(hist.length>to){fwd.push(view);v=hist.pop();if(hist.length>to)view=v;}
     if(v){if(v.name==='record')rdraft=null;ui.leaveOk=true;go(v,false);}
     return;
@@ -314,7 +318,8 @@ window.addEventListener('popstate',e=>{
   if(n>here){
     // Forward, after going back
     const v=fwd.pop();
-    if(!v||!guard()){popIgnore++;history.back();if(v)fwd.push(v);return;}
+    const tabOnly=v&&view.name==='formEdit'&&v.name==='formEdit'&&v.formId===view.formId&&!!fdraft;
+    if(!v||(!tabOnly&&!guard())){popIgnore++;history.back();if(v)fwd.push(v);return;}
     hist.push(view);ui.leaveOk=true;
     if(!go(v,false)){hist.pop();}
   }
@@ -322,6 +327,41 @@ window.addEventListener('popstate',e=>{
 /** Open the screen an address names. Returns true once handled (opened, refused or given up). */
 function openRoute(r){
   if(!r)return true;
+  const adminOnly=()=>{if(isAdmin(store.me))return false;toast('Only administrators can open that.');return true;};
+  if(r.kind==='home'){goHome();return true;}
+  if(r.kind==='mywork'){ui.mwTab=cmt.unreadCount()||!store.forms.some(f=>wfOn(f))?'mentions':'waiting';go({name:'mywork'},false);return true;}
+  if(r.kind==='designer'){if(adminOnly())return true;go({name:'designer'},false);return true;}
+  if(r.kind==='formEdit'){
+    if(adminOnly())return true;
+    if(!formById(r.id)){if(!store.ready)return false;toast('That form isn’t available.');return true;}
+    go({name:'designer'},false);editForm(r.id);if(r.tab&&r.tab!=='fields'&&view.name==='formEdit'){view={...view,tab:r.tab};ui.tab=r.tab;if(r.tab==='history')fv.refresh();syncHash(false);render();}
+    return true;
+  }
+  if(r.kind==='settings'){
+    if(adminOnly())return true;
+    const pg=r.page||'';
+    if(!pg){go({name:'settings'},false);return true;}
+    if(pg==='problems'){enterProblems();go({name:'problems'},false);return true;}
+    if(pg==='exports'&&view.name!=='exports')exportLeave();
+    if(pg==='dates'&&view.name!=='dates')calLeave();
+    if(r.id){
+      if(pg==='groups'){go({name:'groups'},false);return admin.openGroupById(r.id)||(store.groups.length?(toast('That security group isn’t there any more.'),true):false);}
+      if(pg==='roles'){go({name:'roles'},false);return admin.openRoleById(r.id)||((store.roles||[]).length?(toast('That role isn’t there any more.'),true):false);}
+      if(pg==='automations'){if(!store.automations.some(a=>a.id===r.id))return false;/* still arriving (or gone: given up on after a few seconds) */go({name:'automations'},false);openAutomation(r.id);return true;}
+    }
+    go({name:pg},false);return true;
+  }
+  if(r.kind==='recordHistory'){
+    if(adminOnly())return true;
+    const rec=recById(r.id);if(!rec){if(store.recordsLoading.size)return false;}
+    go({name:'audit',recordId:r.id},false);return true;
+  }
+  if(r.kind==='newRecord'){
+    const f=formById(r.id);
+    if(!f){if(!store.ready)return false;toast('That form isn’t available to you.');return true;}
+    if(!canCreate(store.me,f.id)){toast(`You can’t add ${f.name.toLowerCase()}.`);return true;}
+    go({name:'records',formId:f.id},false);goRec(newRecordDraft(f,null),{name:'record',formId:f.id,recordId:null});return true;
+  }
   if(r.kind==='reports'){go({name:'reports'},false);return true;}
   if(r.kind==='calendar'){go({name:'calendar'},false);return true;}
   if(r.kind==='problems'){if(!isAdmin(store.me))return true;enterProblems();go({name:'problems'},false);return true;}
@@ -366,7 +406,7 @@ window.addEventListener('hashchange',()=>{
   // the browser already added a step for this address: count the screen we're leaving as one step back
   if(foreign&&view.name!=='loading'){hist.push(view);fwd=[];}
   const n0=hist.length;
-  if(!openRoute(r)){pendingRoute=r;if(foreign&&hist.length===n0){hist.pop();history.replaceState(st(hist.length),'',urlFor(view));}}
+  if(!openRoute(r)){pendingRoute=r;pendingAt=Date.now();if(foreign&&hist.length===n0){hist.pop();history.replaceState(st(hist.length),'',urlFor(view));}}
 });
 /* ---------- No access yet: one blocking screen, nothing of the app behind it ----------
    Admins and people in at least one security group get in. Everyone else signed in sees only
@@ -394,15 +434,16 @@ function onData(){
     offlineReady(); // changes from an earlier visit still syncing, uploads still waiting
     // the exit step below the first screen (see the back button notes above)
     if(!(history.state&&history.state.b===BOOT)){history.replaceState(st(-1),'',location.href);history.pushState(st(0),'',location.href);}
-    const r=parseRoute(location.hash);
+    const r=routeOf(location);
     home();
     homeCheck=!r&&!store.profiles[store.user?.uid]?.homeDashboard; // no home of your own yet: look again once the default home arrives
-    if(r&&!openRoute(r))pendingRoute=r;
+    if(r&&!openRoute(r)){pendingRoute=r;pendingAt=Date.now();}
     return;
   }
   // the home dashboard is on the profile, which can arrive after the first screen
   if(homeCheck&&store.profiles[store.user?.uid]&&store.dashReady&&store.homeDefaultReady){homeCheck=false;if(!hist.length&&effectiveHome()&&view.name!=='dashboard'&&!dirty()){home();return;}}
   if(pendingRoute&&openRoute(pendingRoute))pendingRoute=null;
+  else if(pendingRoute&&Date.now()-pendingAt>8000){pendingRoute=null;toast('That page isn’t available. It may have been deleted, or you may not have access to it.');}
   if(ADMIN_VIEWS.has(view.name)&&!isAdmin(store.me)){ui.leaveOk=true;home();return;}
   if((view.name==='records'||view.name==='record')&&!canViewForm(store.me,view.formId)){ui.leaveOk=true;home();return;}
   renderSide();
@@ -2032,7 +2073,7 @@ async function saveRecord(){
   try{if(rowsOut.length||removed.length)await saveRecordBundle(rec,rowsOut,removed);else await store.put('records',rec);}
   catch(e){console.error(e);if(!old)d.recordId=null;toast(e?.code==='permission-denied'?'You don’t have permission to save this record or one of its rows.':'Saving failed. Check your connection and try again.');return;}
   if(rowsOut.length||removed.length){const n=rowsOut.length+removed.length;setTimeout(()=>toast(`Saved with ${n} row change${n>1?'s':''}`),0);}
-  d.dirty=false;d.errors={};d.recordId=id;d.copied=0;d.mode='read';view.recordId=id;toast('Saved');render();
+  d.dirty=false;d.errors={};d.recordId=id;d.copied=0;d.mode='read';const wasNew=!view.recordId;view.recordId=id;if(wasNew)syncHash(false);toast('Saved');render();
   askChildRules(form,{...(old||{}),...rec,nums:old?.nums});
 }
 /* ---------- A parent changed: children whose rules look at it ----------
@@ -2745,7 +2786,7 @@ document.addEventListener('click',async e=>{
     case 'sig-clear':{const d=draftOf(el);const f=formOfDraft(d).fields.find(x=>x.id===el.dataset.fid);d.values[f.id]=null;markDirty(d);repaint(d,f);break;}
     case 'edit-form':editForm(id);break;
     case 'new-form':if(!guard())return;fdraft={id:uid('f'),name:'',itemName:'',description:'',color:store.forms.length%COLORS.length,showInSidebar:true,titleField:'',children:[],fields:[],isNew:true,dirty:true};fdraft.fields.push({...newField('text'),label:'Name',required:true,inList:true,width:'full'});pdraft=null;fv.openForm(null);ui.saveMeta=null;go({name:'formEdit',formId:fdraft.id});setTimeout(()=>$('.title-in')?.focus(),50);break;
-    case 'tab':ui.tab=el.dataset.tab;ui.confirm=null;ui.openField=null;if(ui.tab==='history')fv.refresh();if(ui.tab==='preview'||ui.tab==='rules')pdraft=null;renderMain();break;
+    case 'tab':if(view.name==='formEdit'&&fdraft&&el.dataset.tab!==ui.tab){ui.confirm=null;go({...view,tab:el.dataset.tab});}else{ui.tab=el.dataset.tab;ui.confirm=null;ui.openField=null;renderMain();}break;
     case 'open-field':ui.openField=id;fmPos={x:0,y:0};renderMain();break;
     case 'close-field':ui.openField=null;renderMain();break;
     case 'focus-field':{if(dzUnfoldFor(id))renderMain();const row=document.querySelector(`.crow[data-feid="${id}"]`);row?.scrollIntoView({block:'center',behavior:'smooth'});row?.classList.add('flash');setTimeout(()=>row?.classList.remove('flash'),1200);break;}

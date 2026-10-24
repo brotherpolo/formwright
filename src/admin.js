@@ -406,6 +406,9 @@ async function saveDraft() {
   }
 }
 
+/** Open a security group or a role from its web address (#/settings/groups/<id>); false when it isn't there (yet). */
+export function openGroupById(id) { if (!store.groups.some((g) => g.id === id)) return false; openGroup(id); gdraft.dirty = false; go({ name: 'groupEdit', groupId: id }, false); return true; }
+export function openRoleById(id) { if (!(store.roles || []).some((r) => r.id === id)) return false; openRole(id); go({ name: 'roleEdit', roleId: id }, false); return true; }
 export function onInput(t) {
   if (exportset.onInput(t)) return;
   if (audit.onInput(t)) return;
