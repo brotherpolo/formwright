@@ -128,3 +128,14 @@ test('the server shows a checklist as its score line, and calculations get its %
   assert.equal(kit.text(form, r, form.fields[0]), '3 / 4 · 75% · Fail · 2 of 2 answered');
   assert.equal(kit.valOf(form.fields[1], r, form), 150);
 });
+
+import { setColor, scoreBand, SET_COLORS } from '../../src/checklistlogic.js';
+test('answer set colours and how good each answer is', () => {
+  assert.equal(cleanSet({ name: 'A', color: 'violet', options: [] }).color, 'violet');
+  assert.equal('color' in cleanSet({ name: 'A', color: 'tartan', options: [] }), false);
+  assert.equal(setColor({ color: 'teal' }, 0), 'teal');
+  assert.equal(setColor({}, 2), SET_COLORS[2], 'no colour: by its place');
+  const opts = [{ score: 0, fail: true }, { score: 1 }, { score: 2 }, { score: 4 }, { score: null }];
+  assert.deepEqual(opts.map((o) => scoreBand(o, opts)), ['f', 1, 2, 4, 'n']);
+  assert.equal(scoreBand({ score: 1 }, [{ score: 1 }]), 4, 'all the same: best');
+});

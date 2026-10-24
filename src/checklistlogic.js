@@ -47,7 +47,18 @@ export function cleanSet(d) {
   const options = (Array.isArray(d?.options) ? d.options : []).slice(0, MAX_OPTIONS).map((o) => ({
     id: str(o?.id, 40), label: str(o?.label, 60), score: num(o?.score), fail: !!o?.fail,
   })).filter((o) => o.id && !seen.has(o.id) && seen.add(o.id));
-  return { name: str(d?.name, 80), options };
+  return { name: str(d?.name, 80), options, ...(SET_COLORS.includes(d?.color) ? { color: d.color } : {}) };
+}
+/** Colours an answer set can have (Settings › Checklists); without one, it gets one by its place in the list. */
+export const SET_COLORS = ['green', 'amber', 'violet', 'blue', 'teal', 'red', 'pink', 'slate'];
+export const setColor = (s, i = 0) => (SET_COLORS.includes(s?.color) ? s.color : SET_COLORS[i % SET_COLORS.length]);
+/** How good an answer is, for its colour: 'n' (not counted), 'f' (a fail), or 0 (worst) to 4 (best). */
+export function scoreBand(o, options) {
+  if (!o || typeof o.score !== 'number') return o?.fail ? 'f' : 'n';
+  if (o.fail) return 'f';
+  const xs = (options || []).map((x) => x.score).filter((x) => typeof x === 'number');
+  const lo = Math.min(...xs), hi = Math.max(...xs);
+  return hi === lo ? 4 : Math.round(((o.score - lo) / (hi - lo)) * 4);
 }
 export function setIssues(d) {
   const s = cleanSet(d), out = [];

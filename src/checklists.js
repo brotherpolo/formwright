@@ -7,10 +7,10 @@ import { renderMain, go } from './app.js';
 import { esc, uid, toast } from './ui.js';
 import { writeXlsx, readSheets } from './xlsx.js';
 import { exportSheets, templateSheets, planImport, copyName } from './checklistio.js';
-import { BUILT_IN, isBuiltIn, MAX_ITEMS, MAX_OPTIONS, FAIL_MODES, starterSets, cleanSet, setIssues, cleanItems, checklistIssues, snapshotOf, usesSet, maxOf } from './checklistlogic.js';
+import { BUILT_IN, isBuiltIn, MAX_ITEMS, MAX_OPTIONS, FAIL_MODES, starterSets, cleanSet, setIssues, cleanItems, checklistIssues, snapshotOf, usesSet, maxOf, SET_COLORS, setColor, scoreBand } from './checklistlogic.js';
 
 let D = null; // { tab, sel, cl (draft), sets (draft), typeNew, typeRen, confirm, busy }
-const fresh = () => ({ tab: 'checklists', sel: null, cl: null, sets: null, typeNew: null, typeRen: null, confirm: null, busy: false, issues: [] });
+const fresh = () => ({ tab: 'checklists', sel: null, it: null, fold: new Set(), setEdit: null, cl: null, sets: null, typeNew: null, typeRen: null, confirm: null, busy: false, issues: [] });
 const S = () => (D = D || fresh());
 
 export const isDirty = () => !!(D && ((D.cl && D.cl.dirty) || (D.sets && D.sets.dirty)));
@@ -26,7 +26,7 @@ const blankItem = () => ({ id: 'i' + uid(), kind: 'item', label: '', help: '', s
 
 function pick(id) {
   const c = store.checklists.find((x) => x.id === id);
-  D.sel = id; D.confirm = null; D.issues = [];
+  D.sel = id; D.confirm = null; D.issues = []; D.it = null; D.fold = new Set();
   D.cl = c ? { id: c.id, name: c.name, typeId: c.typeId || '', passAt: c.passAt ?? '', items: JSON.parse(JSON.stringify(c.items || [])), ver: c.ver || 0, isNew: false, dirty: false } : null;
 }
 
@@ -54,7 +54,7 @@ function tree() {
     const ren = D.typeRen === g.id && g.id;
     const hd = ren ? `<div class="cl-th cl-ren"><input class="in" id="cl-typename" value="${esc(g.name)}" maxlength="80" aria-label="Type name"><button type="button" class="btn sm primary" data-act="cl-type-save" data-id="${esc(g.id)}">Save</button><button type="button" class="btn sm ghost" data-act="cl-type-cancel">Cancel</button></div>`
       : `<div class="cl-th"><span>${esc(g.name)}</span>${g.id ? `<span class="cl-tact"><button type="button" class="ibtn" data-act="cl-type-ren" data-id="${esc(g.id)}" aria-label="Rename ${esc(g.name)}" title="Rename">✎</button>${cs.length ? '' : `<button type="button" class="ibtn" data-act="cl-type-del" data-id="${esc(g.id)}" aria-label="Delete ${esc(g.name)}" title="Delete (it’s empty)">✕</button>`}<button type="button" class="ibtn" data-act="cl-new" data-id="${esc(g.id)}" aria-label="New checklist in ${esc(g.name)}" title="New checklist here">＋</button>${menu('t:' + g.id, `${cs.length ? `<button type="button" role="menuitem" data-act="cl-exp" data-type="${esc(g.id)}">⇩ Export the whole type</button>` : ''}<button type="button" role="menuitem" data-act="cl-imp" data-type="${esc(g.id)}">⇧ Import into this type…</button>`)}</span>` : ''}</div>`;
-    return `<div class="cl-tg">${hd}${cs.map(row).join('') || '<p class="help cl-none">No checklists yet.</p>'}</div>`;
+    return `<div class="cl-tg c-${g.id ? typeColor(g.id) : 'none'}">${hd}${cs.map(row).join('') || '<p class="help cl-none">No checklists yet.</p>'}</div>`;
   }).join('');
   const add = D.typeNew != null ? `<div class="cl-th cl-ren"><input class="in" id="cl-typename" value="${esc(D.typeNew)}" maxlength="80" placeholder="e.g. Safety inspections" aria-label="New type name"><button type="button" class="btn sm primary" data-act="cl-type-save">Add</button><button type="button" class="btn sm ghost" data-act="cl-type-cancel">Cancel</button></div>` : '';
   return `<nav class="cl-tree" aria-label="Checklists">${html || '<p class="help">Start with a type, like “Safety inspections”, then add checklists to it.</p>'}${add}
@@ -65,83 +65,146 @@ function checklistsTab() {
   if (!store.answerSets.length && !store.checklists.length) {
     return `<div class="panel empty"><h2>First, the answers</h2><p>Checklist items are answered from <b>answer sets</b>: choices with scores, like Pass / Fail / N/A. Start with the usual ones and change them any time.</p><button type="button" class="btn primary" data-act="cl-starter">Add Pass / Fail / N/A, Yes / No and Condition 1–5</button> <button type="button" class="btn" data-act="cl-tab" data-v="sets">Make my own</button></div>`;
   }
-  return `<div class="cl-wrap">${tree()}<div class="cl-main">${D.cl ? editor() : `<div class="panel empty"><p>${store.checklists.length ? 'Pick a checklist on the left, or make a new one.' : 'No checklists yet.'}</p><button type="button" class="btn primary" data-act="cl-new" data-id="${esc(store.checklistTypes[0]?.id || '')}">+ New checklist</button></div>`}</div></div>`;
+  const insp = D.cl ? inspector() : '';
+  return `<div class="cl-cq"><div class="cl-wrap${insp ? ' has-insp' : ''}">${tree()}<div class="cl-main">${D.cl ? editor() : `<div class="panel empty"><p>${store.checklists.length ? 'Pick a checklist on the left, or make a new one.' : 'No checklists yet.'}</p><button type="button" class="btn primary" data-act="cl-new" data-id="${esc(store.checklistTypes[0]?.id || '')}">+ New checklist</button></div>`}</div>${insp}</div></div>`;
 }
 
-const setChoices = (cur) => `${store.answerSets.length ? `<optgroup label="Answer sets (scored)">${store.answerSets.map((s) => `<option value="${esc(s.id)}"${s.id === cur ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</optgroup>` : ''}<optgroup label="Not scored">${BUILT_IN.map(([k, l]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${l}</option>`).join('')}</optgroup>${cur && !isBuiltIn(cur) && !store.answerSets.some((s) => s.id === cur) ? '<option value="" selected>(deleted answer set)</option>' : ''}`;
+/* ---------- colours ---------- */
+const setIdx = (id) => store.answerSets.findIndex((s) => s.id === id);
+const colorOfSet = (s) => setColor(s, Math.max(0, setIdx(s?.id)));
+const typeColor = (id) => { const i = store.checklistTypes.findIndex((t) => t.id === id); return i < 0 ? 'none' : SET_COLORS[(i + 4) % SET_COLORS.length]; };
+const BUILT_ICON = { text: 'Aa', date: '📅', decimal: '1.5', percent: '%' };
+/** An item's answers as a coloured chip: dots for each answer, best to worst. */
+function answerChip(set) {
+  if (isBuiltIn(set)) return `<span class="cl-chip c-builtin"><b>${BUILT_ICON[set]}</b>${esc(BUILT_IN.find((b) => b[0] === set)[1])}</span>`;
+  const s = store.answerSets.find((y) => y.id === set);
+  if (!s) return '<span class="cl-chip c-gone">Pick answers</span>';
+  return `<span class="cl-chip c-${colorOfSet(s)}"><span class="cl-dots">${(s.options || []).slice(0, 6).map((o) => `<i class="b-${scoreBand(o, s.options)}"></i>`).join('')}</span>${esc(s.name)}</span>`;
+}
+const failable = (x) => { const s = !isBuiltIn(x.set) && store.answerSets.find((y) => y.id === x.set); return !!(s && (s.options || []).some((o) => o.fail)); };
 
-function itemCard(x, i, items) {
-  const at = `data-i="${i}"`, n = items.length;
-  const moves = `<span class="cl-moves"><button type="button" class="ibtn" data-act="cl-mv" ${at} data-dir="-1" aria-label="Move up"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" class="ibtn" data-act="cl-mv" ${at} data-dir="1" aria-label="Move down"${i === n - 1 ? ' disabled' : ''}>↓</button><button type="button" class="ibtn" data-act="cl-del-item" ${at} aria-label="Remove">✕</button></span>`;
-  if (x.kind === 'section') return `<div class="cl-sec" data-item="${esc(x.id)}"><span class="cl-tag">Section</span><input class="in cl-seclab" data-cli="label" ${at} value="${esc(x.label)}" maxlength="120" placeholder="Section heading" aria-label="Section heading">${moves}</div>`;
-  const s = !isBuiltIn(x.set) && store.answerSets.find((y) => y.id === x.set);
-  const choice = !!s, hasFail = s && (s.options || []).some((o) => o.fail);
-  const earlier = items.slice(0, i).filter((y) => y.kind === 'item' && !isBuiltIn(y.set) && store.answerSets.some((z) => z.id === y.set));
-  const src = x.showIf && earlier.find((y) => y.id === x.showIf.item), srcSet = src && store.answerSets.find((z) => z.id === src.set);
-  const failSel = (k, word) => `<label class="cl-mini">${word} <select class="in" data-clc="fail-${k}" ${at}>${FAIL_MODES.map(([v, l]) => `<option value="${v}"${(x.onFail?.[k] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>`;
-  return `<div class="cl-item" data-item="${esc(x.id)}">
-    <div class="cl-r1"><span class="cl-num">${items.slice(0, i + 1).filter((y) => y.kind === 'item').length}</span><input class="in cl-qin" data-cli="label" ${at} value="${esc(x.label)}" maxlength="300" placeholder="Question, e.g. Walkways clear of materials" aria-label="Question"><select class="in cl-set" data-clc="set" ${at} aria-label="Answer type">${setChoices(x.set)}</select>${moves}</div>
-    <div class="cl-r2"><label class="cl-ck"><input type="checkbox" data-clc="required" ${at}${x.required ? ' checked' : ''}>Required</label>${choice ? `<label class="cl-ck" title="A fail here fails the whole checklist"><input type="checkbox" data-clc="critical" ${at}${x.critical ? ' checked' : ''}${hasFail ? '' : ' disabled'}>Critical</label>` : ''}
-      ${hasFail ? `<span class="cl-onfail">On fail: ${failSel('comment', 'comment')} ${failSel('photo', 'photo')}</span>` : choice ? '<span class="help">Mark an answer as a fail in its answer set for Critical and On fail.</span>' : ''}</div>
-    <input class="in cl-help" data-cli="help" ${at} value="${esc(x.help || '')}" maxlength="300" placeholder="Help (optional): what to check" aria-label="Help text">
-    ${earlier.length ? `<div class="cl-r2 cl-if"><label class="cl-mini">Show <select class="in" data-clc="if" ${at}><option value="">always</option>${earlier.map((y) => `<option value="${esc(y.id)}"${src && src.id === y.id ? ' selected' : ''}>only if “${esc((y.label || 'Untitled').slice(0, 50))}” is</option>`).join('')}</select></label>
-      ${srcSet ? `<span class="cl-ifopts">${(srcSet.options || []).map((o) => `<label class="cl-ck"><input type="checkbox" data-clc="ifopt" ${at} value="${esc(o.id)}"${x.showIf.any.includes(o.id) ? ' checked' : ''}>${esc(o.label)}</label>`).join('')}</span>` : ''}</div>` : ''}
-  </div>`;
+/* ---------- the checklist: compact rows ---------- */
+
+function itemRow(x, i, items, n) {
+  const sel = D.it === x.id;
+  if (x.kind === 'section') {
+    const count = (() => { let k = 0; for (let j = i + 1; j < items.length && items[j].kind !== 'section'; j++) k++; return k; })();
+    const shut = D.fold.has(x.id);
+    return `<div class="cl-band${sel ? ' sel' : ''}${shut ? ' shut' : ''}" data-row="${i}" draggable="true"><button type="button" class="cl-fold" data-act="cl-fold" data-id="${esc(x.id)}" aria-expanded="${!shut}" aria-label="${shut ? 'Open' : 'Fold'} ${esc(x.label || 'section')}">${shut ? '▸' : '▾'}</button><button type="button" class="cl-bandl" data-act="cl-item" data-i="${i}">${esc(x.label || 'Untitled section')}<small> · ${count} item${count === 1 ? '' : 's'}</small></button></div>`;
+  }
+  const src = x.showIf && items.find((y) => y.id === x.showIf.item);
+  const srcN = src ? items.filter((y) => y.kind === 'item').indexOf(src) + 1 : 0;
+  const ifWords = src ? (store.answerSets.find((z) => z.id === src.set)?.options || []).filter((o) => x.showIf.any.includes(o.id)).map((o) => o.label).join(' or ') : '';
+  const fail = [x.onFail?.comment ? '💬' : '', x.onFail?.photo ? '📷' : ''].join('');
+  const failReq = x.onFail?.comment === 'req' || x.onFail?.photo === 'req';
+  const badges = [x.required ? '<span class="cl-b req">Required</span>' : '', x.critical ? '<span class="cl-b crit">▲ Critical</span>' : '', fail ? `<span class="cl-b fail">${fail} ${failReq ? 'required' : 'on fail'}</span>` : '', src ? `<span class="cl-b if">↳ if ${srcN} is ${esc(ifWords || '…')}</span>` : ''].join('');
+  return `<div class="cl-row${sel ? ' sel' : ''}${x.critical ? ' crit' : ''}${src ? ' child' : ''}" data-row="${i}" draggable="true">
+    <span class="cl-grip" aria-hidden="true" title="Drag to move">⋮⋮</span><span class="cl-n">${n}</span>
+    <button type="button" class="cl-rq" data-act="cl-item" data-i="${i}" aria-pressed="${sel}">${esc(x.label || 'New question')}${x.help ? `<small>${esc(x.help)}</small>` : ''}</button>
+    ${answerChip(x.set)}<span class="cl-bdg">${badges}</span></div>`;
 }
 
 function editor() {
   const c = D.cl, sets = setsById();
   const live = store.checklists.find((x) => x.id === c.id);
   const used = c.isNew ? [] : formsUsing(c.id);
-  const nItems = c.items.filter((x) => x.kind === 'item').length;
-  const maxScore = c.items.reduce((t, x) => { const s = x.kind === 'item' && sets.get(x.set); const m = s ? maxOf(s.options) : null; return t + (m || 0); }, 0);
-  const del = c.isNew ? '' : used.length ? `<span class="help">Used by ${esc(used.join(', '))}, so it can’t be deleted.</span>` : `<button type="button" class="btn ghost danger${D.confirm === 'del' ? ' armed' : ''}" data-act="cl-del">${D.confirm === 'del' ? 'Click again to delete' : 'Delete checklist'}</button>`;
+  const its = c.items.filter((x) => x.kind === 'item');
+  const maxScore = its.reduce((t, x) => { const s = sets.get(x.set); const m = s ? maxOf(s.options) : null; return t + (m || 0); }, 0);
+  let n = 0, shut = false;
+  const rows = c.items.map((x, i) => {
+    if (x.kind === 'section') { shut = D.fold.has(x.id); return itemRow(x, i, c.items, 0); }
+    n++;
+    return shut ? '' : itemRow(x, i, c.items, n);
+  }).join('');
+  const pass = c.passAt === '' || c.passAt == null ? null : Number(c.passAt);
+  const tc = typeColor(c.typeId);
+  const stat = (k, cls, label) => (k ? `<span class="cl-stat ${cls}">${k} ${label}</span>` : '');
+  const del = c.isNew ? '' : used.length ? `<span class="help" title="Used by ${esc(used.join(', '))}">On a form, so it can’t be deleted</span>` : `<button type="button" class="btn sm ghost danger${D.confirm === 'del' ? ' armed' : ''}" data-act="cl-del">${D.confirm === 'del' ? 'Click again to delete' : 'Delete checklist'}</button>`;
   return `<div class="panel cl-ed">
-    <div class="cl-top"><label class="cl-f"><span>Name</span><input class="in cl-name" data-cli="name" value="${esc(c.name)}" maxlength="80" placeholder="e.g. Daily site walk"></label>
-      <label class="cl-f"><span>Type</span><select class="in" data-clc="type"><option value="">No type</option>${store.checklistTypes.map((t) => `<option value="${esc(t.id)}"${t.id === c.typeId ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
-      <label class="cl-f cl-pass"><span>Pass at</span><span class="cl-pct"><input class="in" type="number" min="0" max="100" step="1" data-cli="passAt" value="${esc(c.passAt ?? '')}" placeholder="—" aria-label="Pass mark, percent">%</span></label></div>
-    <p class="help cl-meta">${c.isNew ? 'New checklist.' : `Version ${live?.ver || c.ver}${live?.at ? ` · saved ${esc(new Date(live.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}` : ''}${used.length ? ` · used by ${esc(used.join(', '))}` : ' · not on a form yet'}`} · ${nItems} item${nItems === 1 ? '' : 's'}${maxScore ? `, best score ${maxScore}` : ''}. Leave Pass at empty for no pass mark; a failed Critical item still fails it.</p>
-    <div class="cl-items">${c.items.map((x, i) => itemCard(x, i, c.items)).join('') || '<p class="help">Add an item: a question and how it’s answered.</p>'}</div>
-    <div class="cl-adds">${c.items.length < MAX_ITEMS ? '<button type="button" class="btn sm" data-act="cl-add-item">+ Item</button><button type="button" class="btn sm" data-act="cl-add-sec">+ Section</button>' : ''}</div>
+    <div class="cl-hdr"><input class="in cl-name" data-cli="name" value="${esc(c.name)}" maxlength="80" placeholder="Checklist name, e.g. Daily site walk" aria-label="Checklist name">
+      <label class="cl-typepill c-${tc}"><span class="sr">Type</span><select data-clc="type" aria-label="Type"><option value="">No type</option>${store.checklistTypes.map((t) => `<option value="${esc(t.id)}"${t.id === c.typeId ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+      <span class="cl-pass"><span>Pass at</span><input type="range" min="0" max="100" step="5" data-clc="passRange" value="${pass ?? 0}" aria-label="Pass mark"${pass == null ? ' class="off"' : ''}><input class="in" type="number" min="0" max="100" step="1" data-cli="passAt" value="${esc(c.passAt ?? '')}" placeholder="—" aria-label="Pass mark, percent"><b>%</b></span></div>
+    <div class="cl-stats">${stat(its.length, '', its.length === 1 ? 'item' : 'items')}${stat(its.filter((x) => x.critical).length, 's-crit', 'critical')}${stat(its.filter((x) => x.required).length, '', 'required')}${stat(its.filter((x) => x.showIf).length, 's-if', 'only if')}${maxScore ? `<span class="cl-stat s-best">best score ${maxScore}</span>` : ''}<span class="cl-meta">${c.isNew ? 'New' : `v${live?.ver || c.ver}`}${used.length ? ` · on ${esc(used.join(', '))}` : c.isNew ? '' : ' · not on a form yet'}</span></div>
+    <div class="cl-list" id="cl-list">${rows || '<p class="help cl-none">Add the first question below.</p>'}</div>
+    ${c.items.length < MAX_ITEMS ? `<div class="cl-quickw"><input class="in cl-quick" id="cl-quick" maxlength="300" placeholder="Add a question… (Enter adds it, with the same answers as the one above)" aria-label="Add a question"><button type="button" class="btn sm" data-act="cl-add-sec">+ Section</button></div>` : ''}
     ${D.issues.length ? `<div class="cl-issues" role="alert"><b>Before saving:</b><ul>${D.issues.map((m) => `<li>${esc(m)}</li>`).join('')}</ul></div>` : ''}
-    <div class="cl-foot">${del}<span class="cl-grow"></span><span class="help" id="cl-dirty">${c.dirty ? (c.isNew ? 'Not saved yet' : `Saving makes version ${(live?.ver || c.ver) + 1}. Records already filled in keep theirs.`) : ''}</span>${c.dirty && !c.isNew ? '<button type="button" class="btn ghost" data-act="cl-discard">Discard changes</button>' : ''}<button type="button" class="btn primary" data-act="cl-save"${D.busy ? ' disabled' : ''}>${D.busy ? 'Saving…' : 'Save'}</button></div>
+    <div class="cl-foot">${del}<span class="cl-grow"></span><span class="help" id="cl-dirty">${c.dirty ? (c.isNew ? 'Not saved yet' : `Unsaved · saving makes v${(live?.ver || c.ver) + 1}`) : ''}</span>${c.dirty && !c.isNew ? '<button type="button" class="btn ghost" data-act="cl-discard">Discard</button>' : ''}<button type="button" class="btn primary" data-act="cl-save"${D.busy ? ' disabled' : ''}>${D.busy ? 'Saving…' : 'Save'}</button></div>
   </div>`;
 }
 
-/* ---------- answer sets ---------- */
+/* ---------- the picked item's settings ---------- */
+
+/** Is the item panel a slide-in (not enough room for three panels)? Same width as checklists.css's @container. */
+const drawerMode = () => { const c = document.querySelector('.cl-cq'); return !c || c.clientWidth <= 1060; };
+function inspector() {
+  const c = D.cl, i = c.items.findIndex((x) => x.id === D.it), x = c.items[i];
+  if (!x) return `<aside class="panel cl-insp cl-insp0" aria-label="Item settings"><p class="help">Click a question to change its answers, Required, Critical, what a fail asks for, and when it shows.</p></aside>`;
+  const at = `data-i="${i}"`, n = c.items.slice(0, i + 1).filter((y) => y.kind === 'item').length;
+  const tools = `<span class="cl-itools"><button type="button" class="ibtn" data-act="cl-mv" ${at} data-dir="-1" aria-label="Move up"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" class="ibtn" data-act="cl-mv" ${at} data-dir="1" aria-label="Move down"${i === c.items.length - 1 ? ' disabled' : ''}>↓</button>${x.kind === 'item' ? `<button type="button" class="ibtn" data-act="cl-dup" ${at} aria-label="Duplicate" title="Duplicate">⧉</button>` : ''}<button type="button" class="ibtn cl-danger" data-act="cl-del-item" ${at} aria-label="Delete" title="Delete">🗑</button><button type="button" class="ibtn cl-iclose" data-act="cl-insp-close" aria-label="Close">✕</button></span>`;
+  if (x.kind === 'section') {
+    return `<div class="cl-scrim" data-act="cl-insp-close" aria-hidden="true"></div><aside class="panel cl-insp" aria-label="Section settings"><div class="cl-ih"><b>Section</b>${tools}</div><div class="cl-ib">
+      <label class="cl-lab" for="cl-in-label">Heading</label><input class="in" id="cl-in-label" data-cli="label" ${at} value="${esc(x.label)}" maxlength="120" placeholder="e.g. Working at height">
+      <p class="help">Questions under it, until the next section, show under this heading on the record.</p></div></aside>`;
+  }
+  const s = !isBuiltIn(x.set) && store.answerSets.find((y) => y.id === x.set);
+  const canFail = failable(x);
+  const earlier = c.items.slice(0, i).filter((y) => y.kind === 'item' && !isBuiltIn(y.set) && store.answerSets.some((z) => z.id === y.set));
+  const src = x.showIf && earlier.find((y) => y.id === x.showIf.item), srcSet = src && store.answerSets.find((z) => z.id === src.set);
+  const seg = (k, v) => `<span class="cl-seg2" role="group" aria-label="${k === 'comment' ? 'Comment' : 'Photo'} on a fail">${FAIL_MODES.map(([m, l]) => `<button type="button" class="${(x.onFail?.[k] || '') === m ? 'on' : ''}" aria-pressed="${(x.onFail?.[k] || '') === m}" data-act="cl-fail" ${at} data-k="${k}" data-v="${m}">${m === '' ? 'Off' : l}</button>`).join('')}</span>`;
+  const setBtn = (y) => `<button type="button" class="cl-sp c-${colorOfSet(y)}${y.id === x.set ? ' on' : ''}" aria-pressed="${y.id === x.set}" data-act="cl-setpick" ${at} data-v="${esc(y.id)}"><i class="cl-sw"></i><span>${esc(y.name)}</span><span class="cl-mini">${(y.options || []).slice(0, 5).map((o) => `<em class="b-${scoreBand(o, y.options)}">${o.score ?? '–'}</em>`).join('')}</span></button>`;
+  const prev = s ? `<div class="cl-pseg">${(s.options || []).map((o) => `<span class="${o.fail ? 'f' : ''}">${esc(o.label)}</span>`).join('')}</div>` : `<div class="cl-pin">${x.set === 'date' ? 'mm / dd / yyyy' : x.set === 'percent' ? '… %' : x.set === 'decimal' ? '0.0' : 'Type an answer'}</div>`;
+  return `<div class="cl-scrim" data-act="cl-insp-close" aria-hidden="true"></div><aside class="panel cl-insp${x.critical ? ' crit' : ''}" aria-label="Item ${n} settings"><div class="cl-ih"><b>Item ${n}</b>${tools}</div><div class="cl-ib">
+    <div><label class="cl-lab" for="cl-in-label">Question</label><input class="in" id="cl-in-label" data-cli="label" ${at} value="${esc(x.label)}" maxlength="300" placeholder="e.g. Walkways clear of materials"></div>
+    <div><label class="cl-lab" for="cl-in-help">Help</label><input class="in" id="cl-in-help" data-cli="help" ${at} value="${esc(x.help || '')}" maxlength="300" placeholder="What to check (optional)"></div>
+    <div><span class="cl-lab">Answers</span><div class="cl-setpick">${store.answerSets.map(setBtn).join('')}<div class="cl-builtins">${BUILT_IN.map(([k, l]) => `<button type="button" class="${x.set === k ? 'on' : ''}" aria-pressed="${x.set === k}" data-act="cl-setpick" ${at} data-v="${k}">${BUILT_ICON[k]} ${l}</button>`).join('')}</div></div></div>
+    <div class="cl-tog"><button type="button" class="t-req${x.required ? ' on' : ''}" aria-pressed="${!!x.required}" data-act="cl-tog" ${at} data-k="required">${x.required ? '✓ ' : ''}Required</button><button type="button" class="t-crit${x.critical ? ' on' : ''}" aria-pressed="${!!x.critical}" data-act="cl-tog" ${at} data-k="critical"${canFail ? '' : ' disabled title="Needs answers with a Fail"'}>▲ Critical</button></div>
+    ${canFail ? `<div class="cl-failbox"><span class="cl-lab">When the answer is a fail</span><div class="cl-frow">💬 Comment ${seg('comment')}</div><div class="cl-frow">📷 Photo ${seg('photo')}</div></div>` : s ? '<p class="help">Mark an answer as <b>Fail</b> in its answer set to use Critical, and to ask for a comment or photo.</p>' : ''}
+    <div class="cl-ifbox"><span class="cl-lab">Show</span>${earlier.length ? `<select class="in" data-clc="if" ${at} aria-label="When it shows"><option value="">Always</option>${earlier.map((y) => `<option value="${esc(y.id)}"${src && src.id === y.id ? ' selected' : ''}>Only if “${esc((y.label || 'Untitled').slice(0, 40))}” is…</option>`).join('')}</select>
+      ${srcSet ? `<div class="cl-ifopts">${(srcSet.options || []).map((o) => `<button type="button" class="${x.showIf.any.includes(o.id) ? 'on' : ''}" aria-pressed="${x.showIf.any.includes(o.id)}" data-act="cl-ifopt" ${at} data-v="${esc(o.id)}">${esc(o.label)}</button>`).join('')}</div>` : ''}` : '<p class="help">Always. (“Only if” can use a choice question above this one.)</p>'}</div>
+    <div class="cl-prev"><span class="cl-lab">Looks like</span><div class="cl-pq">${esc(x.label || 'Your question')}${x.required ? '<span class="req">*</span>' : ''}${x.critical ? ' <span class="cl-b crit">Critical</span>' : ''}</div>${x.help ? `<p class="help">${esc(x.help)}</p>` : ''}${prev}</div>
+  </div></aside>`;
+}
+
+/* ---------- answer sets: a card each ---------- */
 
 function setsDraft() {
-  if (!D.sets) D.sets = { list: store.answerSets.map((s) => ({ id: s.id, ...cleanSet(s), isNew: false })), dirty: false, del: [] };
+  if (!D.sets) D.sets = { list: store.answerSets.map((s, i) => ({ id: s.id, ...cleanSet(s), color: setColor(s, i), isNew: false })), dirty: false, del: [] };
   return D.sets;
+}
+function scale(s) {
+  return `<div class="cl-scale">${(s.options || []).map((o) => `<div class="b-${scoreBand(o, s.options)}${o.fail ? ' isfail' : ''}"><b>${esc(o.label || '—')}</b><small>${o.score == null ? 'not counted' : o.score}</small></div>`).join('')}</div>`;
 }
 function setsTab() {
   const sd = setsDraft();
   const card = (s, si) => {
     const used = store.checklists.filter((c) => usesSet(c, s.id));
-    return `<div class="panel cl-setcard" data-set="${esc(s.id)}">
-      <div class="cl-sethd"><input class="in cl-setname" data-csi="name" data-s="${si}" value="${esc(s.name)}" maxlength="80" placeholder="Answer set name, e.g. Pass / Fail / N/A" aria-label="Answer set name">
-        ${used.length ? `<span class="help">Used by ${used.length} checklist${used.length === 1 ? '' : 's'}</span>` : `<button type="button" class="ibtn" data-act="cl-set-del" data-s="${si}" aria-label="Delete this answer set" title="Delete">✕</button>`}</div>
-      <table class="cl-opts"><thead><tr><th>Answer</th><th>Score</th><th>Counts as a fail</th><th></th></tr></thead><tbody>
-      ${s.options.map((o, oi) => `<tr><td><input class="in" data-csi="olabel" data-s="${si}" data-o="${oi}" value="${esc(o.label)}" maxlength="60" aria-label="Answer"></td>
-        <td><input class="in cl-score" type="number" step="any" data-csi="oscore" data-s="${si}" data-o="${oi}" value="${o.score ?? ''}" placeholder="not counted" aria-label="Score for ${esc(o.label)}"></td>
-        <td><label class="cl-ck"><input type="checkbox" data-csc="ofail" data-s="${si}" data-o="${oi}"${o.fail ? ' checked' : ''}>Fail</label></td>
-        <td class="cl-oact"><button type="button" class="ibtn" data-act="cl-opt-mv" data-s="${si}" data-o="${oi}" data-dir="-1" aria-label="Move up"${oi === 0 ? ' disabled' : ''}>↑</button><button type="button" class="ibtn" data-act="cl-opt-mv" data-s="${si}" data-o="${oi}" data-dir="1" aria-label="Move down"${oi === s.options.length - 1 ? ' disabled' : ''}>↓</button><button type="button" class="ibtn" data-act="cl-opt-del" data-s="${si}" data-o="${oi}" aria-label="Remove ${esc(o.label)}"${s.options.length <= 2 ? ' disabled' : ''}>✕</button></td></tr>`).join('')}
-      </tbody></table>
-      ${s.options.length < MAX_OPTIONS ? `<button type="button" class="btn sm ghost" data-act="cl-opt-add" data-s="${si}">+ Answer</button>` : ''}
-      <span class="help">Best score: ${maxOf(s.options) ?? '—'}. Leave a score empty for answers that don’t count, like N/A.</span>
-    </div>`;
+    const nItems = used.reduce((t, c) => t + (c.items || []).filter((x) => x.kind === 'item' && x.set === s.id).length, 0);
+    const best = maxOf(s.options), fails = s.options.filter((o) => o.fail).length;
+    if (D.setEdit !== si) {
+      return `<div class="panel cl-scard c-${s.color}"><div class="cl-schd"><b>${esc(s.name || 'Untitled answer set')}</b><button type="button" class="btn sm ghost" data-act="cl-set-edit" data-s="${si}">Edit</button></div>
+        <span class="help">${used.length ? `Used by ${plural(used.length, 'checklist')} · ${plural(nItems, 'item')}` : 'Not used yet'}</span>${scale(s)}
+        <div class="cl-smeta"><span>Best score ${best ?? '—'}</span><span>${fails ? plural(fails, 'fail') : 'No fails'}</span></div></div>`;
+    }
+    return `<div class="panel cl-scard cl-sedit c-${s.color}"><div class="cl-schd"><input class="in cl-setname" data-csi="name" data-s="${si}" value="${esc(s.name)}" maxlength="80" placeholder="Answer set name, e.g. Pass / Fail / N/A" aria-label="Answer set name">
+        <span class="cl-swatches" role="radiogroup" aria-label="Colour">${SET_COLORS.map((k) => `<button type="button" role="radio" aria-checked="${s.color === k}" aria-label="${k}" title="${k}" class="c-${k}${s.color === k ? ' on' : ''}" data-act="cl-set-color" data-s="${si}" data-v="${k}"></button>`).join('')}</span>
+        <button type="button" class="btn sm" data-act="cl-set-edit" data-s="">Done</button></div>
+      <div class="cl-orows">${s.options.map((o, oi) => `<div class="cl-orow"><span class="cl-osw b-${scoreBand(o, s.options)}" aria-hidden="true"></span><input class="in" data-csi="olabel" data-s="${si}" data-o="${oi}" value="${esc(o.label)}" maxlength="60" placeholder="Answer" aria-label="Answer ${oi + 1}">
+        <input class="in cl-score" type="number" step="any" data-csi="oscore" data-s="${si}" data-o="${oi}" value="${o.score ?? ''}" placeholder="not counted" aria-label="Score for ${esc(o.label || 'this answer')}">
+        <button type="button" class="cl-fx${o.fail ? ' on' : ''}" aria-pressed="${o.fail}" data-act="cl-opt-fail" data-s="${si}" data-o="${oi}">${o.fail ? '⚑ ' : ''}Fail</button>
+        <span class="cl-oact"><button type="button" class="ibtn" data-act="cl-opt-mv" data-s="${si}" data-o="${oi}" data-dir="-1" aria-label="Move up"${oi === 0 ? ' disabled' : ''}>↑</button><button type="button" class="ibtn" data-act="cl-opt-mv" data-s="${si}" data-o="${oi}" data-dir="1" aria-label="Move down"${oi === s.options.length - 1 ? ' disabled' : ''}>↓</button><button type="button" class="ibtn" data-act="cl-opt-del" data-s="${si}" data-o="${oi}" aria-label="Remove ${esc(o.label)}"${s.options.length <= 2 ? ' disabled' : ''}>✕</button></span></div>`).join('')}</div>
+      <div class="cl-sfoot">${s.options.length < MAX_OPTIONS ? `<button type="button" class="btn sm ghost" data-act="cl-opt-add" data-s="${si}">+ Answer</button>` : ''}<span class="help">Best score ${best ?? '—'}. Leave a score empty for answers that don’t count, like N/A.</span><span class="cl-grow"></span>${used.length ? `<span class="help">Used by ${plural(used.length, 'checklist')}</span>` : `<button type="button" class="btn sm ghost danger" data-act="cl-set-del" data-s="${si}">Delete answer set</button>`}</div></div>`;
   };
   const changedIds = changedSets();
   const affected = store.checklists.filter((c) => changedIds.some((id) => usesSet(c, id)));
-  return `<p class="help cl-sethelp">Choices with scores, used by checklist items. A checklist’s score adds up its answers out of the best possible; answers marked <b>Fail</b> can ask for a comment or photo, and fail a Critical item. Text, Date, Decimal and Percent are always there and aren’t scored.</p>
-    ${sd.list.map(card).join('')}
+  return `<p class="help cl-sethelp">Choices with scores. Each answer is coloured by its score: best green, lowest red, not counted grey; <b>Fail</b> answers can ask for a comment or photo, and fail a Critical item. Text, Date, Decimal and Percent are always there and aren’t scored.</p>
+    <div class="cl-sgrid">${sd.list.map(card).join('')}</div>
     <div class="cl-adds"><button type="button" class="btn" data-act="cl-set-add">+ Answer set</button>${!sd.list.length ? '<button type="button" class="btn" data-act="cl-starter">Add the usual ones</button>' : ''}</div>
     ${D.issues.length ? `<div class="cl-issues" role="alert"><b>Before saving:</b><ul>${D.issues.map((m) => `<li>${esc(m)}</li>`).join('')}</ul></div>` : ''}
     <div class="cl-foot"><span class="cl-grow"></span><span class="help" id="cl-dirty">${sd.dirty ? (affected.length ? `Saving also makes new versions of ${affected.map((c) => `“${esc(c.name)}”`).join(', ')}. Records already filled in keep theirs.` : 'Unsaved changes') : ''}</span>${sd.dirty ? '<button type="button" class="btn ghost" data-act="cl-sets-discard">Discard changes</button>' : ''}<button type="button" class="btn primary" data-act="cl-sets-save"${!sd.dirty || D.busy ? ' disabled' : ''}>${D.busy ? 'Saving…' : 'Save answer sets'}</button></div>`;
 }
 function changedSets() {
   if (!D.sets) return [];
-  const live = setsById();
+  const live = new Map(store.answerSets.map((s, i) => [s.id, { ...s, color: setColor(s, i) }]));
   return D.sets.list.filter((s) => { const l = live.get(s.id); return !l || JSON.stringify(cleanSet(l)) !== JSON.stringify(cleanSet(s)); }).map((s) => s.id);
 }
 
@@ -225,7 +288,7 @@ export async function onClick(a, el) {
     case 'cl-imp-go': await applyImport(); return true;
     case 'cl-tab': D.tab = el.dataset.v; D.issues = []; D.imp = null; renderMain(); return true;
     case 'cl-pick': if (D.cl?.dirty && D.cl.id !== el.dataset.id) { toast('You have unsaved changes. Save or discard them first.'); return true; } pick(el.dataset.id); go({ name: 'checklists', clId: el.dataset.id }, true); renderMain(); return true;
-    case 'cl-new': { if (D.cl?.dirty) { toast('Save or discard your changes first.'); return true; } const id = 'cl' + uid(); D.sel = id; D.issues = []; D.cl = { id, name: '', typeId: el.dataset.id || '', passAt: 80, items: [blankItem()], ver: 0, isNew: true, dirty: true }; renderMain(); focusLater('.cl-name'); return true; }
+    case 'cl-new': { if (D.cl?.dirty) { toast('Save or discard your changes first.'); return true; } const id = 'cl' + uid(); D.sel = id; D.issues = []; const first = blankItem(); D.cl = { id, name: '', typeId: el.dataset.id || '', passAt: 80, items: [first], ver: 0, isNew: true, dirty: true }; D.it = first.id; D.fold = new Set(); renderMain(); focusLater('.cl-name'); return true; }
     case 'cl-discard': pick(D.cl.id); renderMain(); return true;
     case 'cl-save': await saveCl(); return true;
     case 'cl-del': {
@@ -237,17 +300,34 @@ export async function onClick(a, el) {
     }
     case 'cl-add-item': case 'cl-add-sec': {
       const it = a === 'cl-add-item' ? blankItem() : { id: 's' + uid(), kind: 'section', label: '' };
-      D.cl.items.push(it); dirtyCl(); renderMain(); focusLater(`[data-item="${it.id}"] input`); return true;
+      D.cl.items.push(it); D.it = it.id; dirtyCl(); renderMain(); focusLater('#cl-in-label'); return true;
     }
     case 'cl-mv': { const i = +el.dataset.i, j = i + +el.dataset.dir, xs = D.cl.items; if (j < 0 || j >= xs.length) return true; [xs[i], xs[j]] = [xs[j], xs[i]]; fixIfs(); dirtyCl(); renderMain(); focusLater(`[data-act="cl-mv"][data-i="${j}"][data-dir="${el.dataset.dir}"]:not(:disabled)`); return true; }
-    case 'cl-del-item': { const gone = D.cl.items.splice(+el.dataset.i, 1)[0]; D.cl.items.forEach((x) => { if (x.showIf?.item === gone?.id) x.showIf = null; }); dirtyCl(); renderMain(); return true; }
+    case 'cl-del-item': { const gone = D.cl.items.splice(+el.dataset.i, 1)[0]; D.it = null; D.cl.items.forEach((x) => { if (x.showIf?.item === gone?.id) x.showIf = null; }); dirtyCl(); renderMain(); return true; }
     case 'cl-type-new': D.typeNew = ''; D.typeRen = null; renderMain(); focusLater('#cl-typename'); return true;
     case 'cl-type-ren': D.typeRen = el.dataset.id; D.typeNew = null; renderMain(); focusLater('#cl-typename'); return true;
     case 'cl-type-cancel': D.typeNew = null; D.typeRen = null; renderMain(); return true;
     case 'cl-type-save': return saveType(el.dataset.id), true;
     case 'cl-type-del': { const t = store.checklistTypes.find((x) => x.id === el.dataset.id); if (!t) return true; if (store.checklists.some((c) => c.typeId === t.id)) { toast('Move its checklists to another type first.'); return true; } try { await deleteChecklistType(t.id); toast(`Deleted “${t.name}”.`); } catch (e) { toast('Couldn’t delete it. Try again.'); } return true; }
     case 'cl-starter': await addStarter(); return true;
-    case 'cl-set-add': { const sd = setsDraft(); sd.list.push({ id: 'as' + uid(), name: '', options: [{ id: 'o' + uid(), label: '', score: 1, fail: false }, { id: 'o' + uid(), label: '', score: 0, fail: true }], isNew: true }); dirtySets(); renderMain(); focusLater(`.cl-setcard:last-of-type .cl-setname`); return true; }
+    case 'cl-set-add': { const sd = setsDraft(); sd.list.push({ id: 'as' + uid(), name: '', color: SET_COLORS[sd.list.length % SET_COLORS.length], options: [{ id: 'o' + uid(), label: '', score: 1, fail: false }, { id: 'o' + uid(), label: '', score: 0, fail: true }], isNew: true }); D.setEdit = sd.list.length - 1; dirtySets(); renderMain(); focusLater('.cl-sedit .cl-setname'); return true; }
+    case 'cl-set-edit': D.setEdit = el.dataset.s === '' ? null : +el.dataset.s; renderMain(); if (D.setEdit != null) focusLater('.cl-sedit .cl-setname'); else focusLater(`[data-act="cl-set-edit"][data-s="${el.dataset.s}"]`); return true;
+    case 'cl-set-color': { const s = setsDraft().list[+el.dataset.s]; if (!s) return true; s.color = el.dataset.v; dirtySets(); renderMain(); focusLater(`[data-act="cl-set-color"][data-s="${el.dataset.s}"][data-v="${el.dataset.v}"]`); return true; }
+    case 'cl-opt-fail': { const o = setsDraft().list[+el.dataset.s]?.options[+el.dataset.o]; if (!o) return true; o.fail = !o.fail; dirtySets(); renderMain(); focusLater(`[data-act="cl-opt-fail"][data-s="${el.dataset.s}"][data-o="${el.dataset.o}"]`); return true; }
+    case 'cl-item': { const x = D.cl?.items[+el.dataset.i]; if (!x) return true; D.it = D.it === x.id && drawerMode() ? null : x.id; renderMain(); if (D.it && !drawerMode()) focusLater(`[data-act="cl-item"][data-i="${el.dataset.i}"]`); else if (D.it) focusLater('#cl-in-label'); return true; }
+    case 'cl-insp-close': { const i = D.cl?.items.findIndex((x) => x.id === D.it); D.it = null; renderMain(); focusLater(`[data-act="cl-item"][data-i="${i}"]`); return true; }
+    case 'cl-fold': { const id = el.dataset.id; if (D.fold.has(id)) D.fold.delete(id); else D.fold.add(id); renderMain(); focusLater(`[data-act="cl-fold"][data-id="${CSS.escape(id)}"]`); return true; }
+    case 'cl-dup': { const i = +el.dataset.i, x = D.cl.items[i]; if (!x || D.cl.items.length >= MAX_ITEMS) return true; const c = { ...JSON.parse(JSON.stringify(x)), id: 'i' + uid(), label: (x.label + ' (copy)').slice(0, 300) }; D.cl.items.splice(i + 1, 0, c); D.it = c.id; dirtyCl(); renderMain(); focusLater('#cl-in-label'); return true; }
+    case 'cl-setpick': case 'cl-tog': case 'cl-fail': case 'cl-ifopt': {
+      const i = +el.dataset.i, x = D.cl?.items[i]; if (!x) return true;
+      if (a === 'cl-setpick') { x.set = el.dataset.v; if (!failable(x)) { x.critical = false; x.onFail = { comment: '', photo: '' }; } D.cl.items.forEach((y) => { if (y.showIf?.item === x.id) y.showIf = null; }); }
+      else if (a === 'cl-tog') { if (el.dataset.k === 'critical' && !failable(x)) return true; x[el.dataset.k] = !x[el.dataset.k]; }
+      else if (a === 'cl-fail') x.onFail = { ...(x.onFail || {}), [el.dataset.k]: el.dataset.v };
+      else { const have = new Set(x.showIf?.any || []); if (have.has(el.dataset.v)) have.delete(el.dataset.v); else have.add(el.dataset.v); x.showIf = { item: x.showIf.item, any: [...have] }; }
+      dirtyCl(); renderMain();
+      focusLater(`[data-act="${a}"][data-i="${i}"]${el.dataset.k ? `[data-k="${el.dataset.k}"]` : ''}${el.dataset.v != null && a !== 'cl-tog' ? `[data-v="${CSS.escape(el.dataset.v)}"]` : ''}`);
+      return true;
+    }
     case 'cl-set-del': { const sd = setsDraft(), s = sd.list[+el.dataset.s]; if (!s) return true; if (store.checklists.some((c) => usesSet(c, s.id))) { toast('A checklist uses it.'); return true; } sd.list.splice(+el.dataset.s, 1); if (!s.isNew) sd.del.push(s.id); dirtySets(); renderMain(); return true; }
     case 'cl-opt-add': { const s = setsDraft().list[+el.dataset.s]; if (!s || s.options.length >= MAX_OPTIONS) return true; s.options.push({ id: 'o' + uid(), label: '', score: null, fail: false }); dirtySets(); renderMain(); focusLater(`[data-csi="olabel"][data-s="${el.dataset.s}"][data-o="${s.options.length - 1}"]`); return true; }
     case 'cl-opt-del': { const s = setsDraft().list[+el.dataset.s]; if (!s || s.options.length <= 2) return true; s.options.splice(+el.dataset.o, 1); dirtySets(); renderMain(); return true; }
@@ -295,6 +375,7 @@ export function onChange(t) {
   if (t.dataset.clc && D.cl) {
     const k = t.dataset.clc;
     if (k === 'type') { D.cl.typeId = t.value; dirtyCl(); renderMain(); return true; }
+    if (k === 'passRange') { D.cl.passAt = String(t.value); dirtyCl(); renderMain(); focusLater('[data-clc="passRange"]'); return true; }
     const x = item(t); if (!x) return true;
     if (k === 'set') { x.set = t.value; const s = store.answerSets.find((y) => y.id === x.set); if (!s || !s.options.some((o) => o.fail)) { x.critical = false; x.onFail = { comment: '', photo: '' }; } D.cl.items.forEach((y) => { if (y.showIf?.item === x.id) y.showIf = null; }); }
     else if (k === 'required' || k === 'critical') x[k] = t.checked;
@@ -439,3 +520,32 @@ document.addEventListener('dragleave', (e) => { const d = e.target.closest && e.
 document.addEventListener('drop', (e) => { const d = e.target.closest && e.target.closest('#cl-drop'); if (!d) return; e.preventDefault(); d.classList.remove('over'); readImportFile(e.dataTransfer?.files?.[0]); });
 document.addEventListener('click', (e) => { if (D?.menu && !(e.target.closest && e.target.closest('.cl-menuw'))) { D.menu = null; renderMain(); } });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && D?.menu) { D.menu = null; renderMain(); } });
+
+/* ---------- adding fast, and dragging rows ---------- */
+document.addEventListener('keydown', (e) => {
+  if (e.target.id !== 'cl-quick' || e.key !== 'Enter' || !D?.cl) return;
+  e.preventDefault();
+  const label = e.target.value.trim(); if (!label) return;
+  if (D.cl.items.length >= MAX_ITEMS) { toast(`A checklist has at most ${MAX_ITEMS} lines.`); return; }
+  const prev = [...D.cl.items].reverse().find((x) => x.kind === 'item');
+  const it = { ...blankItem(), label: label.slice(0, 300), set: prev?.set || blankItem().set, required: !!prev?.required };
+  D.cl.items.push(it); if (!drawerMode()) D.it = it.id; D.cl.dirty = true; // on narrow screens the panel would cover the box: keep typing
+  renderMain();
+  const q = document.getElementById('cl-quick'); if (q) { q.focus(); q.scrollIntoView({ block: 'nearest' }); }
+});
+document.addEventListener('input', (e) => { if (e.target.dataset?.clc === 'passRange' && D?.cl) { const n = document.querySelector('[data-cli="passAt"]'); if (n) n.value = e.target.value; } });
+let drag = null;
+document.addEventListener('dragstart', (e) => { const r = e.target.closest && e.target.closest('#cl-list [data-row]'); if (!r || !D?.cl) return; drag = +r.dataset.row; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(drag)); } catch (err) { /* old browsers */ } r.classList.add('dragging'); });
+document.addEventListener('dragover', (e) => { if (drag == null) return; const r = e.target.closest && e.target.closest('#cl-list [data-row]'); if (!r) return; e.preventDefault(); document.querySelectorAll('#cl-list .drop-before').forEach((x) => x.classList.remove('drop-before')); r.classList.add('drop-before'); });
+document.addEventListener('dragend', () => { drag = null; document.querySelectorAll('#cl-list .drop-before,#cl-list .dragging').forEach((x) => x.classList.remove('drop-before', 'dragging')); });
+document.addEventListener('drop', (e) => {
+  if (drag == null || !D?.cl) return;
+  const r = e.target.closest && e.target.closest('#cl-list [data-row]'); if (!r) return;
+  e.preventDefault();
+  const from = drag, to = +r.dataset.row; drag = null;
+  if (from === to) { renderMain(); return; }
+  const xs = D.cl.items, [x] = xs.splice(from, 1);
+  xs.splice(to > from ? to - 1 : to, 0, x); // dropped before the row it was over
+  fixIfs(); D.it = x.id; D.cl.dirty = true; renderMain();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && D?.it && D.cl && drawerMode() && document.querySelector('.cl-insp')) { const i = D.cl.items.findIndex((x) => x.id === D.it); D.it = null; renderMain(); document.querySelector(`[data-act="cl-item"][data-i="${i}"]`)?.focus(); } });
