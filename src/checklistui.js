@@ -9,7 +9,7 @@ import { holderName } from './tasks.js';
 import { visibleItems, summarize, missing, isFail, answered, answerText, rowsOf, cleanValue, isBlankValue, maxOf } from './checklistlogic.js';
 
 let H = { draftFor: () => null, markDirty: () => {}, repaint: () => {}, formOf: () => null, upload: null, dateText: (d) => d, toast: () => {},
-  // Cadence tasks on the open record: { tasks } | { unsaved } | { loading } | { off }
+  // Cadence tasks on the open record: { tasks } (on a new record, the ones kept until it's saved: _held) | { loading } | { off }
   taskState: () => ({ off: true }), addTask: () => {}, openTask: () => {} };
 export function initChecklistUI(h) { H = { ...H, ...h }; }
 
@@ -82,9 +82,9 @@ function taskRows(x, scope, fid, edit) {
   const rows = list.map((t) => {
     const who = holderName(t) || '';
     const when = t.done ? 'done' : t.due ? `due ${H.dateText(t.due)}` : '';
-    return `<button type="button" class="cl-tk${t.done ? ' done' : ''}" data-clr="task-open" ${at} data-t="${esc(t.id)}"><span class="cl-tkc" aria-hidden="true"></span><span class="cl-tkt">${esc(t.title)}</span><small>${esc([who, when].filter(Boolean).join(' · '))}</small></button>`;
+    return `<button type="button" class="cl-tk${t.done ? ' done' : ''}" data-clr="task-open" ${at} data-t="${esc(t.id)}"><span class="cl-tkc" aria-hidden="true"></span><span class="cl-tkt">${esc(t.title)}</span>${t._held ? '<span class="cl-onsave" title="Goes to Cadence when you save">on save</span>' : ''}<small>${esc([who, when].filter(Boolean).join(' · '))}</small></button>`;
   }).join('');
-  const can = !ts.off && !(ts.unsaved && !edit);
+  const can = !ts.off && !(ts.held && !edit);
   const btn = can ? `<button type="button" class="btn sm cl-tadd" data-clr="task-add" ${at}${ts.loading || scope === 'preview' ? ' disabled' : ''}>＋ Add a task${x.onFail.task === 'req' && edit && !list.length ? ' (required)' : ''}</button>` : '';
   return rows || btn ? `${rows ? `<div class="cl-tks">${rows}</div>` : ''}${btn}` : '';
 }
@@ -149,6 +149,15 @@ export function blockHTML(f, v, err, scope, mode) {
   }
   const ver = `<span class="cl-ver" title="The version of “${esc(snap.name)}” this was filled in on">${esc(snap.name)} · v${snap.ver}</span>`;
   return wrap(`${ver}${summaryHTML(snap, v, scope, f.id)}<div class="cl-items">${body}</div>${mode === 'view' ? '<p class="help rule-note">View only at this stage</p>' : ''}`, edit ? '' : ' rd');
+}
+
+/** The question a task came from (its checklistItem, 'field id:item id'), for the record's Tasks section. */
+export function itemOf(form, values, key) {
+  const [fid, item] = String(key || '').split(':');
+  const f = (form?.fields || []).find((x) => x.id === fid && x.type === 'checklist');
+  const r = f && snapFor(f, values?.[fid]);
+  const x = r?.snap && (r.snap.items || []).find((y) => y.id === item && y.kind !== 'section');
+  return x ? { fid, item, label: x.label } : null;
 }
 
 /** Read view, PDFs and lists: one line. */

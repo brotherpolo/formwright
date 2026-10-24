@@ -433,3 +433,8 @@
 .cl-tadd{border-style:dashed}
 .cl-tnote{margin:0}
 .cl-fhelp{margin:6px 0 0;font-size:12px}
+.cl-onsave,.tk-onsave,.tt-onsave{flex:none;font-size:11px;font-weight:700;letter-spacing:.02em;border-radius:999px;padding:1px 7px;background:var(--accent-soft);color:var(--accent);vertical-align:middle}
+.cl-qtag{display:inline-flex;align-items:center;gap:3px;max-width:100%;font-size:11.5px;font-weight:600;border-radius:999px;padding:1px 8px;margin-left:6px;background:var(--cl-fail-soft);color:var(--cl-fail);border:0;cursor:pointer;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-qtag:hover{text-decoration:underline}
+.cl-q.flash{animation:clflash 1.4s ease}
+@keyframes clflash{0%,40%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}

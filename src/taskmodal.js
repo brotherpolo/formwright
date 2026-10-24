@@ -74,10 +74,11 @@ export async function open(recordId, taskId = null, opts = {}) {
   M.people = mine ? assignChoices(ppl, me(), cur) : passOn ? passChoices(ppl, task, me()) : [];
   M.roles = mine || passOn ? roleChoices() : [];
   if (task?.assigneeRole && !M.roles.some((r) => r.role === task.assigneeRole)) M.roles.push(roleChoice({ id: task.assigneeRole, name: (task.assigneeRoleName || 'A role') + ' (deleted)' }));
-  M.draft = task ? {
-    title: task.title || '', notes: task.notes || '', due: task.due || '', time: task.time || '', repeat: task.repeat || 'none',
-    typeId: task.typeId || '', levelId: task.levelId || '', nodeId: task.nodeId || '', who: task.assigneeRole ? 'role:' + task.assigneeRole : task.assigneeId || task.ownerId,
-    subtasks: (task.subtasks || []).map((s) => (typeof s === 'string' ? { id: uid('s'), title: s, done: false } : { id: s.id || uid('s'), title: s.title || s.text || '', done: !!s.done })),
+  const src = task || opts.held; // opts.held: a task kept on a record that isn't saved yet (opts.hold)
+  M.draft = src ? {
+    title: src.title || '', notes: src.notes || '', due: src.due || '', time: src.time || '', repeat: src.repeat || 'none',
+    typeId: src.typeId || '', levelId: src.levelId || '', nodeId: src.nodeId || '', who: src.assigneeRole ? 'role:' + src.assigneeRole : src.assigneeId || src.ownerId,
+    subtasks: (src.subtasks || []).map((s) => (typeof s === 'string' ? { id: uid('s'), title: s, done: false } : { id: s.id || uid('s'), title: s.title || s.text || '', done: !!s.done })),
   } : { title: String(opts.prefill?.title || '').slice(0, 500), notes: String(opts.prefill?.notes || '').slice(0, 20000), due: '', time: '', repeat: 'none', typeId: M.lists.defType || '', levelId: M.lists.defLevel || '', nodeId: '', who: H.store.user.uid, subtasks: [] };
   M.startWho = M.draft.who;
   M.loading = false;
@@ -86,6 +87,19 @@ export async function open(recordId, taskId = null, opts = {}) {
 }
 
 export function close() { M = null; const r = document.getElementById('tk-root'); if (r) r.innerHTML = ''; }
+
+const linkFor = (rec, form, checklistItem) => (rec && form ? { recordId: rec.id, formId: form.id, recordSnap: { title: String(H.recTitle(rec, form)).slice(0, 500), form: String(form.name || 'Untitled form').slice(0, 200), color: colorOf(form) }, checklistItem: checklistItem || null } : null);
+
+/** A new record was saved: the tasks added to it before then go to Cadence, linked to it. Returns how many couldn't be. */
+export async function writeHeld(tasks, rec, form) {
+  if (!rec || !form || !tasks?.length) return tasks?.length || 0;
+  const now = Date.now();
+  const out = tasks.map((t) => ({ ...t, ...linkFor(rec, form, null), ...(t.checklistItem ? { checklistItem: t.checklistItem } : {}), createdAt: now, updatedAt: now }));
+  try { await writeTasks(out); return 0; } catch (e) { console.warn('[formwright] tasks with the record', e); }
+  let bad = 0; // one at a time: the ones Cadence accepts still go in
+  for (const t of out) { try { await writeTasks([t]); } catch (e) { console.error('[formwright] task', t.id, e); bad++; } }
+  return bad;
+}
 
 /** "Assigned to": the chosen person, as a button that opens the person picker. */
 const chosen = () => M.people.find((x) => x.uid === M.draft.who) || (M.roles || []).find((x) => x.uid === M.draft.who) || M.people[0];
@@ -125,7 +139,7 @@ function paint() {
   const subsDone = d.subtasks.filter((s) => s.done).length;
   const canDel = t && (own || ((t.assigneeId === H.store.user.uid || M.viaRole) && t.spawnedFrom && !t.done));
   r.innerHTML = `<div class="lv-scrim tk-scrim" data-tk="scrim"><div class="lv-dlg tk-dlg${M.view ? ' tk-view' : ''}" role="dialog" aria-modal="true" aria-labelledby="tk-h" data-stop-scrim="1">
-    <div class="tk-head"><h2 id="tk-h">${t ? (t.done ? 'Task (done)' : 'Task') : 'New task'}</h2><button type="button" class="ibtn" data-tk="close" aria-label="Close">✕</button></div>
+    <div class="tk-head"><h2 id="tk-h">${t ? (t.done ? 'Task (done)' : 'Task') : M.opts.held ? 'Task <span class="tk-onsave">on save</span>' : 'New task'}</h2><button type="button" class="ibtn" data-tk="close" aria-label="Close">✕</button></div>
     ${linkLine}${from}
     <fieldset class="tk-f"${M.view ? ' disabled' : dis}>
       <label class="tk-l"><span>Title</span><input class="in tk-title" data-tki="title" maxlength="500" value="${esc(d.title)}" placeholder="What needs doing?"${ro}></label>
@@ -162,7 +176,8 @@ function paint() {
     </div>` : `<div class="tk-foot">
       ${canDel ? `<button type="button" class="btn${M.armed ? ' danger armed' : ' ghost danger'}" data-tk="del"${dis}>${M.armed ? 'Tap again to delete' : 'Delete'}</button>` : ''}
       ${t ? `<button type="button" class="btn" data-tk="done"${dis}>${t.done ? 'Mark not done' : 'Mark done'}</button>` : ''}
-      ${H.cadenceUrl ? `<a class="tk-cad" href="${esc(cadenceLink(H.cadenceUrl, t ? { task: t.id } : { addTaskFor: M.recordId }))}" target="cadence" rel="noopener">Open in Cadence ↗</a>` : ''}
+      ${M.opts.unhold ? `<button type="button" class="btn ghost danger" data-tk="unhold"${dis}>Remove</button>` : ''}
+      ${H.cadenceUrl && !M.opts.hold ? `<a class="tk-cad" href="${esc(cadenceLink(H.cadenceUrl, t ? { task: t.id } : { addTaskFor: M.recordId }))}" target="cadence" rel="noopener">Open in Cadence ↗</a>` : ''}
       <span class="grow"></span>
       <button type="button" class="btn ghost" data-tk="close"${dis}>Cancel</button>
       <button type="button" class="btn primary" data-tk="save"${dis}>${M.busy ? 'Saving…' : t ? 'Save changes' : 'Add task'}</button>
@@ -197,12 +212,19 @@ async function save() {
   if (M.newSub.trim()) { d.subtasks.push({ id: uid('s'), title: M.newSub.trim(), done: false }); M.newSub = ''; }
   const mine = me(), who = M.owner ? chosen() : null;
   if (M.owner && who && !who.me && !who.ok && who.uid !== M.task?.assigneeId) { M.err = `${who.name} can’t be given tasks yet.`; paint(); return; }
+  if (!M.task && M.opts.hold) { // the record isn't saved yet: the task is kept with it and goes to Cadence when it's saved
+    const t = newTaskDoc(M.opts.held?.id || uid('t'), d, mine, who && !who.me ? who : null, null, M.lists, Date.now());
+    if (M.opts.checklistItem) t.checklistItem = String(M.opts.checklistItem).slice(0, 200);
+    M.opts.hold(t);
+    H.toast(M.opts.held ? 'Task changed. It goes to Cadence when you save.' : 'Task added. It goes to Cadence when you save.');
+    close(); return;
+  }
   M.busy = true; M.err = ''; paint();
   try {
     const now = Date.now();
     if (!M.task) {
       const rec = H.recById(M.recordId), form = rec ? H.formById(rec.formId) : null;
-      const link = rec && form ? { recordId: rec.id, formId: form.id, recordSnap: { title: String(H.recTitle(rec, form)).slice(0, 500), form: String(form.name || 'Untitled form').slice(0, 200), color: colorOf(form) }, checklistItem: M.opts.checklistItem || null } : null;
+      const link = linkFor(rec, form, M.opts.checklistItem);
       const t = newTaskDoc(uid('t'), d, mine, who && !who.me ? who : null, link, M.lists, now);
       try { await writeTasks([t]); }
       catch (e) {
@@ -284,6 +306,7 @@ export function onClick(e) {
       M.busy = true; paint();
       deleteTask(M.task.id).then(() => { H.toast('Task deleted'); close(); }).catch((err) => { console.error(err); M.busy = false; M.armed = false; M.err = 'Couldn’t delete it. Try again.'; paint(); });
       return true;
+    case 'unhold': M.opts.unhold(); H.toast('Task removed'); close(); return true;
     case 'done':
       M.busy = true; paint();
       toggleDone(M.task).then((r) => { H.toast(r === 'next' ? 'Done. The next one is in your tasks.' : r === 'done' ? 'Marked done' : 'Reopened'); close(); }).catch((err) => { console.error(err); M.busy = false; M.err = 'Couldn’t update it. Try again.'; paint(); });

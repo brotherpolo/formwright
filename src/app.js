@@ -31,7 +31,7 @@ import { storeKey as subStoreKey, readSubs, prefsOf, setPrefs, colsFor, toggleCo
 import { colsTool, showMenu, sortMenu, toolBar, moreLine, headCell as subHead } from './subui.js';
 import { headingOf, readFolds, isFolded, setFold, setFolds, foldKeys } from './foldlogic.js';
 import { asFiles, filesText, fileNames, fileLines, fileKind, sizeText as fileSize } from './filelist.js';
-import { initChecklistUI, paintTaskLists as clPaintTasks, blockHTML as clBlock, finalizeValues as clFinalize, checkField as clCheck, uploading as clUploading, summaryText as clSummary } from './checklistui.js';
+import { initChecklistUI, paintTaskLists as clPaintTasks, itemOf as clItemOf, blockHTML as clBlock, finalizeValues as clFinalize, checkField as clCheck, uploading as clUploading, summaryText as clSummary } from './checklistui.js';
 import { sectionOrder, moveSection, TASKS as TASKS_KEY } from './sectionlogic.js';
 import { searchForms, allSearchable, designerMatch, pushRecent, sidebarFormList } from './navlogic.js';
 import * as palette from './palette.js';
@@ -710,7 +710,22 @@ function paintTasks(){
   el.innerHTML=tasksInner();
   if(typing!=null){const s=el.querySelector('[data-ksearch="t:tasks"]');if(s){s.focus({preventScroll:true});try{s.setSelectionRange(typing,typing)}catch(e){}}}
 }
+/** A task from a checklist question: a tag that says which, and goes to it. */
+function qTag(t,form){
+  if(!t.checklistItem||!form)return '';
+  const it=clItemOf(form,rdraft?.values||{},t.checklistItem);
+  return it?`<button type="button" class="cl-qtag" data-act="cl-goto" data-k="${esc(t.checklistItem)}" title="Go to “${esc(it.label)}”">✅ ${esc(it.label)}</button>`:'';
+}
+/** A new record: the tasks added before it's saved (they go to Cadence when it is). */
+function heldInner(form){
+  const held=rdraft?._heldTasks||[],me=store.user?.uid,today=dateKey(new Date());
+  const head=`<div class="section-h"><h2><span class="badge" style="background:${COLORS[6]}" aria-hidden="true">T</span><span>Tasks</span> <span class="count">${held.length}</span></h2></div>`;
+  return head+`<div class="panel subsec"><p class="note">These go to Cadence when you save.</p><div class="tlist tl-held">${held.map(t=>{
+    const due=dueInfo(t.due,today);
+    return `<div class="trow"><button class="tmain" data-act="held-open" data-id="${esc(t.id)}"><b>${esc(t.title||'Untitled task')}</b><span class="tmeta"><span class="tt-onsave">on save</span><span class="tdue ${due.tone}">${esc(due.text)}</span><span>${esc(whoLine(t,me))}</span></span></button>${qTag(t,form)}</div>`;}).join('')}</div></div>`;
+}
 function tasksInner(){
+  if(!view.recordId&&rdraft)return heldInner(formById(rdraft.formId));
   const rec=view.recordId?recById(view.recordId):null;
   const form=rec?formById(rec.formId):null;
   const noun=form?itemName(form).toLowerCase():'record';
@@ -740,13 +755,13 @@ function tasksInner(){
   const tick=t=>{const busy=tw.busy.has(t.id);return `<button class="tcheck${t.done?' on':''}" data-act="task-done" data-id="${esc(t.id)}" aria-pressed="${!!t.done}" aria-label="${t.done?'Reopen':'Mark done'}: ${esc(t.title)}"${busy?' disabled':''}>✓</button>`;};
   const tdCell=(c,x)=>`<td class="${[c.num?'num':'',x.tone?'tt-'+x.tone:'',x.long?'lv-long':''].filter(Boolean).join(' ')}"${x.long&&x.text?` title="${esc(x.text)}"`:''}>${esc(x.text)}</td>`;
   const table=`<div class="sub-box"><div class="tblwrap"><table class="tbl lv-tbl sub-tbl tt-tbl"><thead><tr><th class="tt-ck"><span class="sr">Done</span></th>${subHead(k,{key:'title',label:'Task'},sort)}${cols.map(c=>subHead(k,c,sort)).join('')}</tr></thead>
-    <tbody>${lim.rows.map(r=>`<tr class="${r.t.done?'done':''}" data-act="task-open" data-id="${esc(r.t.id)}"><td class="tt-ck">${tick(r.t)}</td><td class="title" title="${esc(r.title.text)}">${esc(r.title.text)}</td>${cols.map((c,i)=>tdCell(c,r.cells[i])).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+    <tbody>${lim.rows.map(r=>`<tr class="${r.t.done?'done':''}" data-act="task-open" data-id="${esc(r.t.id)}"><td class="tt-ck">${tick(r.t)}</td><td class="title" title="${esc(r.title.text)}">${esc(r.title.text)}${qTag(r.t,form)}</td>${cols.map((c,i)=>tdCell(c,r.cells[i])).join('')}</tr>`).join('')}</tbody></table></div></div>`;
   const cards=`<div class="sub-cards tlist">${lim.rows.map(({t})=>{
     const due=t.done?{text:'Done',tone:'ok'}:dueInfo(t.due,today);
     const rep=repeats(t);
     const meta=[`<span class="tdue ${due.tone}">${esc(due.text)}</span>`,whoLine(t,me),rep?repeatLabel(t):''].filter(Boolean);
     return `<div class="trow${t.done?' done':''}">${tick(t)}
-      <button class="tmain" data-act="task-open" data-id="${esc(t.id)}"><b>${esc(t.title||'Untitled task')}</b><span class="tmeta">${meta.map(x=>x.startsWith('<')?x:`<span>${esc(x)}</span>`).join('')}</span></button>
+      <button class="tmain" data-act="task-open" data-id="${esc(t.id)}"><b>${esc(t.title||'Untitled task')}</b><span class="tmeta">${meta.map(x=>x.startsWith('<')?x:`<span>${esc(x)}</span>`).join('')}</span></button>${qTag(t,form)}
     </div>`;}).join('')}</div>`;
   return head+`<div class="panel subsec">${bar}${table}${cards}${moreLine(k,lim.rows.length,found.length,found.length===1?'task':'tasks')}</div>`;
 }
@@ -811,7 +826,7 @@ function viewRecord(form){
   const sec={}; // the sections under the fields, by child form id (or 'tasks'), shown in the form's chosen order
   grels.forEach(({rel,cf})=>{sec[cf.id]=gridSection(form,rel,cf,rdraft,ro||reading);});
   if(rec)children.forEach(({cf})=>{sec[cf.id]=childSection(form,cf,rec,ro);});
-  if(rec)sec[TASKS_KEY]=`<section class="section" id="rec-tasks">${tasksInner()}</section>`;
+  if(rec||rdraft._heldTasks?.length)sec[TASKS_KEY]=`<section class="section" id="rec-tasks">${tasksInner()}</section>`; // a new record: the tasks added to it so far
   // Comments sit right under Tasks (or at the end when Tasks isn't shown)
   if(rec)sec[TASKS_KEY]=(sec[TASKS_KEY]||'')+`<div id="rec-comments" class="rec-comments-sec">${cmt.html()}</div>`;
   const sectionsHTML=sectionOrder(form).map(k=>sec[k]||'').join(''); // Tasks among them, full width, in the form's order
@@ -2084,24 +2099,40 @@ async function saveRecord(o={}){
   try{if(rowsOut.length||removed.length)await saveRecordBundle(rec,rowsOut,removed);else await store.put('records',rec);}
   catch(e){console.error(e);if(!old)d.recordId=null;toast(e?.code==='permission-denied'?'You don’t have permission to save this record or one of its rows.':'Saving failed. Check your connection and try again.');return;}
   if(rowsOut.length||removed.length){const n=rowsOut.length+removed.length;setTimeout(()=>toast(`Saved with ${n} row change${n>1?'s':''}`),0);}
+  if(!old&&d._heldTasks?.length){const held=d._heldTasks;d._heldTasks=[]; // tasks added before the first save: to Cadence, linked to it now
+    tm.writeHeld(held,rec,form).then(bad=>{if(bad)toast(`Saved, but ${bad} of its ${held.length} task${held.length>1?'s':''} couldn’t be added to Cadence. Add ${bad>1?'them':'it'} again from the record.`,{duration:9000});else toast(held.length>1?`${held.length} tasks added to Cadence`:'Task added to Cadence');});}
   const keep=o.stay?d.mode:null;d.dirty=false;d.errors={};d.recordId=id;d.copied=0;d.mode='read';if(keep)d.mode=keep; // “+ Add a task” saves a new record and carries on filling it in
   const wasNew=!view.recordId;view.recordId=id;if(wasNew)syncHash(false);toast('Saved');render();
   askChildRules(form,{...(old||{}),...rec,nums:old?.nums});
   return true;
 }
 /** The open record's Cadence tasks, when they're loaded: null if not saved yet, still loading, or tasks are off. */
-function recTasks(d){return d&&d===rdraft&&d.recordId&&tw.recordId===d.recordId&&tw.status==='ready'?tw.tasks:null;}
+function recTasks(d){if(d&&d===rdraft&&!d.recordId)return d._heldTasks||[];return d&&d===rdraft&&d.recordId&&tw.recordId===d.recordId&&tw.status==='ready'?tw.tasks:null;}
 function clTaskState(scope){
   if(scope!=='record')return{off:scope};
-  const d=rdraft;if(!d?.recordId)return d?.readOnly?{off:'ro'}:{unsaved:true};
+  const d=rdraft;if(!d?.recordId)return d?.readOnly?{off:'ro'}:{tasks:(d._heldTasks||[]).map(t=>({...t,_held:true})),held:true};
   if(tw.recordId!==d.recordId||tw.status==='loading')return{loading:true};
   return tw.status==='ready'?{tasks:tw.tasks}:{off:'error'};
 }
-/** “+ Add a task” on a failed checklist answer: a record that isn’t saved yet is saved first (tasks link to a saved record). */
-async function clAddTask(pre){
+/** “+ Add a task” on a failed checklist answer. A record that isn’t saved yet keeps its tasks until it is
+ *  (row by row: nothing is checked or saved to add one); they go to Cadence with the record. */
+function clAddTask(pre){
   const d=rdraft;if(!d)return;
-  if(!d.recordId){if(!(await saveRecord({stay:true}))||!d.recordId)return;}
-  tm.open(d.recordId,null,{prefill:{title:pre.title,notes:pre.notes},checklistItem:pre.key,from:pre.from});
+  if(d.recordId){tm.open(d.recordId,null,{prefill:{title:pre.title,notes:pre.notes},checklistItem:pre.key,from:pre.from});return;}
+  tm.open(null,null,{prefill:{title:pre.title,notes:pre.notes},checklistItem:pre.key,from:pre.from,hold:t=>holdTask(d,t)});
+}
+function holdTask(d,t){d._heldTasks=[...(d._heldTasks||[]).filter(x=>x.id!==t.id),t];markDirty(d);afterHeld(d);}
+function afterHeld(d){if(d!==rdraft)return;if(d._heldTasks?.length&&$('#rec-tasks'))paintTasks();else renderMain();clPaintTasks();}
+function openHeld(id){
+  const d=rdraft,t=d?._heldTasks?.find(x=>x.id===id);if(!t)return;
+  const it=clItemOf(formById(d.formId),d.values,t.checklistItem);
+  tm.open(null,null,{held:t,checklistItem:t.checklistItem,from:it?it.label:'',hold:x=>holdTask(d,x),unhold:()=>{d._heldTasks=d._heldTasks.filter(x=>x.id!==id);afterHeld(d);}});
+}
+function clGoto(key){
+  const [fid,item]=String(key).split(':');
+  const el=document.getElementById(`clq-record-${fid}-${item}`);
+  if(!el){toast('That question isn’t showing on this record.');return;}
+  el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');
 }
 /* ---------- A parent changed: children whose rules look at it ----------
    After a save, child records (separate records, not grid rows: those are saved with the parent)
@@ -2768,6 +2799,8 @@ document.addEventListener('click',async e=>{
     case 'cell-close':{const back=cdraft&&`[data-act="grid-cell"][data-row="${cdraft._row.id}"][data-fid="${cdraft._fid}"]`;cdraft=null;renderMain();if(back)document.querySelector(back)?.focus();break;}
     case 'task-done':toggleTask(id);break;
     case 'task-open':if(view.recordId)tm.open(view.recordId,id);break;
+    case 'held-open':openHeld(id);break;
+    case 'cl-goto':clGoto(el.dataset.k);break;
     case 'add-task':if(view.recordId){if(!rdraft?.recordId){toast('Save this record first, then add tasks to it.');break;}tm.open(view.recordId);}break;
     case 'export-pdf':exportPdf();break;
     case 'email-pdf':openMail();break;
@@ -3190,7 +3223,7 @@ document.addEventListener('pointercancel',endFmDrag);
 export function startApp(){
   booted=false;pendingRoute=null;view={name:'loading'};hist=[];rdraft=fdraft=pdraft=null;
   initReports({fmt,valOf,recTitle,go,renderMain,openLink,linkEnv,starterForms:()=>sidebarForms(),openRecord:(id)=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
-  initChecklistUI({draftFor,markDirty,repaint,formOf:formOfDraft,upload:uploadFile,dateText:d=>fmt({type:'date'},d),toast,taskState:clTaskState,addTask:clAddTask,openTask:id=>{if(rdraft?.recordId)tm.open(rdraft.recordId,id);}});
+  initChecklistUI({draftFor,markDirty,repaint,formOf:formOfDraft,upload:uploadFile,dateText:d=>fmt({type:'date'},d),toast,taskState:clTaskState,addTask:clAddTask,openTask:id=>{if(rdraft?.recordId)tm.open(rdraft.recordId,id);else openHeld(id);}});
   initLists({ruleImpact,applyRuleChange,fmt,valOf,recTitle,titleFieldOf,parentsOf,formById,recById,recordsOf,renderMain,withFormulas,search:()=>ui.search,
     canWork:r=>canWork(r,{...store.me,uid:store.user?.uid}),stageMove:boardStageMove,cardExtra:boardCardExtra,colorOf,today:()=>dayKeyOf(Date.now()),dayOf:t=>dayKeyOf(t),weekStart:()=>getCalendar().weekStart});
   initAudit({fmt,formById,recById,recTitle:(r,f)=>recTitle(r,f),go,renderMain});
