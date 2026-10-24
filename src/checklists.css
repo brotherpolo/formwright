@@ -417,3 +417,19 @@
   .cl-pqr{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'t t' 'c a'}
   .cl-pqr .cl-pqt{grid-area:t}.cl-pqr>span:nth-child(2){grid-area:c}.cl-pqr .cl-chip{grid-area:a}
 }
+
+/* Tasks on a failed answer (Cadence) */
+.cl-tasks{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.cl-tasks:empty{display:none}
+.cl-tks{display:flex;flex-direction:column;gap:5px;align-self:stretch}
+.cl-tk{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font:inherit;font-size:13px;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 9px;cursor:pointer}
+.cl-tk:hover{border-color:var(--accent)}
+.cl-tk:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.cl-tkc{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid var(--line)}
+.cl-tk.done .cl-tkc{background:var(--cl-pass);border-color:var(--cl-pass)}
+.cl-tk.done .cl-tkt{text-decoration:line-through;color:var(--muted)}
+.cl-tkt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-tk small{margin-left:auto;color:var(--muted);white-space:nowrap;padding-left:6px}
+.cl-tadd{border-style:dashed}
+.cl-tnote{margin:0}
+.cl-fhelp{margin:6px 0 0;font-size:12px}

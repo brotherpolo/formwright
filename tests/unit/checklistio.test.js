@@ -39,7 +39,7 @@ test('export, then import: the same checklist comes back as an update, answer se
   assert.deepEqual(c.items.map((x) => x.kind === 'section' ? '§' + x.label : x.label), ['§Access', 'Walkways clear', 'Expiry date']);
   const [, i1, i2] = c.items;
   assert.equal(i1.id, 'i1', 'items keep their ids when the question matches');
-  assert.deepEqual(i1.onFail, { comment: 'req', photo: 'ask' });
+  assert.deepEqual(i1.onFail, { comment: 'req', photo: 'ask', task: '' });
   assert.deepEqual(i2.showIf, { item: 'i1', any: ['f'] });
 });
 

@@ -96,3 +96,10 @@ test('roles: a task given to a role, its credit, and passing it on', async () =>
   assert.deepEqual([p.assigneeId, p.assigneeRole, p.assigneeRoleName, p.members], ['bo', null, null, ['amy', 'bo']]);
   assert.ok(!('doneByName' in T.nextOccurrence({ ...t, doneByName: 'x', repeat: 'daily', due: '2026-10-17' }, 'n', 1, '2026-10-17')));
 });
+
+test('a task added from a failed checklist answer keeps which item it came from', () => {
+  const t = newTaskDoc('t9', { title: 'Fix: Exits clear' }, me, null, { ...link, checklistItem: 'f_walk:q1' }, lists, 5);
+  assert.equal(t.checklistItem, 'f_walk:q1');
+  assert.equal('checklistItem' in newTaskDoc('t8', { title: 'x' }, me, null, link, lists, 5), false, 'not on other tasks');
+  assert.equal('checklistItem' in newTaskDoc('t7', { title: 'x' }, me, null, { checklistItem: 'a:b' }, lists, 5), false, 'only with a record');
+});

@@ -8,7 +8,7 @@
 //   checklists/{id}     { name, typeId, passAt: number | null, items: [Item], ver, snap, … }
 //     Item  { id, kind: 'section', label }
 //           { id, kind: 'item', label, help, set, required, critical,
-//             onFail: { comment: '' | 'ask' | 'req', photo: '' | 'ask' | 'req' },
+//             onFail: { comment, photo, task: '' | 'ask' | 'req' },  (task: 'ask' offers + Add a task, 'req' needs one)
 //             showIf: { item, any: [option ids] } | null }
 //           set: an answer set id, or 'text' | 'date' | 'decimal' | 'percent'
 //     ver   the version number; saving makes the next one
@@ -85,7 +85,7 @@ export function cleanItems(items) {
     if (x.kind === 'section') return { id, kind: 'section', label: str(x.label, 120) };
     const set = str(x.set, 40);
     const showIf = x.showIf && typeof x.showIf === 'object' && str(x.showIf.item, 40) ? { item: str(x.showIf.item, 40), any: (Array.isArray(x.showIf.any) ? x.showIf.any : []).map((v) => str(v, 40)).filter(Boolean).slice(0, MAX_OPTIONS) } : null;
-    return { id, kind: 'item', label: str(x.label, 300), help: str(x.help, 300), set, required: !!x.required, critical: !!x.critical, onFail: { comment: mode(x.onFail?.comment), photo: mode(x.onFail?.photo) }, showIf };
+    return { id, kind: 'item', label: str(x.label, 300), help: str(x.help, 300), set, required: !!x.required, critical: !!x.critical, onFail: { comment: mode(x.onFail?.comment), photo: mode(x.onFail?.photo), task: mode(x.onFail?.task) }, showIf };
   }).filter(Boolean);
   return out;
 }
@@ -182,7 +182,8 @@ export function summarize(snap, value) {
 const round = (n) => Math.round(n * 100) / 100;
 
 /** What still needs filling in, by item id: "Answer this", "Add a comment", "Add a photo". */
-export function missing(snap, value) {
+/** tasksFor(itemId) → how many tasks it has (null: don't check tasks, like the first save of a new record). */
+export function missing(snap, value, tasksFor = null) {
   const a = value?.a || {}, n = value?.n || {}, p = value?.p || {}, vis = visibleItems(snap, a), out = {};
   itemsOf(snap).forEach((x) => {
     if (!vis.has(x.id)) return;
@@ -191,9 +192,9 @@ export function missing(snap, value) {
     if (x.type === 'percent' && (num(v) < 0 || num(v) > 100)) { out[x.id] = 'A percent from 0 to 100.'; return; }
     if (!isFail(x, v)) return;
     const needC = x.onFail?.comment === 'req' && !str(n[x.id], MAX_TEXT), needP = x.onFail?.photo === 'req' && !(Array.isArray(p[x.id]) && p[x.id].length);
-    if (needC && needP) out[x.id] = 'Add a comment and a photo.';
-    else if (needC) out[x.id] = 'Add a comment.';
-    else if (needP) out[x.id] = 'Add a photo.';
+    const needT = x.onFail?.task === 'req' && tasksFor && !tasksFor(x.id);
+    const what = [needC ? 'a comment' : '', needP ? 'a photo' : '', needT ? 'a task' : ''].filter(Boolean);
+    if (what.length) out[x.id] = `Add ${what.length > 1 ? what.slice(0, -1).join(', ') + ' and ' + what[what.length - 1] : what[0]}.`;
   });
   return out;
 }

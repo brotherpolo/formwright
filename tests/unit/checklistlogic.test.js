@@ -139,3 +139,13 @@ test('answer set colours and how good each answer is', () => {
   assert.deepEqual(opts.map((o) => scoreBand(o, opts)), ['f', 1, 2, 4, 'n']);
   assert.equal(scoreBand({ score: 1 }, [{ score: 1 }]), 4, 'all the same: best');
 });
+
+test('a task on a fail: offered, or needed before saving', () => {
+  const s2 = snapshotOf({ name: 'T', items: [{ id: 'i1', kind: 'item', label: 'Q', set: 'as_pfn', onFail: { task: 'req', comment: 'req' } }, { id: 'i2', kind: 'item', label: 'R', set: 'as_pfn', onFail: { task: 'ask' } }] }, sets, 1);
+  assert.equal(s2.items[0].onFail.task, 'req');
+  const v = { a: { i1: FAIL, i2: FAIL } };
+  assert.equal(missing(s2, v, () => 0).i1, 'Add a comment and a task.');
+  assert.equal(missing(s2, v, () => 0).i2, undefined, 'offered only: not needed');
+  assert.equal(missing(s2, { ...v, n: { i1: 'x' } }, (id) => (id === 'i1' ? 1 : 0)).i1, undefined, 'one task is enough');
+  assert.equal(missing(s2, { ...v, n: { i1: 'x' } }, null).i1, undefined, 'tasks not checked (the first save of a new record)');
+});

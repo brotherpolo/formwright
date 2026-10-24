@@ -8,7 +8,7 @@ const pool = [{ id: 'q1', label: 'Fire extinguishers in date', help: 'Check the 
 const cls = [{ id: 'c1', items: [it('q1', 'Fire extinguishers in date'), it('q2', 'Exits clear', 'yn')] }, { id: 'c2', items: [it('q1', 'Fire extinguishers in date')] }];
 
 test('questions', () => {
-  assert.deepEqual(cleanQuestion({ label: ' Q ', set: 'text', onFail: { comment: 'x' }, catId: 'c' }), { label: 'Q', help: '', set: 'text', onFail: { comment: '', photo: '' }, catId: 'c' });
+  assert.deepEqual(cleanQuestion({ label: ' Q ', set: 'text', onFail: { comment: 'x' }, catId: 'c' }), { label: 'Q', help: '', set: 'text', onFail: { comment: '', photo: '', task: '' }, catId: 'c' });
   assert.deepEqual(questionIssues({ label: '', set: 'gone' }, new Map()), ['Write the question.', 'Its answer set was deleted. Pick another.']);
   assert.equal(changesMeaning({ label: 'Exits clear', set: 'yn' }, { label: 'exits  clear!', set: 'yn' }), false, 'case and punctuation aren’t a new meaning');
   assert.equal(changesMeaning({ label: 'Exits clear', set: 'yn' }, { label: 'Exits clear', set: 'as1' }), true, 'other answers are');

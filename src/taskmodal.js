@@ -78,7 +78,7 @@ export async function open(recordId, taskId = null, opts = {}) {
     title: task.title || '', notes: task.notes || '', due: task.due || '', time: task.time || '', repeat: task.repeat || 'none',
     typeId: task.typeId || '', levelId: task.levelId || '', nodeId: task.nodeId || '', who: task.assigneeRole ? 'role:' + task.assigneeRole : task.assigneeId || task.ownerId,
     subtasks: (task.subtasks || []).map((s) => (typeof s === 'string' ? { id: uid('s'), title: s, done: false } : { id: s.id || uid('s'), title: s.title || s.text || '', done: !!s.done })),
-  } : { title: '', notes: '', due: '', time: '', repeat: 'none', typeId: M.lists.defType || '', levelId: M.lists.defLevel || '', nodeId: '', who: H.store.user.uid, subtasks: [] };
+  } : { title: String(opts.prefill?.title || '').slice(0, 500), notes: String(opts.prefill?.notes || '').slice(0, 20000), due: '', time: '', repeat: 'none', typeId: M.lists.defType || '', levelId: M.lists.defLevel || '', nodeId: '', who: H.store.user.uid, subtasks: [] };
   M.startWho = M.draft.who;
   M.loading = false;
   paint();
@@ -117,7 +117,7 @@ function paint() {
   const holderNm = t ? holderName(t) : '';
   const doneBy = t && t.done && t.doneByName ? `<p class="help tk-doneby">Done by <b>${esc(t.doneByName)}</b>.</p>` : '';
   const from = (M.view ? `<p class="help tk-from">${esc(t.ownerName || t.ownerEmail || 'Someone')}’s task${t.assigneeId || t.assigneeRole ? `, with ${esc(holderNm)}` : ''}. Only they can change it${M.opts.reassign ? '; you can reassign it' : ''}.</p>`
-    : !own && t ? `<p class="help tk-from">From ${esc(t.ownerName || t.ownerEmail || 'someone')}${M.viaRole ? ` to <b>${esc(t.assigneeRoleName || 'your role')}</b> (your role): anyone in it can do it, and whoever ticks it off first is credited` : ''}. You can change the notes, date and checklist${M.passOn ? ', and pass it on to someone else' : ''}; the rest is theirs.</p>` : '') + doneBy;
+    : !own && t ? `<p class="help tk-from">From ${esc(t.ownerName || t.ownerEmail || 'someone')}${M.viaRole ? ` to <b>${esc(t.assigneeRoleName || 'your role')}</b> (your role): anyone in it can do it, and whoever ticks it off first is credited` : ''}. You can change the notes, date and checklist${M.passOn ? ', and pass it on to someone else' : ''}; the rest is theirs.</p>` : !t && M.opts.from ? `<p class="help tk-from">From ${esc(M.opts.from)}</p>` : '') + doneBy;
   const levels = M.lists.levels || [];
   const node = (M.nodes || []).find((n) => n.id === d.nodeId);
   const q = M.nodeQ.trim().toLowerCase();
@@ -202,7 +202,7 @@ async function save() {
     const now = Date.now();
     if (!M.task) {
       const rec = H.recById(M.recordId), form = rec ? H.formById(rec.formId) : null;
-      const link = rec && form ? { recordId: rec.id, formId: form.id, recordSnap: { title: String(H.recTitle(rec, form)).slice(0, 500), form: String(form.name || 'Untitled form').slice(0, 200), color: colorOf(form) } } : null;
+      const link = rec && form ? { recordId: rec.id, formId: form.id, recordSnap: { title: String(H.recTitle(rec, form)).slice(0, 500), form: String(form.name || 'Untitled form').slice(0, 200), color: colorOf(form) }, checklistItem: M.opts.checklistItem || null } : null;
       const t = newTaskDoc(uid('t'), d, mine, who && !who.me ? who : null, link, M.lists, now);
       try { await writeTasks([t]); }
       catch (e) {

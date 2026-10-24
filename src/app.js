@@ -31,7 +31,7 @@ import { storeKey as subStoreKey, readSubs, prefsOf, setPrefs, colsFor, toggleCo
 import { colsTool, showMenu, sortMenu, toolBar, moreLine, headCell as subHead } from './subui.js';
 import { headingOf, readFolds, isFolded, setFold, setFolds, foldKeys } from './foldlogic.js';
 import { asFiles, filesText, fileNames, fileLines, fileKind, sizeText as fileSize } from './filelist.js';
-import { initChecklistUI, blockHTML as clBlock, finalizeValues as clFinalize, checkField as clCheck, uploading as clUploading, summaryText as clSummary } from './checklistui.js';
+import { initChecklistUI, paintTaskLists as clPaintTasks, blockHTML as clBlock, finalizeValues as clFinalize, checkField as clCheck, uploading as clUploading, summaryText as clSummary } from './checklistui.js';
 import { sectionOrder, moveSection, TASKS as TASKS_KEY } from './sectionlogic.js';
 import { searchForms, allSearchable, designerMatch, pushRecent, sidebarFormList } from './navlogic.js';
 import * as palette from './palette.js';
@@ -700,8 +700,8 @@ function syncTaskWatch(){
   if(tw.unsub){tw.unsub();tw.unsub=null;}
   Object.assign(tw,{recordId:want,tasks:[],status:want?'loading':'off',error:null});
   if(!want)return;
-  tw.unsub=watchTasks(want,(list)=>{tw.tasks=list;tw.status='ready';paintTasks();},(err)=>{
-    console.error('[formwright] tasks',err);tw.status='error';tw.error=err?.code||'unknown';paintTasks();
+  tw.unsub=watchTasks(want,(list)=>{tw.tasks=list;tw.status='ready';paintTasks();clPaintTasks();},(err)=>{
+    console.error('[formwright] tasks',err);tw.status='error';tw.error=err?.code||'unknown';paintTasks();clPaintTasks();
   });
 }
 function paintTasks(){
@@ -2025,12 +2025,12 @@ function initSig(c){
   c.onpointermove=e=>{if(!drawing)return;const p=pt(e);ctx.beginPath();ctx.moveTo(...last);ctx.lineTo(...p);ctx.stroke();last=p;moved=true;};
   c.onpointerup=c.onpointercancel=()=>{if(!drawing)return;drawing=false;if(moved){d.values[fid]=c.toDataURL('image/png');markDirty(d);const s=c.parentElement.querySelector('.sigbar span');if(s)s.textContent='Signed';}};
 }
-function validate(form,vals,st){
+function validate(form,vals,st,opt={}){
   const errs={};st=st||NO_RULES;
   (form.fields||[]).forEach(f=>{
     if(isLayout(f)||f.type==='formula'||f.type==='autonumber'||f.type==='lookup'||f.type==='rollup'||isReadOnly(f))return;const v=vals[f.id];
     if(st.blank.has(f.id)||st.hiddenFields.has(f.id)||st.view?.has(f.id))return; // hidden, cleared or view only: nothing to check
-    if(f.type==='checklist'){const m=clCheck(f,v);if(m)errs[f.id]=m;else if(st.required(f)&&(!v||!v.a||!Object.keys(v.a).length))errs[f.id]='Answer at least one item.';return;}
+    if(f.type==='checklist'){const m=clCheck(f,v,opt.tasks?id=>opt.tasks(f.id,id):null);if(m)errs[f.id]=m;else if(st.required(f)&&(!v||!v.a||!Object.keys(v.a).length))errs[f.id]='Answer at least one item.';return;}
     if(st.required(f)&&(f.type==='checkbox'?!v:isEmpty(v))){errs[f.id]=f.type==='checkbox'?'This must be switched on.':f.type==='attachments'?'Add at least one file.':'This field is required.';return;}
     if(isEmpty(v))return;
     if(f.type==='email'&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))errs[f.id]='Enter an email like name@example.com.';
@@ -2046,10 +2046,12 @@ function validate(form,vals,st){
   });
   return errs;
 }
-async function saveRecord(){
+async function saveRecord(o={}){
   const d=rdraft,form=formById(d.formId);if(d.readOnly){toast('This record is read only for you.');return;}
   if(Object.values(d._attUp||{}).some(a=>a.length)||clUploading(d)){toast('Files are still uploading. Save when they’ve finished.');return;}
-  const rs=draftRules(d);const errs=validate(form,d.values,rs);
+  // a checklist item that needs a task: checked once the record exists (its first save is how tasks can be added)
+  const tks=recTasks(d);
+  const rs=draftRules(d);const errs=validate(form,d.values,rs,{tasks:tks?(fid,id)=>tks.some(t=>t.checklistItem===`${fid}:${id}`):null});
   if(Object.keys(errs).length){d.errors=errs;renderMain();toast('Fix the highlighted fields, then save.');document.querySelector('.fld.bad')?.scrollIntoView({block:'center',behavior:'smooth'});return;}
   // sub-form rows: check, then work out their calculations
   const grels=gridRels(form);let rowErr=0;
@@ -2082,8 +2084,24 @@ async function saveRecord(){
   try{if(rowsOut.length||removed.length)await saveRecordBundle(rec,rowsOut,removed);else await store.put('records',rec);}
   catch(e){console.error(e);if(!old)d.recordId=null;toast(e?.code==='permission-denied'?'You don’t have permission to save this record or one of its rows.':'Saving failed. Check your connection and try again.');return;}
   if(rowsOut.length||removed.length){const n=rowsOut.length+removed.length;setTimeout(()=>toast(`Saved with ${n} row change${n>1?'s':''}`),0);}
-  d.dirty=false;d.errors={};d.recordId=id;d.copied=0;d.mode='read';const wasNew=!view.recordId;view.recordId=id;if(wasNew)syncHash(false);toast('Saved');render();
+  const keep=o.stay?d.mode:null;d.dirty=false;d.errors={};d.recordId=id;d.copied=0;d.mode='read';if(keep)d.mode=keep; // “+ Add a task” saves a new record and carries on filling it in
+  const wasNew=!view.recordId;view.recordId=id;if(wasNew)syncHash(false);toast('Saved');render();
   askChildRules(form,{...(old||{}),...rec,nums:old?.nums});
+  return true;
+}
+/** The open record's Cadence tasks, when they're loaded: null if not saved yet, still loading, or tasks are off. */
+function recTasks(d){return d&&d===rdraft&&d.recordId&&tw.recordId===d.recordId&&tw.status==='ready'?tw.tasks:null;}
+function clTaskState(scope){
+  if(scope!=='record')return{off:scope};
+  const d=rdraft;if(!d?.recordId)return d?.readOnly?{off:'ro'}:{unsaved:true};
+  if(tw.recordId!==d.recordId||tw.status==='loading')return{loading:true};
+  return tw.status==='ready'?{tasks:tw.tasks}:{off:'error'};
+}
+/** “+ Add a task” on a failed checklist answer: a record that isn’t saved yet is saved first (tasks link to a saved record). */
+async function clAddTask(pre){
+  const d=rdraft;if(!d)return;
+  if(!d.recordId){if(!(await saveRecord({stay:true}))||!d.recordId)return;}
+  tm.open(d.recordId,null,{prefill:{title:pre.title,notes:pre.notes},checklistItem:pre.key,from:pre.from});
 }
 /* ---------- A parent changed: children whose rules look at it ----------
    After a save, child records (separate records, not grid rows: those are saved with the parent)
@@ -3172,7 +3190,7 @@ document.addEventListener('pointercancel',endFmDrag);
 export function startApp(){
   booted=false;pendingRoute=null;view={name:'loading'};hist=[];rdraft=fdraft=pdraft=null;
   initReports({fmt,valOf,recTitle,go,renderMain,openLink,linkEnv,starterForms:()=>sidebarForms(),openRecord:(id)=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
-  initChecklistUI({draftFor,markDirty,repaint,formOf:formOfDraft,upload:uploadFile,dateText:d=>fmt({type:'date'},d),toast});
+  initChecklistUI({draftFor,markDirty,repaint,formOf:formOfDraft,upload:uploadFile,dateText:d=>fmt({type:'date'},d),toast,taskState:clTaskState,addTask:clAddTask,openTask:id=>{if(rdraft?.recordId)tm.open(rdraft.recordId,id);}});
   initLists({ruleImpact,applyRuleChange,fmt,valOf,recTitle,titleFieldOf,parentsOf,formById,recById,recordsOf,renderMain,withFormulas,search:()=>ui.search,
     canWork:r=>canWork(r,{...store.me,uid:store.user?.uid}),stageMove:boardStageMove,cardExtra:boardCardExtra,colorOf,today:()=>dayKeyOf(Date.now()),dayOf:t=>dayKeyOf(t),weekStart:()=>getCalendar().weekStart});
   initAudit({fmt,formById,recById,recTitle:(r,f)=>recTitle(r,f),go,renderMain});

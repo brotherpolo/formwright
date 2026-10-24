@@ -5,9 +5,12 @@
 import './checklists.css';
 import { store, checklistVersion } from './store.js';
 import { esc } from './ui.js';
+import { holderName } from './tasks.js';
 import { visibleItems, summarize, missing, isFail, answered, answerText, rowsOf, cleanValue, isBlankValue, maxOf } from './checklistlogic.js';
 
-let H = { draftFor: () => null, markDirty: () => {}, repaint: () => {}, formOf: () => null, upload: null, dateText: (d) => d, toast: () => {} };
+let H = { draftFor: () => null, markDirty: () => {}, repaint: () => {}, formOf: () => null, upload: null, dateText: (d) => d, toast: () => {},
+  // Cadence tasks on the open record: { tasks } | { unsaved } | { loading } | { off }
+  taskState: () => ({ off: true }), addTask: () => {}, openTask: () => {} };
 export function initChecklistUI(h) { H = { ...H, ...h }; }
 
 const PHOTO_MAX = 25 * 1024 * 1024;
@@ -39,11 +42,18 @@ export function finalizeValues(form, values) {
   return values;
 }
 /** What's missing in a Checklist field: '' or "3 items need attention". */
-export function checkField(f, v) {
+export function checkField(f, v, tasksFor = null) {
   const r = snapFor(f, v);
   if (!r.snap) return '';
-  const m = missing(r.snap, v || {}), n = Object.keys(m).length;
+  const m = missing(r.snap, v || {}, tasksFor), n = Object.keys(m).length;
   return n ? `${n} item${n === 1 ? ' needs' : 's need'} attention.` : '';
+}
+
+/** Has this checklist item a task yet? null when tasks can't be checked here (not saved yet, a grid row, not loaded). */
+export const taskKey = (fid, itemId) => `${fid}:${itemId}`;
+function tasksFn(scope, fid) {
+  const ts = H.taskState(scope);
+  return ts.tasks ? (id) => ts.tasks.some((t) => t.checklistItem === taskKey(fid, id)) : null;
 }
 
 const fmtN = (n) => (Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toString());
@@ -64,6 +74,22 @@ const photoTile = (x, i, at, edit) => {
   return `<span class="cl-ph">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener" title="${label}">${img}</a>` : img}${edit ? `<button type="button" class="cl-phx" data-clr="photo-del" ${at} data-n="${i}" aria-label="Remove ${label}">✕</button>` : ''}</span>`;
 };
 
+function taskRows(x, scope, fid, edit) {
+  const ts = H.taskState(scope);
+  if (ts.off === 'cell') return '<p class="help cl-tnote">Tasks: open this row on its own to add one.</p>';
+  const list = (ts.tasks || []).filter((t) => t.checklistItem === taskKey(fid, x.id));
+  const at = `data-scope="${scope}" data-clf="${esc(fid)}" data-item="${esc(x.id)}"`;
+  const rows = list.map((t) => {
+    const who = holderName(t) || '';
+    const when = t.done ? 'done' : t.due ? `due ${H.dateText(t.due)}` : '';
+    return `<button type="button" class="cl-tk${t.done ? ' done' : ''}" data-clr="task-open" ${at} data-t="${esc(t.id)}"><span class="cl-tkc" aria-hidden="true"></span><span class="cl-tkt">${esc(t.title)}</span><small>${esc([who, when].filter(Boolean).join(' · '))}</small></button>`;
+  }).join('');
+  const can = !ts.off && !(ts.unsaved && !edit);
+  const btn = can ? `<button type="button" class="btn sm cl-tadd" data-clr="task-add" ${at}${ts.loading || scope === 'preview' ? ' disabled' : ''}>＋ Add a task${x.onFail.task === 'req' && edit && !list.length ? ' (required)' : ''}</button>` : '';
+  return rows || btn ? `${rows ? `<div class="cl-tks">${rows}</div>` : ''}${btn}` : '';
+}
+const tasksBox = (x, scope, fid, edit) => `<div class="cl-tasks" id="cltk-${scope}-${esc(fid)}-${esc(x.id)}" data-scope="${scope}" data-clf="${esc(fid)}" data-item="${esc(x.id)}">${taskRows(x, scope, fid, edit)}</div>`;
+
 function itemHTML(x, v, scope, fid, errs, edit, upNames) {
   const a = v?.a || {}, ans = a[x.id], at = `data-scope="${scope}" data-clf="${esc(fid)}" data-item="${esc(x.id)}"`;
   const fail = isFail(x, ans), err = errs && errs[x.id];
@@ -75,12 +101,15 @@ function itemHTML(x, v, scope, fid, errs, edit, upNames) {
   else if (x.type === 'decimal' || x.type === 'percent') ctl = `<span class="cl-numw"><input class="in cl-in cl-nin" type="number" step="any" inputmode="decimal" id="${id}" data-clr="val" ${at} value="${esc(ans ?? '')}"${x.type === 'percent' ? ' min="0" max="100"' : ''}>${x.type === 'percent' ? '%' : ''}</span>`;
   else ctl = `<input class="in cl-in" type="text" id="${id}" data-clr="val" ${at} value="${esc(ans || '')}" maxlength="500">`;
   let extra = '';
-  if (fail && (x.onFail?.comment || x.onFail?.photo)) {
+  if (fail && (x.onFail?.comment || x.onFail?.photo || x.onFail?.task)) {
     const note = v?.n?.[x.id] || '', ph = Array.isArray(v?.p?.[x.id]) ? v.p[x.id] : [];
     if (edit) {
       extra = `<div class="cl-fail">${x.onFail.comment ? `<textarea class="in cl-note" rows="2" data-clr="note" ${at} maxlength="500" placeholder="What’s wrong?${x.onFail.comment === 'req' ? ' (required)' : ''}" aria-label="Comment on ${esc(x.label)}">${esc(note)}</textarea>` : ''}
-        ${x.onFail.photo ? `<div class="cl-phs">${ph.map((p, i) => photoTile(p, i, at, true)).join('')}${(upNames || []).map((n) => `<span class="cl-ph up" title="${esc(n)}"><span class="cl-ph0">…</span></span>`).join('')}${ph.length < 10 ? `<label class="btn sm cl-addph">+ Photo${x.onFail.photo === 'req' ? ' (required)' : ''}<input type="file" accept="image/*" capture="environment" data-clr="photo" ${at} hidden></label>` : ''}</div>` : ''}</div>`;
-    } else if (note || ph.length) extra = `<div class="cl-fail">${note ? `<p class="cl-notev">${esc(note)}</p>` : ''}${ph.length ? `<div class="cl-phs">${ph.map((p, i) => photoTile(p, i, at, false)).join('')}</div>` : ''}</div>`;
+        ${x.onFail.photo ? `<div class="cl-phs">${ph.map((p, i) => photoTile(p, i, at, true)).join('')}${(upNames || []).map((n) => `<span class="cl-ph up" title="${esc(n)}"><span class="cl-ph0">…</span></span>`).join('')}${ph.length < 10 ? `<label class="btn sm cl-addph">+ Photo${x.onFail.photo === 'req' ? ' (required)' : ''}<input type="file" accept="image/*" capture="environment" data-clr="photo" ${at} hidden></label>` : ''}</div>` : ''}${x.onFail.task ? tasksBox(x, scope, fid, true) : ''}</div>`;
+    } else {
+      const tk = x.onFail.task ? tasksBox(x, scope, fid, false) : '';
+      if (note || ph.length || /cl-t(k|add)/.test(tk)) extra = `<div class="cl-fail">${note ? `<p class="cl-notev">${esc(note)}</p>` : ''}${ph.length ? `<div class="cl-phs">${ph.map((p, i) => photoTile(p, i, at, false)).join('')}</div>` : ''}${tk}</div>`;
+    }
   }
   return `<div class="cl-q${fail ? ' fail' : ''}${err ? ' bad' : ''}${edit ? '' : ' rd'}" id="clq-${scope}-${esc(fid)}-${esc(x.id)}">
     <div class="cl-qh"><span class="cl-qt" id="${id}-l">${x.type !== 'choice' && edit ? `<label for="${id}">${esc(x.label)}</label>` : esc(x.label)}${x.required && edit ? '<span class="req">*</span>' : ''}${x.critical ? ' <span class="cl-crit">Critical</span>' : ''}</span>${ctl}</div>
@@ -99,7 +128,7 @@ export function blockHTML(f, v, err, scope, mode) {
   const snap = r.snap, edit = mode === 'edit';
   if (!edit && isBlankValue(v)) return wrap('<span class="rd-empty" aria-label="Empty">–</span>', ' rd');
   const d = H.draftFor(scope);
-  const errs = err && edit ? missing(snap, v || {}) : null;
+  const errs = err && edit ? missing(snap, v || {}, tasksFn(scope, f.id)) : null;
   const ups = (d?._clUp || {})[f.id] || {};
   const vis = visibleItems(snap, v?.a || {});
   let body = '';
@@ -145,12 +174,12 @@ function ctx(el) {
 }
 function settle(c, focusSel) {
   H.markDirty(c.d);
-  if (c.d.errors?.[c.f.id]) { const m = checkField(c.f, c.d.values[c.f.id]); if (m) c.d.errors[c.f.id] = m; else delete c.d.errors[c.f.id]; }
+  if (c.d.errors?.[c.f.id]) { const m = checkField(c.f, c.d.values[c.f.id], tasksFn(c.scope, c.f.id)); if (m) c.d.errors[c.f.id] = m; else delete c.d.errors[c.f.id]; }
   if (focusSel === false) { // typed: just the score line, and this item's message once it's sorted
     const el = document.getElementById(`clsum-${c.scope}-${c.f.id}`);
     if (el) el.outerHTML = summaryHTML(c.snap, c.d.values[c.f.id], c.scope, c.f.id);
     const q = c.x && document.getElementById(`clq-${c.scope}-${c.f.id}-${c.x.id}`);
-    if (q && q.classList.contains('bad') && !missing(c.snap, c.d.values[c.f.id])[c.x.id]) { q.classList.remove('bad'); q.querySelector(':scope > .err')?.remove(); }
+    if (q && q.classList.contains('bad') && !missing(c.snap, c.d.values[c.f.id], tasksFn(c.scope, c.f.id))[c.x.id]) { q.classList.remove('bad'); q.querySelector(':scope > .err')?.remove(); }
     if (!c.d.errors?.[c.f.id]) { const fb = document.getElementById(`fb-${c.scope}-${c.f.id}`); if (fb) { fb.classList.remove('bad'); fb.querySelector(':scope > .err')?.remove(); } }
     return;
   }
@@ -158,9 +187,42 @@ function settle(c, focusSel) {
   if (focusSel) document.querySelector(focusSel)?.focus({ preventScroll: true });
 }
 
+/** Tasks on a failed item: open one, or add one (the usual task pop-up, filled in to start). */
+function taskClick(el) {
+  const scope = el.dataset.scope, d = H.draftFor(scope);
+  if (!d) return;
+  if (el.dataset.clr === 'task-open') { H.openTask(el.dataset.t); return; }
+  const form = H.formOf(d), f = (form?.fields || []).find((y) => y.id === el.dataset.clf);
+  const v = f && d.values[f.id], r = f && snapFor(f, v);
+  const x = r?.snap && (r.snap.items || []).find((y) => y.id === el.dataset.item);
+  if (!x) return;
+  const ans = answerText(x, v?.a?.[x.id], H.dateText), note = String(v?.n?.[x.id] || '').trim();
+  H.addTask({
+    key: taskKey(f.id, x.id),
+    title: `Fix: ${x.label}`.slice(0, 500),
+    notes: [`Answer: ${ans}`, note ? `Comment: ${note}` : ''].filter(Boolean).join('\n'),
+    from: `${r.snap.name} › ${x.label}: ${ans}`,
+  });
+}
+/** The record's tasks changed (Cadence): the task lists under failed items, and a "needs a task" message that's now sorted. */
+export function paintTaskLists() {
+  document.querySelectorAll('.cl-tasks[data-scope="record"]').forEach((el) => {
+    const d = H.draftFor('record'), form = d && H.formOf(d), f = (form?.fields || []).find((y) => y.id === el.dataset.clf);
+    const r = f && snapFor(f, d.values[f.id]), x = r?.snap && (r.snap.items || []).find((y) => y.id === el.dataset.item);
+    if (!x) return;
+    const edit = !!el.closest('.cl-q:not(.rd)');
+    el.innerHTML = taskRows(x, 'record', f.id, edit);
+    if (edit && d.errors?.[f.id]) {
+      const m = checkField(f, d.values[f.id], tasksFn('record', f.id));
+      if (m !== d.errors[f.id]) { if (m) d.errors[f.id] = m; else delete d.errors[f.id]; H.repaint(d, f); }
+    }
+  });
+}
+
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-clr]');
   if (!el || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return;
+  if (el.dataset.clr === 'task-add' || el.dataset.clr === 'task-open') { taskClick(el); return; }
   const c = ctx(el); if (!c || !c.x) return;
   const at = `[data-scope="${c.scope}"][data-clf="${CSS.escape(c.f.id)}"][data-item="${CSS.escape(c.x.id)}"]`;
   if (el.dataset.clr === 'ans') {

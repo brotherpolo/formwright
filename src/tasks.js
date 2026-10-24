@@ -182,6 +182,7 @@ export function newTaskDoc(id, draft, me, who, link, lists, now) {
     members: assigned ? [me.uid, who.uid] : [me.uid],
     ...(role ? { assigneeRole: role.role, assigneeRoleName: String(role.name || '').slice(0, 80) || null } : {}),
     recordId: link?.recordId || null, formId: link?.recordId ? link.formId || null : null, recordSnap: link?.recordId ? link.recordSnap || null : null,
+    ...(link?.recordId && link.checklistItem ? { checklistItem: String(link.checklistItem).slice(0, 200) } : {}), // a checklist item it was added from: '<field id>:<item id>'
   };
   if (assigned || role) Object.assign(t, snaps(t, lists));
   return t;

@@ -25,7 +25,7 @@ const BUILT = new Map(BUILT_IN.map(([k, l]) => [norm(l), k]));
 
 /* ---------- writing ---------- */
 
-const onFailText = (o) => [o?.comment ? 'comment' + (o.comment === 'req' ? ' required' : '') : '', o?.photo ? 'photo' + (o.photo === 'req' ? ' required' : '') : ''].filter(Boolean).join(', ');
+const onFailText = (o) => [o?.comment ? 'comment' + (o.comment === 'req' ? ' required' : '') : '', o?.photo ? 'photo' + (o.photo === 'req' ? ' required' : '') : '', o?.task ? 'task' + (o.task === 'req' ? ' required' : '') : ''].filter(Boolean).join(', ');
 const head = (cols) => cols.map((c) => ({ v: c, s: 'head' }));
 
 /** The workbook for these checklists: [{ name, rows, cols, freeze }] for xlsx.js writeXlsx. */
@@ -66,7 +66,7 @@ const GUIDE = [
   ['Answers', 'An answer set by name (one you have, or one on the Answer sets sheet), or Text, Date, Decimal, Percent.'],
   ['Required', 'Yes: it must be answered to save the record.'],
   ['Critical', 'Yes: a fail here fails the whole checklist.'],
-  ['On fail', 'comment, comment required, photo, photo required, or both, like “comment required, photo”.'],
+  ['On fail', 'comment, photo or task (offer a task), each optionally “required”, like “comment required, photo, task”.'],
   ['Help', 'A line under the question.'],
   ['Show only if', 'Show it only when an earlier question has one of these answers: “Extinguishers in date = Fail” or “= Fail, N/A”.'],
   ['', ''],
@@ -105,12 +105,13 @@ function findSheets(sheets) {
   return { items, sets };
 }
 const parseOnFail = (v) => {
-  const t = txt(v).toLowerCase(), out = { comment: '', photo: '' };
+  const t = txt(v).toLowerCase(), out = { comment: '', photo: '', task: '' };
   if (!t) return out;
   t.split(/\s*(?:,|and|\+|\/)\s*/).forEach((part) => {
     const req = /requir|must|need/.test(part);
     if (/comment|note/.test(part)) out.comment = req ? 'req' : 'ask';
     if (/photo|picture|image/.test(part)) out.photo = req ? 'req' : 'ask';
+    if (/task|action|follow/.test(part)) out.task = req ? 'req' : 'ask';
   });
   return out;
 };
@@ -216,10 +217,10 @@ export function planImport(sheets, existing, { intoType = '', uid }) {
     c.sec = sec || c.sec;
     const canFail = !!ans.opts && ans.opts.some((o) => o.fail);
     const onFail = parseOnFail(cell('onFail')), critical = yes(cell('critical'));
-    if ((onFail.comment || onFail.photo || critical) && !canFail) problems.push({ sheet: sh.name, row, msg: `Critical and On fail need answers that can fail; “${txt(cell('answers'))}” has none, so they were left out.` });
+    if ((onFail.comment || onFail.photo || onFail.task || critical) && !canFail) problems.push({ sheet: sh.name, row, msg: `Critical and On fail need answers that can fail; “${txt(cell('answers'))}” has none, so they were left out.` });
     const inPool = poolMatch(exPool, q, ans.set), fk = norm(q) + '|' + ans.set;
     if (!inPool && !fileQs.has(fk)) fileQs.set(fk, { id: c.exItems.find((x) => x.kind === 'item' && same(x.label, q) && x.set === ans.set && !exPool.some((p) => p.id === x.id))?.id || 'i' + uid(), catId: catOf(cell('category')) });
-    const item = { id: inPool ? inPool.id : fileQs.get(fk).id, kind: 'item', label: q.slice(0, 300), help: txt(cell('help')).slice(0, 300), set: ans.set, required: yes(cell('required')), critical: canFail && critical, onFail: canFail ? onFail : { comment: '', photo: '' }, showIf: null, _opts: ans.opts };
+    const item = { id: inPool ? inPool.id : fileQs.get(fk).id, kind: 'item', label: q.slice(0, 300), help: txt(cell('help')).slice(0, 300), set: ans.set, required: yes(cell('required')), critical: canFail && critical, onFail: canFail ? onFail : { comment: '', photo: '', task: '' }, showIf: null, _opts: ans.opts };
     if (c.items.some((x) => x.id === item.id)) { problems.push({ sheet: sh.name, row, msg: `“${q}” is in “${c.name}” twice; the second was left out.` }); return; }
     const si = txt(cell('showIf'));
     if (si) {

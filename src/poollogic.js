@@ -17,7 +17,7 @@ export const norm = (s) => String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}%]
 
 /** A question, tidied for saving. */
 export function cleanQuestion(d) {
-  return { label: str(d?.label, 300), help: str(d?.help, 300), set: str(d?.set, 40), onFail: { comment: mode(d?.onFail?.comment), photo: mode(d?.onFail?.photo) }, catId: str(d?.catId, 60) };
+  return { label: str(d?.label, 300), help: str(d?.help, 300), set: str(d?.set, 40), onFail: { comment: mode(d?.onFail?.comment), photo: mode(d?.onFail?.photo), task: mode(d?.onFail?.task) }, catId: str(d?.catId, 60) };
 }
 export function questionIssues(q, sets) {
   const out = [];
@@ -27,7 +27,7 @@ export function questionIssues(q, sets) {
   return out;
 }
 /** The parts of a question an item copies. */
-export const copyOf = (q) => ({ label: q.label, help: q.help || '', set: q.set, onFail: { comment: mode(q.onFail?.comment), photo: mode(q.onFail?.photo) } });
+export const copyOf = (q) => ({ label: q.label, help: q.help || '', set: q.set, onFail: { comment: mode(q.onFail?.comment), photo: mode(q.onFail?.photo), task: mode(q.onFail?.task) } });
 /** Does a change alter what the question asks (its wording or its answers)? Help, On fail and category don't. */
 export const changesMeaning = (a, b) => norm(a?.label) !== norm(b?.label) || (a?.set || '') !== (b?.set || '');
 const differs = (a, b) => JSON.stringify(copyOf(a)) !== JSON.stringify(copyOf(b));
