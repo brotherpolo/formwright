@@ -214,7 +214,7 @@ function viewUsers() {
   const admins = store.users.filter(isAdmin).length;
   const formsVisible = (u) => (isAdmin(u) ? store.forms.length : store.forms.filter((f) => levelFor(u.access, f.id).view !== 'none').length);
   return `
-  <div class="head"><div class="ttl"><div><h1>Users</h1><p class="sub">People appear here after they sign in to Formwright or Cadence for the first time. Add them to security groups to give them access to forms, give them roles for the work they do, and switch on Cadence for the people who should use it.</p></div></div></div>
+  <div class="head"><div class="ttl"><div><h1>Users</h1><p class="sub">People appear here after they sign in to Forms or Plan for the first time. Add them to security groups to give them access to forms, give them roles for the work they do, and switch on Plan for the people who should use it.</p></div></div></div>
   ${users.length ? `<div class="panel flist">${users.map((u) => {
     const self = u.id === store.user?.uid;
     const lastAdmin = isAdmin(u) && admins <= 1;
@@ -224,7 +224,7 @@ function viewUsers() {
       ${isAdmin(u) ? `<p class="help">Administrators see and edit every form and manage forms, groups and users.</p>` : gs.length ? `<div class="opts">${gs.map((g) => `<label class="opt"><input type="checkbox" data-ugroup="${u.id}" value="${g.id}"${(u.groups || []).includes(g.id) ? ' checked' : ''}>${esc(g.name || 'Untitled group')}</label>`).join('')}</div>
         <p class="help">${(u.groups || []).length ? `Can open ${formsVisible(u)} of ${store.forms.length} forms.` : 'Not in any group, so no forms are visible yet.'}</p>` : `<p class="help">Create a security group first, then add this person to it.</p>`}
       ${rs.length ? `<div class="uroles"><span class="help">Roles</span><div class="opts">${rs.map((r) => `<label class="opt"><input type="checkbox" data-ujrole="${u.id}" value="${r.id}"${(u.roles || []).includes(r.id) ? ' checked' : ''}>${esc(r.name || 'Untitled role')}</label>`).join('')}</div></div>` : ''}
-      ${isAdmin(u) ? `<p class="help ucad">Cadence: administrators can always use it.</p>` : `<label class="switch ucad"><input type="checkbox" data-ucad="${u.id}"${u.cadence === true ? ' checked' : ''}><span class="tr"></span><span>Can use Cadence${u.cadence === true ? '' : ' <span class="chip">Waiting</span>'}</span></label>`}
+      ${isAdmin(u) ? `<p class="help ucad">Plan: administrators can always use it.</p>` : `<label class="switch ucad"><input type="checkbox" data-ucad="${u.id}"${u.cadence === true ? ' checked' : ''}><span class="tr"></span><span>Can use Plan${u.cadence === true ? '' : ' <span class="chip">Waiting</span>'}</span></label>`}
       ${self ? '' : removeHTML(u)}
     </div>`;
   }).join('')}</div>` : `<div class="panel empty"><p>No one has signed in yet.</p></div>`}
@@ -239,7 +239,7 @@ function removeHTML(u) {
   if (!rm || rm.id !== u.id) return `<div class="urm-row"><button type="button" class="btn sm ghost danger" data-act="u-rm" data-id="${u.id}">Remove…</button></div>`;
   const n = ownedBy(u.id).length;
   return `<div class="urm" role="group" aria-label="Remove ${esc(userName(u))}">
-    <p><b>Remove ${esc(userName(u))}?</b> Their sign-in is deleted, so they can’t log in to Formwright or Cadence with this account. Their Cadence tasks are deleted, and tasks given to them go back to whoever gave them. This can’t be undone.</p>
+    <p><b>Remove ${esc(userName(u))}?</b> Their sign-in is deleted, so they can’t log in to Forms or Plan with this account. Their Plan tasks are deleted, and tasks given to them go back to whoever gave them. This can’t be undone.</p>
     <label class="prop"><span>Their ${n} record${n === 1 ? '' : 's'}</span><select class="in" data-urmgive="1"${rm.busy ? ' disabled' : ''}>
       <option value="">Keep them under “${esc(userName(u))} (removed)”</option>
       ${others([u.id]).map((x) => `<option value="${x.id}"${rm.giveTo === x.id ? ' selected' : ''}>Give them to ${esc(userName(x))}</option>`).join('')}
@@ -476,7 +476,7 @@ export async function onChange(t) {
   if (t.dataset.ucad) {
     try {
       await setUserCadence(t.dataset.ucad, t.checked);
-      toast(t.checked ? 'They can use Cadence now. Their Cadence opens by itself.' : 'Cadence switched off for them.');
+      toast(t.checked ? 'They can use Plan now. Their Plan opens by itself.' : 'Plan switched off for them.');
     } catch (e) {
       console.error(e);
       toast('Could not change that. Try again.');

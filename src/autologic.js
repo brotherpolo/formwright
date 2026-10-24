@@ -13,7 +13,7 @@ export const TRIGGERS = [
 ];
 export const ACTS = [
   { key: 'set', label: 'Set fields' },
-  { key: 'task', label: 'Create a Cadence task' },
+  { key: 'task', label: 'Create a Plan task' },
   { key: 'email', label: 'Send an email' },
   { key: 'child', label: 'Create a child record' },
 ];

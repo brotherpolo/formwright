@@ -404,7 +404,7 @@ export function formChangeLines(before, after, countValues) {
 /** A version file's form, checked: { form } or { error }. */
 export function readVersionFile(text) {
   let j;
-  try { j = JSON.parse(text); } catch (e) { return { error: 'That isn’t a JSON file Formwright can read.' }; }
+  try { j = JSON.parse(text); } catch (e) { return { error: 'That isn’t a JSON file Wayholm Forms can read.' }; }
   const form = j && j.formwright === 'form-version' ? j.form : j;
   if (!form || typeof form !== 'object' || !Array.isArray(form.fields)) return { error: 'That file doesn’t hold a form (it has no list of fields).' };
   const bad = form.fields.find((f) => !f || typeof f !== 'object' || !f.id || !f.type || !(f.type === 'heading' || TYPE_NAME[f.type]));

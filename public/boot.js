@@ -4,11 +4,11 @@ try {
   var t = localStorage.getItem('fw.theme');
   if (t === 'light' || t === 'dark') {
     document.documentElement.dataset.theme = t;
-    document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.content = t === 'dark' ? '#171a23' : '#ffffff'; });
+    document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.content = t === 'dark' ? '#171c1e' : '#ffffff'; });
   }
   // colour scheme and density (src/theme.js)
   var s = localStorage.getItem('fw.scheme');
-  if (s === 'spruce' || s === 'sand') document.documentElement.dataset.scheme = s;
+  if (s === 'indigo' || s === 'spruce' || s === 'sand') document.documentElement.dataset.scheme = s;
   if (localStorage.getItem('fw.density') === 'compact') document.documentElement.dataset.density = 'compact';
   // the sidebar folded to a strip of icons (Alt+B, or « at its top)
   if (localStorage.getItem('fw.rail') === '1') document.documentElement.dataset.rail = '1';

@@ -41,7 +41,7 @@ function stageCard(f, s, i, n) {
       ${a.type === 'group' ? `<select class="in am-sel" ${at} data-wfd="agroup"><option value="">Pick a group…</option>${H.groups().map((g) => `<option value="${esc(g.id)}"${g.id === a.group ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}</select>` : ''}</div>
     <div class="am-row"><label class="wf-due"><span class="am-lab">Due within</span><input class="in wf-duein" type="number" min="0" max="365" step="1" inputmode="numeric" ${at} data-wfd="due" value="${esc(s.dueDays ?? '')}" placeholder="–" aria-label="Due within how many working days"><span class="help">working days of arriving (Monday to Friday). Empty: no due date.</span></label></div>
     ${s.dueDays != null && s.dueDays !== '' ? overdueRows(s, at) : ''}
-    <div class="am-row"><label class="switch"><input type="checkbox" ${at} data-wfd="ntask"${s.notify?.task ? ' checked' : ''}><span class="tr"></span><span>Create a Cadence task for them</span></label>
+    <div class="am-row"><label class="switch"><input type="checkbox" ${at} data-wfd="ntask"${s.notify?.task ? ' checked' : ''}><span class="tr"></span><span>Create a Plan task for them</span></label>
       <label class="switch"><input type="checkbox" ${at} data-wfd="nemail"${s.notify?.email ? ' checked' : ''}><span class="tr"></span><span>Email them</span></label></div>
     <div class="wf-mvs"><span class="am-lab">Buttons</span>${moves || '<p class="help">No buttons: records stop here (the last stage), unless an administrator moves them.</p>'}
       <button type="button" class="btn sm ghost" ${at} data-wfa="madd">+ Button</button></div>

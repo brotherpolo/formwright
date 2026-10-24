@@ -31,7 +31,7 @@ if (!configured) {
     } catch (e) {
       console.error('[formwright] account setup failed', e);
       boot.innerHTML = !navigator.onLine || e?.code === 'unavailable'
-        ? `<div class="panel empty"><h2>You’re offline</h2><p>The first time on this device, Formwright needs a connection to fetch your forms. After that it opens with no signal.</p><button class="btn" data-act="reload-boot">Try again</button></div>`
+        ? `<div class="panel empty"><h2>You’re offline</h2><p>The first time on this device, Wayholm Forms needs a connection to fetch your forms. After that it opens with no signal.</p><button class="btn" data-act="reload-boot">Try again</button></div>`
         : `<div class="panel empty"><h2>Your account couldn’t be set up</h2><p>${
         e?.code === 'permission-denied'
           ? 'The database refused the request. Check that the security rules from the Cadence folder have been deployed.'
@@ -42,7 +42,7 @@ if (!configured) {
     startApp();
     startData(user);
     // offline and nothing saved on this device yet: say so rather than loading forever
-    setTimeout(() => { if (!navigator.onLine && !boot.hidden && /Loading/.test(boot.textContent)) boot.innerHTML = '<div class="panel empty"><h2>You’re offline</h2><p>Your forms haven’t been saved on this device yet. Open Formwright once with a signal, and after that it works offline.</p></div>'; }, 8000);
+    setTimeout(() => { if (!navigator.onLine && !boot.hidden && /Loading/.test(boot.textContent)) boot.innerHTML = '<div class="panel empty"><h2>You’re offline</h2><p>Your forms haven’t been saved on this device yet. Open Wayholm Forms once with a signal, and after that it works offline.</p></div>'; }, 8000);
   });
 }
 

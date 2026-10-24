@@ -91,7 +91,7 @@ test('whole-form summaries and version files', () => {
   assert.deepEqual(formChangeLines(a, a), ['No changes']);
   assert.deepEqual(formChangeLines(null, a), ['First version']);
   assert.deepEqual(formChangeLines(a, b), ['Renamed the form: Jobs → Work', 'Relationships changed', 'Rules changed (0 → 1)', 'Workflow changed', 'Settings changed']);
-  assert.equal(readVersionFile('{').error, 'That isn’t a JSON file Formwright can read.');
+  assert.equal(readVersionFile('{').error, 'That isn’t a JSON file Wayholm Forms can read.');
   assert.match(readVersionFile('{"fields":[{"id":"a","type":"weird","label":"Q"}]}').error, /“Q”/);
   const ok = readVersionFile(JSON.stringify({ formwright: 'form-version', formId: 'f1', formName: 'Jobs', version: 3, form: a }));
   assert.deepEqual([ok.formId, ok.formName, ok.version, ok.form.name], ['f1', 'Jobs', 3, 'Jobs']);

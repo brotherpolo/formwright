@@ -210,7 +210,7 @@ export function guideRows(form, cols, ctx) {
       case 'select': case 'radio': what = `One of: ${listText(f.options || [])}. Pick from the dropdown.`; break;
       case 'multiselect': what = `Any of: ${listText(f.options || [])}. Separate several with semicolons, like “A; B”.`; break;
       case 'color': what = 'A color code like #3346c8.'; break;
-      case 'relation': { const t = ctx.formById(f.relForm); what = t ? `A ${ctx.itemName(t).toLowerCase()} in Formwright: its name or its Record ID.` : 'A record’s name or Record ID.'; break; }
+      case 'relation': { const t = ctx.formById(f.relForm); what = t ? `A ${ctx.itemName(t).toLowerCase()} in Wayholm Forms: its name or its Record ID.` : 'A record’s name or Record ID.'; break; }
       case 'location': what = 'An address, or latitude and longitude like 43.65, -79.38.'; break;
       default: what = '';
     }
@@ -606,12 +606,12 @@ export function templateSheets(form, cols, ctx, mode, names) {
     ...guideRows(form, cols, ctx).map((g) => [{ v: g.col, s: 'bold' }, g.type, g.required ? 'Required' : '', { v: g.what, s: 'wrap' }]),
     [],
     [{ v: 'How to use this file', s: 'bold' }],
-    [null, null, null, { v: `Keep row 1 as it is. Add one ${item} per row below it, then import the file from the ${form.name} list in Formwright (Import and templates › Import a filled-in file).`, s: 'wrap' }],
+    [null, null, null, { v: `Keep row 1 as it is. Add one ${item} per row below it, then import the file from the ${form.name} list in Wayholm Forms (Import and templates › Import a filled-in file).`, s: 'wrap' }],
     [null, null, null, { v: `Leave Record ID blank for a new ${item}. A row with a Record ID updates that ${item}; only the columns in the file change.`, s: 'wrap' }],
-    [null, null, null, { v: 'You can delete columns you don’t need. Formwright ignores this Guide sheet.', s: 'wrap' }],
+    [null, null, null, { v: 'You can delete columns you don’t need. Wayholm Forms ignores this Guide sheet.', s: 'wrap' }],
   ];
   const skipped = skippedFields(form);
-  if (skipped.length) guide.push([], [{ v: 'Not in the template', s: 'bold' }], ...skipped.map((s) => [s.label, s.why === 'calculated' ? 'Calculation' : s.why[0].toUpperCase() + s.why.slice(1), '', { v: s.why === 'calculated' ? 'Worked out by Formwright after the import.' : 'Can’t come from a spreadsheet. Add it in Formwright.', s: 'wrap' }]));
+  if (skipped.length) guide.push([], [{ v: 'Not in the template', s: 'bold' }], ...skipped.map((s) => [s.label, s.why === 'calculated' ? 'Calculation' : s.why[0].toUpperCase() + s.why.slice(1), '', { v: s.why === 'calculated' ? 'Worked out by Wayholm Forms after the import.' : 'Can’t come from a spreadsheet. Add it in Wayholm Forms.', s: 'wrap' }]));
   const sheets = [
     { name: names.main, rows, cols: widths, freeze: true, validations },
     { name: names.guide, rows: guide, cols: [{ width: 26 }, { width: 16 }, { width: 11 }, { width: 80 }] },

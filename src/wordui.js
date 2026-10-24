@@ -140,7 +140,7 @@ function dlgHTML() {
     <p class="help">Make a document in Word and type field names in braces where values should go, like <code>{${esc(sampleField(form))}}</code>. Everyone who can see ${esc(form?.name || 'this form')} can use these from Export.</p>
     ${pend}
     ${W.list.length ? `<ul class="xw-list">${list}</ul>` : p ? '' : '<p class="xw-empty">No Word templates yet.</p>'}
-    ${p ? '' : `<div class="xw-add"><label class="btn primary xw-file">Add a Word template…<input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" data-xw-file hidden></label><span class="xw-links"><button type="button" class="cm-lnk" data-xw="placeholders">Placeholders for ${esc(form?.name || 'this form')} (.docx)</button><a class="cm-lnk" href="${SAMPLE_URL}" download="Formwright quote template.docx">Sample template with every option</a></span></div>`}
+    ${p ? '' : `<div class="xw-add"><label class="btn primary xw-file">Add a Word template…<input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" data-xw-file hidden></label><span class="xw-links"><button type="button" class="cm-lnk" data-xw="placeholders">Placeholders for ${esc(form?.name || 'this form')} (.docx)</button><a class="cm-lnk" href="${SAMPLE_URL}" download="Wayholm Forms quote template.docx">Sample template with every option</a></span></div>`}
   </div></div>`;
 }
 const SAMPLE_URL = '/word-template-sample.docx';
@@ -298,7 +298,7 @@ async function onFile(input) {
     p.check = await checkDocx(new Uint8Array(await file.arrayBuffer()), formSchema(H.formById(W.formId)));
   } catch (e) {
     console.error(e);
-    p.check = { tags: [], errors: [/Word file/.test(e.message) || e.stale ? e.message : `Formwright couldn’t read that file (${String(e?.message || e).slice(0, 120)}). Reload the page and try again; if it still happens, send a screenshot of this.`] };
+    p.check = { tags: [], errors: [/Word file/.test(e.message) || e.stale ? e.message : `Wayholm Forms couldn’t read that file (${String(e?.message || e).slice(0, 120)}). Reload the page and try again; if it still happens, send a screenshot of this.`] };
   }
   if (W.dlg?.pending === p) { paint(); root().querySelector(p.replace ? '[data-xw="pend-save"]' : '[data-xwi="name"]')?.focus(); }
 }

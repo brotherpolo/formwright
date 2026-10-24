@@ -82,7 +82,7 @@ function taskRows(x, scope, fid, edit) {
   const rows = list.map((t) => {
     const who = holderName(t) || '';
     const when = t.done ? 'done' : t.due ? `due ${H.dateText(t.due)}` : '';
-    return `<button type="button" class="cl-tk${t.done ? ' done' : ''}" data-clr="task-open" ${at} data-t="${esc(t.id)}"><span class="cl-tkc" aria-hidden="true"></span><span class="cl-tkt">${esc(t.title)}</span>${t._held ? '<span class="cl-onsave" title="Goes to Cadence when you save">on save</span>' : ''}<small>${esc([who, when].filter(Boolean).join(' · '))}</small></button>`;
+    return `<button type="button" class="cl-tk${t.done ? ' done' : ''}" data-clr="task-open" ${at} data-t="${esc(t.id)}"><span class="cl-tkc" aria-hidden="true"></span><span class="cl-tkt">${esc(t.title)}</span>${t._held ? '<span class="cl-onsave" title="Goes to Plan when you save">on save</span>' : ''}<small>${esc([who, when].filter(Boolean).join(' · '))}</small></button>`;
   }).join('');
   const can = !ts.off && !(ts.held && !edit);
   const btn = can ? `<button type="button" class="btn sm cl-tadd" data-clr="task-add" ${at}${ts.loading || scope === 'preview' ? ' disabled' : ''}>＋ Add a task${x.onFail.task === 'req' && edit && !list.length ? ' (required)' : ''}</button>` : '';

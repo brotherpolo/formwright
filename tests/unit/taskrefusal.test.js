@@ -17,7 +17,7 @@ test('missing account', () => {
 });
 
 test('Cadence not switched on (admins always can)', () => {
-  assert.match(taskRefusal(me, acct({ cadence: false }), task(), rec(), person).join(' '), /Cadence isn’t switched on/);
+  assert.match(taskRefusal(me, acct({ cadence: false }), task(), rec(), person).join(' '), /Plan isn’t switched on/);
   assert.deepEqual(taskRefusal(me, acct({ cadence: false, role: 'admin', access: {} }), task(), rec(), person), []);
 });
 
@@ -26,7 +26,7 @@ test('owner email must be my sign-in email', () => {
 });
 
 test('assignee missing from the people list, or on another account', () => {
-  assert.match(taskRefusal(me, acct(), task(), rec(), null, { assignee: 'Adam Pollack' }).join(' '), /Adam Pollack isn’t in Cadence’s people list under adam@example.com/);
+  assert.match(taskRefusal(me, acct(), task(), rec(), null, { assignee: 'Adam Pollack' }).join(' '), /Adam Pollack isn’t in Plan’s people list under adam@example.com/);
   assert.match(taskRefusal(me, acct(), task(), rec(), { uid: 'u_other' }).join(' '), /different account/);
   assert.deepEqual(taskRefusal(me, acct(), task({ assigneeId: null, assigneeEmail: null }), rec(), undefined), []);
 });

@@ -31,9 +31,9 @@ test('applying a theme sets the page, the browser bar and the stored choice', ()
   assert.deepEqual(d.metas.map((m) => m.a.content), ['#ffffff', '#ffffff']);
   assert.equal(s.m[THEME_KEY], 'light');
   applyTheme(d, 'dark', s);
-  assert.deepEqual(d.metas.map((m) => m.a.content), ['#171a23', '#171a23']);
+  assert.deepEqual(d.metas.map((m) => m.a.content), ['#171c1e', '#171c1e']);
   applyTheme(d, 'auto', s);
   assert.equal(d.documentElement.dataset.theme, undefined);
-  assert.deepEqual(d.metas.map((m) => m.a.content), ['#ffffff', '#171a23']);
+  assert.deepEqual(d.metas.map((m) => m.a.content), ['#ffffff', '#171c1e']);
   assert.equal(THEME_KEY in s.m, false);
 });

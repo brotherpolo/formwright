@@ -6,8 +6,9 @@ img{max-width:100%}
 
 /* Layout: app shell — persistent form sidebar (drawer on phones) beside a single working column; designer uses expandable field rows. */
 :root{
-  --bg:#f3f4f7; --surface:#ffffff; --sunk:#e9ebf1; --line:#d6d9e3; --line-strong:#b9bfcf;
-  --fg:#141826; --muted:#5a6174; --accent:#3346c8; --accent-ink:#ffffff; --accent-soft:#e2e6fb;
+/* Wayholm: sand, granite, and Lake blue for Forms */
+  --bg:#f5f1ea; --surface:#ffffff; --sunk:#ece6db; --line:#e0d9cc; --line-strong:#c7beae;
+  --fg:#1e2528; --muted:#625d53; --accent:#2f5e9e; --accent-ink:#ffffff; --accent-soft:#e3ebf6;
   --ok:#1d7349; --ok-soft:#dcf1e5; --danger:#b42335; --danger-soft:#fbe4e7; --warn-soft:#fff1d6;
   --display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --body:"Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -15,15 +16,24 @@ img{max-width:100%}
   --r:10px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0f1117; --surface:#171a23; --sunk:#0b0d12; --line:#282d3b; --line-strong:#3a4154;
-  --fg:#e7e9f0; --muted:#959cae; --accent:#8496ff; --accent-ink:#0c1033; --accent-soft:#222a55;
+  --bg:#101416; --surface:#171c1e; --sunk:#0b0e0f; --line:#2a3236; --line-strong:#3b4549;
+  --fg:#ede8df; --muted:#a39c90; --accent:#7fa8dd; --accent-ink:#0b1a2e; --accent-soft:#1e2e44;
   --ok:#5ccf98; --ok-soft:#163327; --danger:#ff8090; --danger-soft:#3b1a21; --warn-soft:#3a2d12; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#0f1117; --surface:#171a23; --sunk:#0b0d12; --line:#282d3b; --line-strong:#3a4154;
-  --fg:#e7e9f0; --muted:#959cae; --accent:#8496ff; --accent-ink:#0c1033; --accent-soft:#222a55;
+  --bg:#101416; --surface:#171c1e; --sunk:#0b0e0f; --line:#2a3236; --line-strong:#3b4549;
+  --fg:#ede8df; --muted:#a39c90; --accent:#7fa8dd; --accent-ink:#0b1a2e; --accent-soft:#1e2e44;
   --ok:#5ccf98; --ok-soft:#163327; --danger:#ff8090; --danger-soft:#3b1a21; --warn-soft:#3a2d12; color-scheme:dark}
 /* Colour schemes (Appearance, per device): the sidebar has its own colours so a scheme can darken it */
 :root{--side-bg:var(--surface);--side-fg:var(--fg);--side-muted:var(--muted);--side-hover:var(--sunk);--side-on:var(--accent-soft);--side-line:var(--line);--side-input:var(--surface)}
+:root[data-scheme="indigo"]{
+  --bg:#f3f4f7; --surface:#ffffff; --sunk:#e9ebf1; --line:#d6d9e3; --line-strong:#b9bfcf;
+  --fg:#141826; --muted:#5a6174; --accent:#3346c8; --accent-ink:#ffffff; --accent-soft:#e2e6fb}
+@media (prefers-color-scheme: dark){:root[data-scheme="indigo"]:not([data-theme="light"]){
+  --bg:#0f1117; --surface:#171a23; --sunk:#0b0d12; --line:#282d3b; --line-strong:#3a4154;
+  --fg:#e7e9f0; --muted:#959cae; --accent:#8496ff; --accent-ink:#0c1033; --accent-soft:#222a55}}
+:root[data-scheme="indigo"][data-theme="dark"]{
+  --bg:#0f1117; --surface:#171a23; --sunk:#0b0d12; --line:#282d3b; --line-strong:#3a4154;
+  --fg:#e7e9f0; --muted:#959cae; --accent:#8496ff; --accent-ink:#0c1033; --accent-soft:#222a55}
 :root[data-scheme="spruce"]{
   --bg:#f2f5f3; --surface:#ffffff; --sunk:#e6eeea; --line:#d3ddd8; --line-strong:#b3c2bb;
   --fg:#12201c; --muted:#4f625c; --accent:#0f6b5c; --accent-ink:#ffffff; --accent-soft:#d8ece6;
@@ -62,9 +72,12 @@ a{color:var(--accent)}
 .app{display:grid;grid-template-columns:264px minmax(0,1fr);min-height:100%}
 .side{position:sticky;top:0;align-self:start;height:100dvh;max-height:100dvh;overflow:auto;background:var(--side-bg);color:var(--side-fg);border-right:1px solid var(--side-line);display:flex;flex-direction:column;padding-block:18px;padding-inline:14px;gap:4px}
 .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 16px}
-.brand b{font-family:var(--display);font-size:1.2rem;letter-spacing:-.02em}
-.brand-mark{width:26px;height:26px;border-radius:7px;background:var(--accent);display:grid;place-items:center}
-.brand-mark i{display:block;width:12px;height:2px;background:var(--accent-ink);box-shadow:0 -5px 0 var(--accent-ink),0 5px 0 var(--accent-ink)}
+.brand b{font-family:var(--display);font-size:1.25rem;font-weight:700;letter-spacing:-.005em;line-height:1;white-space:nowrap}
+.brand b span{font-weight:500;color:var(--accent);margin-left:.24em}
+/* the Wayholm mark: three stones, the top one in the app's colour (squared for Forms) */
+.brand-mark{width:30px;height:30px;flex:none;color:currentColor;display:grid;place-items:center}
+.brand-mark svg{width:100%;height:100%;display:block}
+.brand-mark .st{fill:currentColor}.brand-mark .tp{fill:var(--accent)}
 .navlabel{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--side-muted);padding:10px 10px 4px;font-weight:600}
 .nav{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;background:none;border-radius:8px;cursor:pointer;text-align:left;min-height:42px}
 .nav:hover{background:var(--side-hover)}
@@ -529,7 +542,7 @@ details.fxref summary{cursor:pointer;font-weight:600;font-size:13px;padding:4px 
 .ex-lh b{font-size:16px}
 .ex-lh .note{color:#6b7080}
 .ex-ttl{padding-top:14px}
-.ex-ttl small{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;color:#3346c8}
+.ex-ttl small{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--accent)}
 .ex-ttl b{font-size:19px}
 @media (max-width:520px){.recbar #pdf-btn{padding-inline:10px}}
 

@@ -3,7 +3,7 @@
 export const THEMES = ['auto', 'light', 'dark'];
 export const THEME_KEY = 'fw.theme';
 // the browser bar colour for each look (matches --surface)
-export const BAR = { light: '#ffffff', dark: '#171a23' };
+export const BAR = { light: '#ffffff', dark: '#171c1e' };
 
 export const nextTheme = (t) => THEMES[(THEMES.indexOf(THEMES.includes(t) ? t : 'auto') + 1) % THEMES.length];
 export const themeLabel = (t) => ({ auto: 'Auto', light: 'Light', dark: 'Dark' })[t] || 'Auto';
@@ -27,9 +27,9 @@ export function applyTheme(doc, t, storage) {
 
 /* Colour scheme and density, also per device. The scheme recolours the accent, the background and
    the sidebar; each has a light and a dark version (Light / Dark / Auto above still applies). */
-export const SCHEMES = ['indigo', 'spruce', 'sand'];
+export const SCHEMES = ['wayholm', 'indigo', 'spruce', 'sand'];
 export const SCHEME_KEY = 'fw.scheme';
-export const schemeLabel = (s) => ({ indigo: 'Indigo', spruce: 'Spruce', sand: 'Sand' })[s] || 'Indigo';
+export const schemeLabel = (s) => ({ wayholm: 'Wayholm', indigo: 'Indigo', spruce: 'Spruce', sand: 'Sand' })[s] || 'Wayholm';
 export const DENSITIES = ['comfortable', 'compact'];
 export const DENSITY_KEY = 'fw.density';
 export const densityLabel = (d) => ({ comfortable: 'Comfortable', compact: 'Compact' })[d] || 'Comfortable';

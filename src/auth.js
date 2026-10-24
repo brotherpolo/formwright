@@ -9,7 +9,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import { auth, configured } from './firebase.js';
-import { $, esc } from './ui.js';
+import { $, esc, BRAND } from './ui.js';
 import { saveProfileName } from './store.js';
 
 let mode = 'signin'; // signin | signup | reset
@@ -49,7 +49,7 @@ export async function signOutUser() {
 function render() {
   const el = $('#auth');
   if (!configured) {
-    el.innerHTML = `<div class="auth"><div class="auth-card"><div class="brand"><span class="brand-mark"><i></i></span><b>Formwright</b></div>
+    el.innerHTML = `<div class="auth"><div class="auth-card"><div class="brand">${BRAND}</div>
       <h1>Firebase is not configured</h1>
       <p class="sub">Copy <code>.env.example</code> to <code>.env.local</code>, fill in your web app settings from the Firebase console, and restart <code>npm run dev</code>.</p></div></div>`;
     return;
@@ -57,7 +57,7 @@ function render() {
   const title = mode === 'signup' ? 'Create your account' : mode === 'reset' ? 'Reset your password' : 'Sign in';
   el.innerHTML = `
   <div class="auth"><div class="auth-card">
-    <div class="brand"><span class="brand-mark"><i></i></span><b>Formwright</b></div>
+    <div class="brand">${BRAND}</div>
     <h1>${title}</h1>
     ${message ? `<p class="auth-msg ${message.kind}">${esc(message.text)}</p>` : ''}
     ${mode !== 'reset' ? `<button class="btn google" data-auth="google" ${busy ? 'disabled' : ''}><span class="g">G</span>Continue with Google</button><div class="or"><span>or</span></div>` : ''}

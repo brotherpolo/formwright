@@ -106,7 +106,7 @@ export function allTasksHTML() {
     <div class="segs" role="group" aria-label="Status">${[['open', 'Open'], ['done', 'Done'], ['all', 'All']].map(([k, l]) => `<button type="button" class="${A.tf.status === k ? 'on' : ''}" aria-pressed="${A.tf.status === k}" data-aw="t-status" data-v="${k}">${l}</button>`).join('')}</div>
     <span class="grow help">${list.length} shown · ${nOpen} open${nLate ? ` · <b class="aw-late">${nLate} overdue</b>` : ''}</span></div>
     ${sel.length ? `<div class="aw-selbar" role="region" aria-label="Selected tasks"><b>${sel.length} selected</b><button type="button" class="btn sm primary" data-aw="t-reassign-sel">Reassign…</button><button type="button" class="btn sm ghost" data-aw="t-clear">Clear</button></div>` : ''}`;
-  if (!list.length) return `${bar}<div class="panel empty"><h2>No tasks${A.tf.who || A.tf.form || A.tf.status !== 'open' ? ' match' : ' open'}</h2><p>Cadence tasks linked to records show up here. People’s own tasks without a record stay private.</p></div>`;
+  if (!list.length) return `${bar}<div class="panel empty"><h2>No tasks${A.tf.who || A.tf.form || A.tf.status !== 'open' ? ' match' : ' open'}</h2><p>Plan tasks linked to records show up here. People’s own tasks without a record stay private.</p></div>`;
   const all = list.length && sel.length === list.length;
   const row = (t) => {
     const { title, form, rec } = recLabel(t.recordId, t.recordSnap?.title);
@@ -133,7 +133,7 @@ export function allTasksHTML() {
   };
   return `${bar}<div class="panel"><div class="tblwrap"><table class="tbl aw-tbl aw-tasks"><thead><tr><th class="aw-cb"><input type="checkbox" data-aw="t-all" aria-label="Select all shown"${all ? ' checked' : ''}></th><th>Task</th><th>Record</th><th>Assigned to</th><th>Owner</th><th>Due</th><th>Status</th><th><span class="sr">Reassign</span></th></tr></thead><tbody>${list.map(row).join('')}</tbody></table></div>
     <div class="cards aw-cards"><label class="aw-call"><input type="checkbox" data-aw="t-all"${all ? ' checked' : ''}> Select all shown</label>${list.map(card).join('')}</div></div>
-    <p class="help">Only Cadence tasks linked to records are listed. Reassigning changes who does it; each task’s owner still sees it.</p>`;
+    <p class="help">Only Plan tasks linked to records are listed. Reassigning changes who does it; each task’s owner still sees it.</p>`;
 }
 
 /* ---------- Reassign pop-up ---------- */
@@ -151,7 +151,7 @@ function paintDlg() {
       ${pickerHTML({ id: 'aw', label: `Give ${one ? 'it' : 'them'} to`, people: d.people, sel: d.who, q: d.q, counts: openCounts(A.tList),
         pinned: [{ uid: '__owner', name: one ? `Back to ${one.ownerName || one.ownerEmail || 'the owner'} (owner)` : 'Back to each task’s owner', ok: true, icon: '↩' }],
         roles: d.roles, exclude: one ? [one.ownerId, holder(one).uid] : [] })}</div>
-      <p class="help">They get Cadence’s “assigned to you” notice. The owner stays the same and still sees ${one ? 'it' : 'them'}. It’s noted in the audit trail.</p>`}
+      <p class="help">They get Plan’s “assigned to you” notice. The owner stays the same and still sees ${one ? 'it' : 'them'}. It’s noted in the audit trail.</p>`}
     ${d.err ? `<p class="err" role="alert">${esc(d.err)}</p>` : ''}
     <div class="lv-dlgacts"><button type="button" class="btn ghost" data-aw="d-cancel"${d.busy ? ' disabled' : ''}>Cancel</button><button type="button" class="btn primary" data-aw="d-save"${d.busy || !d.who ? ' disabled' : ''}>${d.busy ? 'Reassigning…' : 'Reassign'}</button></div>
   </div></div>`;

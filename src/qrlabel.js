@@ -16,10 +16,10 @@ export function qrDialogHTML({ url, title, formName, item = 'record', badgeHTML 
   const svg = qrSvg(url, { size: 168, label: 'QR code for ' + title });
   return `<div class="lv-scrim qr-scrim" data-act="qr-scrim"><div class="lv-dlg qr-dlg" role="dialog" aria-modal="true" aria-labelledby="qr-h" data-stop-scrim="1">
     <div class="qr-top"><h2 id="qr-h">QR code</h2><button type="button" class="ibtn" data-act="qr-close" aria-label="Close">✕</button></div>
-    <p class="help">Print it and stick it where people need this ${esc(String(item).toLowerCase())}. A phone’s camera opens it in Formwright. Whoever scans it signs in first, and only sees it if they’re allowed to.</p>
+    <p class="help">Print it and stick it where people need this ${esc(String(item).toLowerCase())}. A phone’s camera opens it in Wayholm Forms. Whoever scans it signs in first, and only sees it if they’re allowed to.</p>
     <div class="qr-label" id="qr-label">
       <div class="qr-code">${svg}</div>
-      <div class="qr-txt"><span class="qr-form">${badgeHTML}<span>${esc(formName)}</span></span><b class="qr-title">${esc(title)}</b><span class="qr-hint">Scan to open in Formwright</span></div>
+      <div class="qr-txt"><span class="qr-form">${badgeHTML}<span>${esc(formName)}</span></span><b class="qr-title">${esc(title)}</b><span class="qr-hint">Scan to open in Wayholm Forms</span></div>
     </div>
     <div class="qr-acts"><button type="button" class="btn primary" data-act="qr-print">Print label</button><button type="button" class="btn" data-act="qr-png">Download image</button><button type="button" class="btn" data-act="qr-copy">Copy link</button></div>
   </div></div>`;

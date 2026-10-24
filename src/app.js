@@ -74,7 +74,7 @@ import { BEFORE, BEFORE_NAME, STAGE_FIELD, wfOn, stagesOf, stageById, stageIndex
 import { initRules, viewRules, rulesClick, rulesChange, rulesInput, rulesListHTML, parentUse, rulesCtx } from './rulesui.js';
 import { formatAuto, nextAuto, missingNumbers, autoSettings } from './autonum.js';
 import { signOutUser } from './auth.js';
-import { $, esc, uid, clone, isEmpty, toast, COLORS, colorOf, itemName, badge, lazy } from './ui.js';
+import { $, BRAND, esc, uid, clone, isEmpty, toast, COLORS, colorOf, itemName, badge, lazy } from './ui.js';
 import examples from './examples.json';
 
 const ADMIN_VIEWS = new Set(['settings', 'checklists', 'dates', 'problems', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
@@ -272,7 +272,7 @@ let booted=false,pendingRoute=null,pendingAt=0,homeCheck=false;
    Each screen you open is a step in the browser's history ({fw: how many screens are behind it}),
    so the phone's or browser's Back goes one screen back, like the in-app Back button.
    Below the first screen sits one extra step ({fw:-1}): reaching it shows "Press back again to exit",
-   and a second Back leaves. Links from Cadence open a record directly. */
+   and a second Back leaves. Links from Plan open a record directly. */
 let fwd=[],exitArmed=false,exitTimer=null,popIgnore=0,backPending=false;
 const BOOT=Date.now().toString(36); // steps from an earlier page load are left to the browser
 const st=fw=>({fw,b:BOOT});
@@ -423,7 +423,7 @@ function accessGate(){
   $('#boot').hidden=true;$('#app').hidden=true;
   if(!g){
     g=document.createElement('div');g.id='noaccess';g.className='auth';
-    g.innerHTML=`<div class="auth-card na-card" role="alertdialog" aria-modal="true" aria-labelledby="na-t" aria-describedby="na-d"><div class="brand"><span class="brand-mark"><i></i></span><b>Formwright</b></div><h1 id="na-t">You don’t have access yet</h1><p id="na-d">Please contact an administrator.</p><p class="na-who">Signed in as <b>${esc(store.user?.email||'this account')}</b></p><button type="button" class="btn" id="na-out">Sign out</button></div>`;
+    g.innerHTML=`<div class="auth-card na-card" role="alertdialog" aria-modal="true" aria-labelledby="na-t" aria-describedby="na-d"><div class="brand">${BRAND}</div><h1 id="na-t">You don’t have access yet</h1><p id="na-d">Please contact an administrator.</p><p class="na-who">Signed in as <b>${esc(store.user?.email||'this account')}</b></p><button type="button" class="btn" id="na-out">Sign out</button></div>`;
     g.querySelector('#na-out').addEventListener('click',async()=>{await signOutUser();});
     document.body.appendChild(g);
     g.querySelector('#na-out').focus({preventScroll:true});
@@ -551,7 +551,7 @@ function renderSide(){
   const tip=label=>rail?` title="${esc(label)}" aria-label="${esc(label)}"`:'';
   const navBtn=(act,on,label,glyph,extra='')=>`<button class="nav${on?' on':''}" data-act="${act}"${on?' aria-current="page"':''}${tip(label)}><span class="glyph navg">${glyph}</span><span class="t">${label}</span>${extra}</button>`;
   $('#side').innerHTML=`
-    <div class="brand"><span class="brand-mark"><i></i></span><b>Formwright</b><button type="button" class="ibtn side-tog" data-act="side-rail" aria-pressed="${rail}" aria-keyshortcuts="Alt+B" aria-label="${rail?'Expand the sidebar':'Collapse the sidebar'}" title="${rail?'Expand the sidebar':'Collapse the sidebar'} (Alt+B)">${rail?'»':'«'}</button></div>
+    <div class="brand">${BRAND}<button type="button" class="ibtn side-tog" data-act="side-rail" aria-pressed="${rail}" aria-keyshortcuts="Alt+B" aria-label="${rail?'Expand the sidebar':'Collapse the sidebar'}" title="${rail?'Expand the sidebar':'Collapse the sidebar'} (Alt+B)">${rail?'»':'«'}</button></div>
     ${rail?`<button type="button" class="nav nav-find" data-act="palette"${tip('Search everything (Ctrl K)')}><span class="glyph navg"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></span><span class="t">Search</span></button>`:''}
     <div class="fsearch">
       <svg class="fs-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
@@ -576,7 +576,7 @@ function renderSide(){
 /** Appearance (the sidebar's footer button): Light / Dark / Auto, a colour scheme and density, kept on this device. */
 function appearanceHTML(){
   const t=readTheme(localStorage),sc=readScheme(localStorage),dn=readDensity(localStorage);
-  const sw={indigo:['#3346c8','#f3f4f7'],spruce:['#0f6b5c','#13332d'],sand:['#a8481a','#f6f1e8']};
+  const sw={wayholm:['#2f5e9e','#f5f1ea'],indigo:['#3346c8','#f3f4f7'],spruce:['#0f6b5c','#13332d'],sand:['#a8481a','#f6f1e8']};
   return `<div class="appear" role="dialog" aria-label="Appearance" data-stop-scrim="1">
     <b class="ap-h">Appearance</b>
     <div class="ap-row"><span class="ap-l" id="ap-mode">Mode</span><div class="segs" role="group" aria-labelledby="ap-mode">${['auto','light','dark'].map(k=>`<button type="button" class="${t===k?'on':''}" aria-pressed="${t===k}" data-act="ap-mode" data-v="${k}">${themeLabel(k)}</button>`).join('')}</div></div>
@@ -598,7 +598,7 @@ function settingsGroups(){return [
     {act:'nav-checklists',on:['checklists'],t:'Checklists',g:'☑',n:store.checklists.length,d:'Reusable checklists with scored answers, for the Checklist field.'},
     {act:'nav-dates',on:['dates'],t:'Dates and time',g:'☼',d:'Time zone, the day weeks start and the fiscal year, for reports and dashboards.'}]},
   {h:'People and access',items:[
-    {act:'nav-users',on:['users'],t:'Users',g:'☺',n:store.users.length,d:'Who has an account, their groups, roles and Cadence access.'},
+    {act:'nav-users',on:['users'],t:'Users',g:'☺',n:store.users.length,d:'Who has an account, their groups, roles and Plan access.'},
     {act:'nav-groups',on:['groups','groupEdit'],t:'Security groups',g:'◫',n:store.groups.length,d:'Which forms each group can see and change.'},
     {act:'nav-roles',on:['roles','roleEdit'],t:'Roles',g:'◉',n:(store.roles||[]).length,d:'Jobs people do, for workflow stages, tasks and emails.'}]},
   {h:'Automation',items:[
@@ -627,7 +627,7 @@ async function undoDel(rid,form){
   }catch(e){busy();console.warn('[formwright] undo delete',e?.code||e);toast(/not-found/.test(e?.code||'')&&/function|404/i.test(e?.message||'')?'Undo needs the latest Cadence functions. Deploy them first.':e?.message||'It couldn’t be brought back. An administrator can restore it from Recently deleted.');}
 }
 function renderMain(){
-  const m=$('#main');let h='',title='Formwright';
+  const m=$('#main');let h='',title='Wayholm Forms';
   if(!store.ready){m.innerHTML='<div class="loading">Loading your forms…</div>';return;}
   let wide=true; // every screen uses the room it has (up to 1600px); dashboards the whole width
   if(view.name==='reports'){title='Reports';h=viewReportsList();}
@@ -645,11 +645,11 @@ function renderMain(){
   else if(view.name==='formEdit'){title='Edit form';h=viewFormEdit();}
   else if(admin.handles(view)){const r=admin.renderView(view);title=r.title;h=r.html;}
   else if(view.name==='settings'){title='Settings';h=viewSettings();}
-  else if(view.name==='welcome'){title='Formwright';h=viewWelcome();}
+  else if(view.name==='welcome'){title='Wayholm Forms';h=viewWelcome();}
   else if(view.name==='home'&&(h=viewStarterHome())){title='Home';}
   else if(view.name==='home'){title='Home';h=`<div class="head"><div class="ttl"><div><h1>Home</h1><p class="sub">Home shows a dashboard: your own, or the one an administrator picked for everyone.</p></div></div></div><div class="panel empty"><h2>No home dashboard yet</h2><p>Open a dashboard and press <b>Set as my home</b>.${isAdmin(store.me)?' To give everyone a Home, share a dashboard and press <b>Make everyone’s default home</b>.':''}</p><button class="btn primary" data-act="nav-dashboards">Dashboards</button></div>`;}
   if(ADMIN_VIEWS.has(view.name)&&!NO_FRAME.has(view.name)&&isAdmin(store.me))h=settingsFrame(h);
-  $('#topttl').textContent=title||'Formwright';
+  $('#topttl').textContent=title||'Wayholm Forms';
   const ae=document.activeElement,ks=ae&&ae.dataset?.ksearch?[ae.dataset.ksearch,ae.selectionStart]:null; // a redraw while searching keeps the cursor in the box
   const ck=cmt.keep(); // a redraw while writing a comment keeps the cursor in it
   m.innerHTML=`<div class="wrap${wide?' wide':''}${wide==='full'?' full':''}">${h}</div>`;
@@ -720,7 +720,7 @@ function qTag(t,form){
 function heldInner(form){
   const held=rdraft?._heldTasks||[],me=store.user?.uid,today=dateKey(new Date());
   const head=`<div class="section-h"><h2><span class="badge" style="background:${COLORS[6]}" aria-hidden="true">T</span><span>Tasks</span> <span class="count">${held.length}</span></h2></div>`;
-  return head+`<div class="panel subsec"><p class="note">These go to Cadence when you save.</p><div class="tlist tl-held">${held.map(t=>{
+  return head+`<div class="panel subsec"><p class="note">These go to Plan when you save.</p><div class="tlist tl-held">${held.map(t=>{
     const due=dueInfo(t.due,today);
     return `<div class="trow"><button class="tmain" data-act="held-open" data-id="${esc(t.id)}"><b>${esc(t.title||'Untitled task')}</b><span class="tmeta"><span class="tt-onsave">on save</span><span class="tdue ${due.tone}">${esc(due.text)}</span><span>${esc(whoLine(t,me))}</span></span></button>${qTag(t,form)}</div>`;}).join('')}</div></div>`;
 }
@@ -743,8 +743,8 @@ function tasksInner(){
   const head=`<div class="section-h"><h2>${foldBtn(k,tOpen,`<span class="badge" style="background:${COLORS[6]}" aria-hidden="true">T</span><span>Tasks</span>${openTasks.length?` <span class="count">${openTasks.length}</span>`:''}`,tSum)}</h2></div>`;
   if(!tOpen)return head;
   if(tw.status==='loading'||tw.recordId!==view.recordId)return head+`<div class="panel subsec">${toolBar({buttons:addBtn})}<p class="note">Loading tasks…</p></div>`;
-  if(tw.status==='error')return head+`<div class="panel subsec"><p class="note">${tw.error==='failed-precondition'?'Tasks need a database index that is still being built. Try again in a few minutes.':tw.error==='permission-denied'&&!isAdmin(store.me)&&store.me?.cadence!==true?'Tasks come from Cadence, which isn’t switched on for you yet. Ask an administrator to turn on Cadence for you under Users.':'Couldn’t load tasks ('+esc(tw.error)+').'}</p></div>`;
-  if(!tw.tasks.length)return head+`<div class="panel subsec">${toolBar({buttons:addBtn})}<p class="note">No tasks for this ${esc(noun)} yet.${cadenceUrl?' Add one, or link an existing task to it in Cadence.':' Link a task to it from Cadence.'}</p></div>`;
+  if(tw.status==='error')return head+`<div class="panel subsec"><p class="note">${tw.error==='failed-precondition'?'Tasks need a database index that is still being built. Try again in a few minutes.':tw.error==='permission-denied'&&!isAdmin(store.me)&&store.me?.cadence!==true?'Tasks come from Plan, which isn’t switched on for you yet. Ask an administrator to turn on Plan for you under Users.':'Couldn’t load tasks ('+esc(tw.error)+').'}</p></div>`;
+  if(!tw.tasks.length)return head+`<div class="panel subsec">${toolBar({buttons:addBtn})}<p class="note">No tasks for this ${esc(noun)} yet.${cadenceUrl?' Add one, or link an existing task to it in Plan.':' Link a task to it from Plan.'}</p></div>`;
   const me=store.user?.uid,today=dateKey(new Date()),now=Date.now();
   const tq=(rdraft?.kq||{})[k]||'';
   const {cols,sort,rows:found}=taskRows(p,tq,today,now);
@@ -1047,7 +1047,7 @@ function viewMyWork(){
   const hasWf=store.forms.some(f=>wfOn(f));
   const adm=isAdmin(store.me);
   const tab=hasWf&&ui.mwTab==='waiting'?'waiting':adm&&(ui.mwTab==='allm'||ui.mwTab==='allt')?ui.mwTab:'mentions';
-  if(tab==='allm'||tab==='allt')return `<div class="head"><div class="ttl"><div><h1>My work</h1><p class="sub">${tab==='allm'?'Every @mention in comments, for administrators: who it was for, and whether they’ve read it.':'Cadence tasks linked to records, for administrators: who has them, and when they’re due. Reassign them here.'}</p></div></div></div>
+  if(tab==='allm'||tab==='allt')return `<div class="head"><div class="ttl"><div><h1>My work</h1><p class="sub">${tab==='allm'?'Every @mention in comments, for administrators: who it was for, and whether they’ve read it.':'Plan tasks linked to records, for administrators: who has them, and when they’re due. Reassign them here.'}</p></div></div></div>
     ${myWorkTabs(tab,hasWf)}<div id="mw-p" role="tabpanel" aria-labelledby="mw-t-${tab}">${tab==='allm'?allwork.allMentionsHTML():allwork.allTasksHTML()}</div>`;
   if(tab==='mentions')return `<div class="head"><div class="ttl"><div><h1>My work</h1><p class="sub">Comments where someone mentioned you${hasWf?', and records waiting on you in a workflow':''}.</p></div></div></div>
     ${myWorkTabs(tab,hasWf)}<div id="mw-p" role="tabpanel" aria-labelledby="mw-t-mentions">${cmt.mentionsHTML()}</div>`;
@@ -2099,8 +2099,8 @@ async function saveRecord(o={}){
   try{if(rowsOut.length||removed.length)await saveRecordBundle(rec,rowsOut,removed);else await store.put('records',rec);}
   catch(e){console.error(e);if(!old)d.recordId=null;toast(e?.code==='permission-denied'?'You don’t have permission to save this record or one of its rows.':'Saving failed. Check your connection and try again.');return;}
   if(rowsOut.length||removed.length){const n=rowsOut.length+removed.length;setTimeout(()=>toast(`Saved with ${n} row change${n>1?'s':''}`),0);}
-  if(!old&&d._heldTasks?.length){const held=d._heldTasks;d._heldTasks=[]; // tasks added before the first save: to Cadence, linked to it now
-    tm.writeHeld(held,rec,form).then(bad=>{if(bad)toast(`Saved, but ${bad} of its ${held.length} task${held.length>1?'s':''} couldn’t be added to Cadence. Add ${bad>1?'them':'it'} again from the record.`,{duration:9000});else toast(held.length>1?`${held.length} tasks added to Cadence`:'Task added to Cadence');});}
+  if(!old&&d._heldTasks?.length){const held=d._heldTasks;d._heldTasks=[]; // tasks added before the first save: to Plan, linked to it now
+    tm.writeHeld(held,rec,form).then(bad=>{if(bad)toast(`Saved, but ${bad} of its ${held.length} task${held.length>1?'s':''} couldn’t be added to Plan. Add ${bad>1?'them':'it'} again from the record.`,{duration:9000});else toast(held.length>1?`${held.length} tasks added to Plan`:'Task added to Plan');});}
   const keep=o.stay?d.mode:null;d.dirty=false;d.errors={};d.recordId=id;d.copied=0;d.mode='read';if(keep)d.mode=keep; // “+ Add a task” saves a new record and carries on filling it in
   const wasNew=!view.recordId;view.recordId=id;if(wasNew)syncHash(false);toast('Saved');render();
   askChildRules(form,{...(old||{}),...rec,nums:old?.nums});
@@ -2215,7 +2215,7 @@ function sectionCards(f){
   const order=sectionOrder(f);
   const card=(k,i)=>{
     let badgeHTML,name,kind;
-    if(k===TASKS_KEY){badgeHTML=`<span class="badge" style="background:${COLORS[6]}" aria-hidden="true">T</span>`;name='Tasks';kind='Tasks linked from Cadence';}
+    if(k===TASKS_KEY){badgeHTML=`<span class="badge" style="background:${COLORS[6]}" aria-hidden="true">T</span>`;name='Tasks';kind='Tasks linked from Plan';}
     else{const cf=formById(k)||(f._newForms||[]).find(x=>x.id===k);const rel=(f.children||[]).find(c=>c.formId===k);if(!rel)return '';badgeHTML=cf?badge(cf):'<span class="badge">?</span>';name=cf?.name||'New sub-form';kind=rel.display==='grid'?'Sub-form, shown as a grid':'Child form, separate records';}
     return `<li class="scard"><button type="button" class="pgrip" data-pdrag="section" data-v="${esc(k)}" aria-label="Move ${esc(name)}: drag, or use the up and down arrow keys" title="Drag to move"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="8" cy="6" r="1.8"/><circle cx="16" cy="6" r="1.8"/><circle cx="8" cy="12" r="1.8"/><circle cx="16" cy="12" r="1.8"/><circle cx="8" cy="18" r="1.8"/><circle cx="16" cy="18" r="1.8"/></svg></button><span class="sgrip" aria-hidden="true">${i+1}</span>${badgeHTML}<div class="crow-m"><b>${esc(name)}</b><small>${esc(kind)}</small></div>
       ${k===TASKS_KEY?'':`<button type="button" class="btn sm ghost" data-act="tab" data-tab="relations">Relationships</button>`}
@@ -2376,7 +2376,7 @@ function viewFormEdit(){
       ${badgeProp(f)}
       <label class="prop full"><span>Email PDF: subject</span><input class="in" data-fprop="emailSubject" value="${esc(f.emailSubject||'')}" maxlength="200" placeholder="${esc(DEFAULT_SUBJECT)}"></label>
       <label class="prop full"><span>Email PDF: message</span><textarea class="in" data-fprop="emailMessage" rows="6" maxlength="10000" placeholder="${esc(DEFAULT_MESSAGE)}">${esc(f.emailMessage||'')}</textarea><small class="help">What <b>Email PDF</b> fills in; it can be changed before sending. Use {Field name} for any field on this form (for example {${esc((f.fields||[]).find(x=>x.type!=='heading')?.label||'Invoice #')}}), plus {Title}, {Item}, {Company}, {Sender} and {Date}. Leave empty for the standard wording shown.</small></label>
-      <div class="prop full"><span>Word templates</span><div class="xw-links"><button type="button" class="btn sm" data-act="wd-placeholders">Placeholders for this form (.docx)</button><a class="btn sm ghost" href="/word-template-sample.docx" download="Formwright quote template.docx">Sample template</a></div><small class="help">Every placeholder a Word template for this form can use, to copy into your own document${f.dirty?' (made from the form as it is on screen, so save it before using new fields)':''}. People add templates from <b>Export ▾ → Word templates…</b> on a record.</small></div>
+      <div class="prop full"><span>Word templates</span><div class="xw-links"><button type="button" class="btn sm" data-act="wd-placeholders">Placeholders for this form (.docx)</button><a class="btn sm ghost" href="/word-template-sample.docx" download="Wayholm Forms quote template.docx">Sample template</a></div><small class="help">Every placeholder a Word template for this form can use, to copy into your own document${f.dirty?' (made from the form as it is on screen, so save it before using new fields)':''}. People add templates from <b>Export ▾ → Word templates…</b> on a record.</small></div>
       <div class="prop"><span>Visibility</span><label class="switch"><input type="checkbox" data-fprop="showInSidebar" data-kind="bool"${f.showInSidebar?' checked':''}><span class="tr"></span><span>Show in sidebar</span></label><small class="help">Only forms switched on are listed in the sidebar. Hidden ones stay in the designer, under their parent records, and in Search forms and Ctrl K.</small></div>
     </div></div>
     ${f.isNew?'':`<section class="section"><div class="section-h"><h2>Delete form</h2></div><div class="panel"><div class="parentcard"><p class="grow help">Deletes the form and its ${recordsOf(f.id).length} records. Child records in other forms are kept.</p><button class="btn danger${ui.confirm==='form'?' armed':''}" data-act="del-form">${ui.confirm==='form'?'Tap again to delete':'Delete form'}</button></div></div></section>`}`;

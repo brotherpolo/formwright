@@ -36,7 +36,7 @@ export function viewAutomations() {
     <div class="actions"><button class="btn primary" data-act="am-new">+ New automation</button></div></div>
     ${err ? `<div class="panel am-warn" role="alert">${err === 'permission-denied' ? 'Automations need the latest Cadence security rules and functions. Deploy them from Cloud Shell (see the install steps).' : 'Couldn’t load automations. Check your connection.'}</div>` : ''}
     ${waitingHTML()}
-    ${list.length ? `<div class="panel flist">${cards}</div>` : `<div class="panel empty"><h2>No automations yet</h2><p>For example: when an invoice’s Status becomes Approved, create a Cadence task to send it; or 3 days before a project’s Due date, email its owner.</p><button class="btn primary" data-act="am-new">+ New automation</button></div>`}`;
+    ${list.length ? `<div class="panel flist">${cards}</div>` : `<div class="panel empty"><h2>No automations yet</h2><p>For example: when an invoice’s Status becomes Approved, create a Plan task to send it; or 3 days before a project’s Due date, email its owner.</p><button class="btn primary" data-act="am-new">+ New automation</button></div>`}`;
 }
 
 /* ---------- approve first: what's waiting for an OK ---------- */
@@ -160,7 +160,7 @@ function scheduleHTML(t0, form) {
     <p class="help">Each time, for each ${it} where the “Only if” below holds.</p>
     ${t.freq === 'day' ? '' : `<label class="switch"><input type="checkbox" data-am="theads"${t.headsUp ? ' checked' : ''}><span class="tr"></span><span>Email me the day before with what’s going out</span></label>`}
     <label class="switch"><input type="checkbox" data-am="tapprove"${t.approve ? ' checked' : ''}><span class="tr"></span><span>Approve first: give me a task to OK each one, instead of doing it straight away</span></label>
-    <p class="help">${t.approve ? 'Each one waits on its record (and at the top of Automations) with Send now and Don’t send.' : 'If an email can’t go (no address, or Gmail refuses it), the steps after it are skipped, so nothing is marked as sent when it wasn’t, and you get a Cadence task.'}</p>
+    <p class="help">${t.approve ? 'Each one waits on its record (and at the top of Automations) with Send now and Don’t send.' : 'If an email can’t go (no address, or Gmail refuses it), the steps after it are skipped, so nothing is marked as sent when it wasn’t, and you get a Plan task.'}</p>
   </div>`;
 }
 /** A change to the schedule: start from what's there, apply it, keep it tidy. */
@@ -215,7 +215,7 @@ function actHTML(x, ai, form) {
       <div class="am-row"><span class="am-lab">For</span><select class="in am-sel" ${at} data-ama="assign"><option value="owner"${x.assign === 'owner' ? ' selected' : ''}>the record’s owner</option><option value="actor"${x.assign === 'actor' ? ' selected' : ''}>whoever made the change</option><option value="person"${x.assign === 'person' ? ' selected' : ''}>a specific person</option></select>
         ${x.assign === 'person' ? `<select class="in am-sel" ${at} data-ama="person"><option value="">Pick someone…</option>${people().map((p) => `<option value="${p.id}"${p.id === x.person ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select>` : ''}
         <span class="am-lab">Due in</span><input class="in am-num" type="number" min="0" max="365" ${at} data-ama="dueDays" value="${esc(x.dueDays ?? '')}" placeholder="—" aria-label="Due in days"><span class="help">days (empty: no due date)</span></div>
-      <p class="help">The task links to the record. Whoever gets it needs Cadence switched on (Users) to see it.</p>`;
+      <p class="help">The task links to the record. Whoever gets it needs Plan switched on (Users) to see it.</p>`;
   } else if (x.do === 'email') {
     const to = x.to || {};
     const ef = fieldsOf(form, (g) => g.type === 'email');

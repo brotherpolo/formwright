@@ -65,7 +65,7 @@ test('who will be told', () => {
   assert.equal(andList(['A', 'B', 'C', 'D', 'E']), 'A, B and 3 others');
   const ms = [{ uid: 'a', name: 'Sam Lee' }, { uid: 'c', name: 'Kim' }];
   assert.equal(notifyLine(ms), 'Sam and Kim will get an email.');
-  assert.equal(notifyLine(ms, { task: true }), 'Sam and Kim will get an email and a Cadence task.');
+  assert.equal(notifyLine(ms, { task: true }), 'Sam and Kim will get an email and a Plan task.');
   assert.equal(notifyLine(ms, { off: new Set(['c']) }), 'Sam will get an email. Kim can’t see this record.');
   assert.equal(notifyLine([]), '');
 });

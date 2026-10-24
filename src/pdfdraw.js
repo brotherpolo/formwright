@@ -46,8 +46,8 @@ export async function drawPdf(L, model, imgs = new Map()) {
   const brandName = T(model.brand?.name || '');
   pdf.setTitle([T(model.formName), title].filter(Boolean).join(' - '));
   if (brandName) pdf.setAuthor(brandName);
-  pdf.setCreator('Formwright');
-  pdf.setProducer('Formwright');
+  pdf.setCreator('Wayholm Forms');
+  pdf.setProducer('Wayholm Forms');
 
   // pictures: embed each once; one that won't embed is printed as its name instead
   const pics = new Map();

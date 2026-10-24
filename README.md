@@ -1,6 +1,6 @@
-# Formwright
+# Wayholm Forms
 
-A form builder for phone and desktop, running on Firebase.
+*Formerly Formwright.* A form builder for phone and desktop, running on Firebase.
 
 - **Form designer** with 26 field types: text, long text, email, phone, website, location, whole number, decimal, currency, percent, rating, slider, calculation, date, time, date and time, yes/no, dropdown, single choice, multiple choice, file upload, photo, signature, color, link to record, and section heading.
   - Each form's row in the designer has **+ Add**, for adding a record to any form, including hidden ones that have no place in the sidebar. Saving returns to the designer.
@@ -18,6 +18,16 @@ Plain JavaScript modules, built with Vite. The only runtime dependency is the Fi
 Formwright runs on **Cadence's Firebase project (`tasks-2ae9d`)**, with the same accounts, and deploys to its own Hosting site. The security rules, indexes and Cloud Functions for both apps live in the Cadence folder and deploy from there. This repo deploys only its web pages.
 
 ---
+
+## The Wayholm brand
+
+Wayholm Forms (this app, formerly Formwright) and Wayholm Plan (formerly Cadence) are one family. The code folders, the Firebase project and every stored field keep their old names, so nothing about your data changes.
+
+- **Logo:** three stacked stones. The top stone is the app's colour: **squared, Lake blue (#2F5E9E) for Forms**; **round, Moss green (#4B7A3C) for Plan**. The family mark has an Ember (#C8643A) top stone.
+- **Appearance:** Wayholm is the default colour scheme; Indigo (the old colours), Spruce and Sand are still there to pick under Appearance.
+- **Colours:** Granite text (#1E2528), Sand background (#F5F1EA), Lichen for quiet text, each with a dark-mode partner. Pass, fail and overdue colours are unchanged.
+- **Fonts:** Bricolage Grotesque (logo, titles), Instrument Sans (text), JetBrains Mono (numbers).
+- **Icons:** app icons in the app's colour with cream stones (`icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png`, favicon).
 
 ## How permissions work
 

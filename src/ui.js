@@ -6,6 +6,8 @@ import { esc } from './util.js';
 export { esc, uid, clone, isEmpty } from './util.js';
 
 export const $ = (s) => document.querySelector(s);
+/** The Wayholm Forms logo: the stones and the name (the top stone takes the accent colour). */
+export const BRAND = '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 64 64"><ellipse class="st" cx="32" cy="50" rx="24" ry="8.6" transform="rotate(-3 32 50)"/><ellipse class="st" cx="30.5" cy="33.6" rx="16.5" ry="6.9" transform="rotate(5 30.5 33.6)"/><rect class="tp" x="26" y="10.5" width="14" height="13" rx="3.6" transform="rotate(-7 33 17)"/></svg></span><b>wayholm<span>forms</span></b>';
 
 export const COLORS = ['#3346c8', '#0f7b6c', '#b4531a', '#8a3fb8', '#b42367', '#3d6b1f', '#56607a', '#0b6aa2'];
 
@@ -68,19 +70,19 @@ export function toast(message, opts = {}) {
 }
 
 /* ---------- a page opened before an update ----------
-   Parts of Formwright load when first needed (Word templates, PDFs). After an update those files
+   Parts of Wayholm Forms load when first needed (Word templates, PDFs). After an update those files
    have new names, so a page left open from before can't load them: say so, and offer a reload. */
 let staleShown = false;
 export const isStaleImport = (e) => /dynamically imported module|importing a module script failed|error loading dynamically imported module|unable to preload css|failed to load module script/i.test(String((e && (e.message || e)) || ''));
 export function staleNotice() {
   if (staleShown) return;
   staleShown = true;
-  toast('Formwright was updated since this page opened. Reload to use the new version.', { action: 'Reload', onAction: () => location.reload(), duration: 60000 });
+  toast('Wayholm Forms was updated since this page opened. Reload to use the new version.', { action: 'Reload', onAction: () => location.reload(), duration: 60000 });
 }
 /** Load a part of Formwright; if the page is from before an update, explain instead of a vague error. */
 export async function lazy(load) {
   try { return await load(); } catch (e) {
-    if (isStaleImport(e)) { staleNotice(); const err = new Error('Formwright was updated since this page opened. Reload the page (pull down, or press Reload), then try again.'); err.stale = true; err.cause = e; throw err; }
+    if (isStaleImport(e)) { staleNotice(); const err = new Error('Wayholm Forms was updated since this page opened. Reload the page (pull down, or press Reload), then try again.'); err.stale = true; err.cause = e; throw err; }
     throw e;
   }
 }

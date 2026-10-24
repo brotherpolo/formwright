@@ -151,7 +151,7 @@ export function placeholderModel(form, ctx) {
   const d = ctx.now || new Date();
   return {
     title: `Placeholders for ${form.name || 'this form'}`,
-    intro: `Made by Formwright on ${d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })} from the ${form.name || ''} form as it is now. Copy any placeholder (the blue text) into your own Word document. Everything here is recognised when you add a template to ${form.name || 'this form'}. Options after the bar are suggestions; the sample template lists them all.`,
+    intro: `Made by Wayholm Forms on ${d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })} from the ${form.name || ''} form as it is now. Copy any placeholder (the blue text) into your own Word document. Everything here is recognised when you add a template to ${form.name || 'this form'}. Options after the bar are suggestions; the sample template lists them all.`,
     sections,
   };
 }

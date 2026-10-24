@@ -9,9 +9,9 @@
 const SHELL = 'fw-shell-v1', FONTS = 'fw-fonts-v1';
 const OFFLINE = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#3346c8">
-<title>Formwright</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.5 system-ui,sans-serif;background:#f3f4f7;color:#141826;text-align:center;padding:24px}
+<title>Wayholm Forms</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.5 system-ui,sans-serif;background:#f5f1ea;color:#1e2528;text-align:center;padding:24px}
 @media (prefers-color-scheme:dark){body{background:#0f1117;color:#e7e9f0}}b{display:block;font-size:1.25rem;margin-bottom:6px}</style></head>
-<body><div><b>You’re offline</b>Formwright hasn’t been opened on this device with a signal yet. Open it once with a connection, and after that it works offline.</div></body></html>`;
+<body><div><b>You’re offline</b>Wayholm Forms hasn’t been opened on this device with a signal yet. Open it once with a connection, and after that it works offline.</div></body></html>`;
 
 self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(syncShell()); });
 self.addEventListener('activate', (e) => e.waitUntil((async () => {

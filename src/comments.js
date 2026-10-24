@@ -147,7 +147,7 @@ function commentHTML(c, reply, rec) {
   return `<article class="cm-c${reply ? ' cm-r' : ''}${mine ? ' mine' : ''}${lit ? ' cm-flash' : ''}" id="cm-${esc(c.id)}">
     ${avatar(c.by, name, reply)}
     <div class="cm-b">
-      <div class="cm-h"><b>${esc(name)}</b><time datetime="${new Date(c.at || 0).toISOString()}" title="${esc(full)}">${esc(ago(c.at || 0))}</time>${c.editedAt ? `<span class="cm-ed" title="Edited ${esc(new Date(c.editedAt).toLocaleString())}">edited</span>` : ''}${c.task && (c.mentions || []).length ? '<span class="cm-tag" title="The people mentioned were also given a Cadence task">+ task</span>' : ''}</div>
+      <div class="cm-h"><b>${esc(name)}</b><time datetime="${new Date(c.at || 0).toISOString()}" title="${esc(full)}">${esc(ago(c.at || 0))}</time>${c.editedAt ? `<span class="cm-ed" title="Edited ${esc(new Date(c.editedAt).toLocaleString())}">edited</span>` : ''}${c.task && (c.mentions || []).length ? '<span class="cm-tag" title="The people mentioned were also given a Plan task">+ task</span>' : ''}</div>
       ${text}
       ${notes.map((x) => `<p class="cm-note">${esc(x)}</p>`).join('')}
       ${acts}
@@ -165,7 +165,7 @@ function composerHTML(rec) {
     ${parent ? `<div class="cm-replying">Replying to <b>${esc(nameOf(parent.by, parent.byName))}</b><button type="button" class="cm-lnk" data-cm="cancel-reply">Cancel</button></div>` : ''}
     <div class="cm-tawrap">${avatar(me(), myName())}<textarea class="in cm-ta" data-cm-ta="new" rows="${d.text ? 3 : 2}" maxlength="${MAX_TEXT}" placeholder="Write a comment. Type @ to mention someone (or a role)." aria-label="${parent ? 'Write a reply' : 'Write a comment'}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cm-pop-new"${busy ? ' disabled' : ''}>${esc(d.text)}</textarea><div class="cm-pop" id="cm-pop-new" role="listbox" aria-label="People" hidden></div></div>
     <div class="cm-foot">
-      ${tasks ? `<label class="cm-task"><input type="checkbox" data-cm-task${d.task ? ' checked' : ''}> Also give the people I mention a Cadence task</label>` : ''}
+      ${tasks ? `<label class="cm-task"><input type="checkbox" data-cm-task${d.task ? ' checked' : ''}> Also give the people I mention a Plan task</label>` : ''}
       <span class="cm-who" id="cm-who" role="status">${esc(whoLine(rec))}</span>
       <button type="button" class="btn primary" data-cm="post"${busy ? ' disabled' : ''}>${busy ? 'Posting…' : parent ? 'Reply' : 'Comment'}</button>
     </div>

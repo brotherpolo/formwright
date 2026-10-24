@@ -18,7 +18,7 @@ export function markSeen() { try { localStorage.setItem(SEEN, String(Date.now())
 /** Opening the page: what's new is marked New this visit, and the Settings card's count clears. */
 export function enterProblems() { P.since = seenAt(); P.confirm = ''; markSeen(); }
 
-const APPS = [['all', 'All'], ['formwright', 'Formwright'], ['cadence', 'Cadence'], ['server', 'Server']];
+const APPS = [['all', 'All'], ['formwright', 'Forms'], ['cadence', 'Plan'], ['server', 'Server']];
 const appName = (a) => (APPS.find((x) => x[0] === a) || [a, a])[1];
 const when = (t) => new Date(t).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 function ago(t, now = Date.now()) {
@@ -49,7 +49,7 @@ export function viewProblems() {
       ${open ? `<dl class="pb-det">${p.code ? `<dt>Code</dt><dd><code>${esc(p.code)}</code></dd>` : ''}<dt>Last</dt><dd>${esc(when(p.at))}${p.name ? ` · ${esc(p.name)}` : ''}</dd>${p.url ? `<dt>Page</dt><dd><code>${esc(p.url)}</code></dd>` : ''}${p.agent ? `<dt>Browser</dt><dd>${esc(p.agent)}</dd>` : ''}${p.detail ? `<dt>Details</dt><dd><pre>${esc(p.detail)}</pre></dd>` : ''}</dl>` : ''}
     </article>`;
   };
-  return `<div class="head"><div class="ttl"><div><h1>Problems</h1><p class="sub">What went wrong for people in Formwright and Cadence, and for the server’s own jobs (emails, automations, the nightly backup). Reports clear themselves after 30 days.</p></div></div></div>
+  return `<div class="head"><div class="ttl"><div><h1>Problems</h1><p class="sub">What went wrong for people in Forms and Plan, and for the server’s own jobs (emails, automations, the nightly backup). Reports clear themselves after 30 days.</p></div></div></div>
   <div class="panel pb-bk ${b.ok === true ? 'ok' : b.ok === false ? 'bad' : ''}" role="status"><span class="pb-dot" aria-hidden="true"></span><span>${esc(b.text)}</span></div>
   <div class="pb-bar"><div class="db-seg" role="group" aria-label="Show">${seg}</div><span class="grow"></span>
     <label class="switch pb-mail"><input type="checkbox" data-act-change="pb-email"${mine ? ' checked' : ''}><span class="tr"></span><span>Email me each morning when there are new ones</span></label>

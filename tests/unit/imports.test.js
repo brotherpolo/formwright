@@ -63,7 +63,7 @@ test('template columns: Record ID, parent, importable fields; required marked; s
   assert.deepEqual(dup.map((c) => c.header), ['Record ID', 'Name', 'name (2)']);
   const g = guideRows(projects, cols, ctx);
   assert.match(g.find((x) => x.col === 'Stage').what, /Scoping, In progress, Review, Done/);
-  assert.match(g.find((x) => x.col === 'Contact').what, /contact in Formwright/);
+  assert.match(g.find((x) => x.col === 'Contact').what, /contact in Wayholm Forms/);
 });
 
 test('dates, times and numbers in the forms people type them', () => {

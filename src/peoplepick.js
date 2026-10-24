@@ -33,7 +33,7 @@ export function pickerHTML(o) {
       ${roles.length ? `<div class="pk-sep pk-rh" role="presentation"${roles.every((p) => !pickMatch(p, q)) ? ' hidden' : ''}><span>Roles: anyone in it can do it</span></div>${roles.map((p) => opt(p, o.sel, q, null, 'role')).join('')}` : ''}
       <p class="pk-none help"${any ? ' hidden' : ''}>No one matches “<span>${esc(q)}</span>”.</p>
     </div>
-    ${blocked ? '<p class="help pk-foot">Greyed-out people need Cadence switched on (an administrator does that in Users), then to sign in to Formwright or Cadence once.</p>' : ''}
+    ${blocked ? '<p class="help pk-foot">Greyed-out people need Plan switched on (an administrator does that in Users), then to sign in to Forms or Plan once.</p>' : ''}
   </div>`;
 }
 

@@ -96,7 +96,7 @@ export async function writeHeld(tasks, rec, form) {
   const now = Date.now();
   const out = tasks.map((t) => ({ ...t, ...linkFor(rec, form, null), ...(t.checklistItem ? { checklistItem: t.checklistItem } : {}), createdAt: now, updatedAt: now }));
   try { await writeTasks(out); return 0; } catch (e) { console.warn('[formwright] tasks with the record', e); }
-  let bad = 0; // one at a time: the ones Cadence accepts still go in
+  let bad = 0; // one at a time: the ones Plan accepts still go in
   for (const t of out) { try { await writeTasks([t]); } catch (e) { console.error('[formwright] task', t.id, e); bad++; } }
   return bad;
 }
@@ -159,9 +159,9 @@ function paint() {
       ${own ? `<div class="tk-l tk-nodew"><span>On the map</span>
         <div class="tk-nodeline"><button type="button" class="tk-pill tk-pickn${node ? '' : ' tk-none'}" data-tk="nodes" aria-haspopup="listbox" aria-expanded="${M.nodeOpen}"${node ? ` style="--pc:${esc(node.hex)}"` : ''}><i></i>${esc(node ? node.title : d.nodeId ? 'Its node was deleted' : 'Link to a node')}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
           ${d.nodeId ? `<button type="button" class="ibtn" data-tk="node" data-v="" aria-label="Unlink from the map" title="Unlink">✕</button>` : ''}${node?.parent ? `<span class="help">in ${esc(node.parent)}</span>` : ''}</div>
-        ${M.nodeOpen ? `<div class="tk-nodes" role="listbox" aria-label="Your Cadence map"><input class="in" data-tki="nodeQ" value="${esc(M.nodeQ)}" placeholder="Search your map" aria-label="Search your map" autocomplete="off">
-          <div class="tk-nlist">${(M.nodes || []).length ? nodeOpts.map((n) => `<button type="button" role="option" class="tk-nopt${n.id === (d.nodeId || '') ? ' on' : ''}" aria-selected="${n.id === (d.nodeId || '')}" data-tk="node" data-v="${esc(n.id)}" style="padding-left:${10 + (q ? 0 : n.depth * 18)}px">${n.id ? pill(n.hex, n.title) : `<span class="tk-pill tk-none"><i></i>${esc(n.title)}</span>`}${n.id === (d.nodeId || '') ? '<span class="tk-check">✓</span>' : ''}</button>`).join('') : '<p class="note">Your Cadence map has no nodes yet.</p>'}</div></div>` : ''}
-        <small class="help">Your own Cadence map. Only you see this link.</small></div>` : ''}
+        ${M.nodeOpen ? `<div class="tk-nodes" role="listbox" aria-label="Your Plan map"><input class="in" data-tki="nodeQ" value="${esc(M.nodeQ)}" placeholder="Search your map" aria-label="Search your map" autocomplete="off">
+          <div class="tk-nlist">${(M.nodes || []).length ? nodeOpts.map((n) => `<button type="button" role="option" class="tk-nopt${n.id === (d.nodeId || '') ? ' on' : ''}" aria-selected="${n.id === (d.nodeId || '')}" data-tk="node" data-v="${esc(n.id)}" style="padding-left:${10 + (q ? 0 : n.depth * 18)}px">${n.id ? pill(n.hex, n.title) : `<span class="tk-pill tk-none"><i></i>${esc(n.title)}</span>`}${n.id === (d.nodeId || '') ? '<span class="tk-check">✓</span>' : ''}</button>`).join('') : '<p class="note">Your Plan map has no nodes yet.</p>'}</div></div>` : ''}
+        <small class="help">Your own Plan map. Only you see this link.</small></div>` : ''}
       <div class="tk-l"><span>Priority</span>${own ? `<div class="segs tk-lv" role="group" aria-label="Priority">${levels.map((l) => `<button type="button" class="${d.levelId === l.id ? 'on' : ''}" aria-pressed="${d.levelId === l.id}" data-tk="level" data-v="${esc(l.id)}"><i style="background:${esc(l.color)}"></i>${esc(l.name)}</button>`).join('')}</div>` : `<p class="tk-ro">${levels[0] ? pill(levels[0].color, levels[0].name) : 'None'}</p>`}</div>
       <div class="tk-l"><span>Checklist ${d.subtasks.length ? `<small class="help">${subsDone} of ${d.subtasks.length} done</small>` : ''}</span>
         <div class="tk-subs">${d.subtasks.map((s, i) => `<div class="tk-sub${s.done ? ' done' : ''}"><button type="button" class="tcheck${s.done ? ' on' : ''}" data-tk="sub-done" data-i="${i}" aria-pressed="${s.done}" aria-label="${s.done ? 'Not done' : 'Done'}: ${esc(s.title)}">✓</button><input class="tk-subt" data-tki="sub" data-i="${i}" value="${esc(s.title)}" aria-label="Step ${i + 1}" maxlength="500"><button type="button" class="ibtn" data-tk="sub-del" data-i="${i}" aria-label="Remove ${esc(s.title)}">✕</button></div>`).join('')}
@@ -177,7 +177,7 @@ function paint() {
       ${canDel ? `<button type="button" class="btn${M.armed ? ' danger armed' : ' ghost danger'}" data-tk="del"${dis}>${M.armed ? 'Tap again to delete' : 'Delete'}</button>` : ''}
       ${t ? `<button type="button" class="btn" data-tk="done"${dis}>${t.done ? 'Mark not done' : 'Mark done'}</button>` : ''}
       ${M.opts.unhold ? `<button type="button" class="btn ghost danger" data-tk="unhold"${dis}>Remove</button>` : ''}
-      ${H.cadenceUrl && !M.opts.hold ? `<a class="tk-cad" href="${esc(cadenceLink(H.cadenceUrl, t ? { task: t.id } : { addTaskFor: M.recordId }))}" target="cadence" rel="noopener">Open in Cadence ↗</a>` : ''}
+      ${H.cadenceUrl && !M.opts.hold ? `<a class="tk-cad" href="${esc(cadenceLink(H.cadenceUrl, t ? { task: t.id } : { addTaskFor: M.recordId }))}" target="cadence" rel="noopener">Open in Plan ↗</a>` : ''}
       <span class="grow"></span>
       <button type="button" class="btn ghost" data-tk="close"${dis}>Cancel</button>
       <button type="button" class="btn primary" data-tk="save"${dis}>${M.busy ? 'Saving…' : t ? 'Save changes' : 'Add task'}</button>
@@ -212,11 +212,11 @@ async function save() {
   if (M.newSub.trim()) { d.subtasks.push({ id: uid('s'), title: M.newSub.trim(), done: false }); M.newSub = ''; }
   const mine = me(), who = M.owner ? chosen() : null;
   if (M.owner && who && !who.me && !who.ok && who.uid !== M.task?.assigneeId) { M.err = `${who.name} can’t be given tasks yet.`; paint(); return; }
-  if (!M.task && M.opts.hold) { // the record isn't saved yet: the task is kept with it and goes to Cadence when it's saved
+  if (!M.task && M.opts.hold) { // the record isn't saved yet: the task is kept with it and goes to Plan when it's saved
     const t = newTaskDoc(M.opts.held?.id || uid('t'), d, mine, who && !who.me ? who : null, null, M.lists, Date.now());
     if (M.opts.checklistItem) t.checklistItem = String(M.opts.checklistItem).slice(0, 200);
     M.opts.hold(t);
-    H.toast(M.opts.held ? 'Task changed. It goes to Cadence when you save.' : 'Task added. It goes to Cadence when you save.');
+    H.toast(M.opts.held ? 'Task changed. It goes to Plan when you save.' : 'Task added. It goes to Plan when you save.');
     close(); return;
   }
   M.busy = true; M.err = ''; paint();
@@ -249,7 +249,7 @@ async function save() {
   } catch (e) {
     console.error('[formwright] task', e);
     M.busy = false;
-    M.err = e?.diag ? e.diag : e?.code === 'permission-denied' ? 'Cadence didn’t allow that. You may not have Cadence switched on, or the person you picked can’t be given tasks yet. If you use Brave or an ad blocker, turn it off for this site (Brave: the lion icon → Shields down) and try again.' : 'Saving didn’t work. Check your connection and try again.';
+    M.err = e?.diag ? e.diag : e?.code === 'permission-denied' ? 'Plan didn’t allow that. You may not have Plan switched on, or the person you picked can’t be given tasks yet. If you use Brave or an ad blocker, turn it off for this site (Brave: the lion icon → Shields down) and try again.' : 'Saving didn’t work. Check your connection and try again.';
     paint();
   }
 }
@@ -261,17 +261,17 @@ async function explainRefusal(t, who) {
   const reads = await taskCheckReads(t);
   console.warn('[formwright] task refused. What the rules read:', { task: t, ...reads });
   const err = (x) => !!(x && x.error);
-  if (err(reads.account)) return { msg: `Cadence didn’t allow that, and your own account couldn’t be read (${reads.account.error}). Sign out and sign in again. If you use Brave or an ad blocker, turn it off for this site.` };
+  if (err(reads.account)) return { msg: `Plan didn’t allow that, and your own account couldn’t be read (${reads.account.error}). Sign out and sign in again. If you use Brave or an ad blocker, turn it off for this site.` };
   const why = taskRefusal(me(), reads.account, t, err(reads.record) ? null : reads.record, err(reads.person) ? null : reads.person, { assignee: who?.name, roleMissing: !!t.assigneeRole && !(H.store.roles || []).some((r) => r.id === t.assigneeRole) });
-  if (why.length) return { msg: 'Cadence didn’t allow that. ' + why.join(' ') };
+  if (why.length) return { msg: 'Plan didn’t allow that. ' + why.join(' ') };
   if (t.typeSnap || t.levelSnap) {
     try { await writeTasks([{ ...t, typeSnap: null, levelSnap: null }]); console.warn('[formwright] task saved without its type/priority copy'); return { saved: true }; } catch (e) { /* not that */ }
   }
-  const self = { ...t, id: uid('t'), title: 'Formwright check (removed automatically)', assigneeId: null, assigneeName: null, assigneeEmail: null, members: [t.ownerId], typeSnap: null, levelSnap: null };
+  const self = { ...t, id: uid('t'), title: 'Wayholm Forms check (removed automatically)', assigneeId: null, assigneeName: null, assigneeEmail: null, members: [t.ownerId], typeSnap: null, levelSnap: null };
   const ref = `ref: ${String(t.ownerId).slice(0, 6)} → ${String(t.assigneeId || '').slice(0, 6)} ${t.assigneeEmail || ''}`;
-  if (t.assigneeId && (await probeTask(self))) return { msg: `Cadence refused giving this task to ${who?.name || 'that person'}, but accepts it as your own task, and their Cadence entry looks right from here. Please send a screenshot of this message to your administrator. (${ref})` };
-  if (t.recordId && (await probeTask({ ...self, recordId: null, formId: null, recordSnap: null }))) return { msg: `Cadence refused linking a task to this record, though your access looks right from here. Ask an administrator to press Recalculate access in Security groups, then try again. (${ref})` };
-  return { msg: `Cadence didn’t allow any task from you just now, though your account looks right from here. Sign out and sign in again, then try once more. (${ref})` };
+  if (t.assigneeId && (await probeTask(self))) return { msg: `Plan refused giving this task to ${who?.name || 'that person'}, but accepts it as your own task, and their Plan entry looks right from here. Please send a screenshot of this message to your administrator. (${ref})` };
+  if (t.recordId && (await probeTask({ ...self, recordId: null, formId: null, recordSnap: null }))) return { msg: `Plan refused linking a task to this record, though your access looks right from here. Ask an administrator to press Recalculate access in Security groups, then try again. (${ref})` };
+  return { msg: `Plan didn’t allow any task from you just now, though your account looks right from here. Sign out and sign in again, then try once more. (${ref})` };
 }
 
 export function onClick(e) {

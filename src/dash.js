@@ -548,7 +548,7 @@ function catalogHTML(kind, rows, openAct, empty) {
     <div class="ct-colwrap"><button type="button" class="btn sm" data-ct="pop" data-kind="${kind}" aria-expanded="${st.pop}">Columns</button>${pop}</div></div>`;
   if (!rows.length) return head + `<div class="panel"><p class="note">${empty}</p></div>`;
   const body = found.length ? found.map((r) => `<tr data-d="${openAct}" data-v="${esc(r.id)}"><th scope="row" class="ct-name"><button type="button" class="ct-open" data-d="${openAct}" data-v="${esc(r.id)}">${esc(r.name)}</button></th>${
-    cols.map((k) => { const c = r.cells[k] || {}; const lab = esc(colOf(k).label); return `<td data-label="${lab}"${colOf(k).num ? ' class="num"' : ''}>${k === 'home' && kind === 'dashes' ? (c.text ? `<button type="button" class="db-home on" data-d="sethome" data-v="" aria-pressed="true" title="Opens when you start Formwright">Home</button>` : `<button type="button" class="db-home" data-d="sethome" data-v="${esc(r.id)}" aria-pressed="false">Set as home</button>`) : c.text ? esc(c.text) : '<span class="ct-blank">—</span>'}</td>`; }).join('')}</tr>`).join('')
+    cols.map((k) => { const c = r.cells[k] || {}; const lab = esc(colOf(k).label); return `<td data-label="${lab}"${colOf(k).num ? ' class="num"' : ''}>${k === 'home' && kind === 'dashes' ? (c.text ? `<button type="button" class="db-home on" data-d="sethome" data-v="" aria-pressed="true" title="Opens when you start Wayholm Forms">Home</button>` : `<button type="button" class="db-home" data-d="sethome" data-v="${esc(r.id)}" aria-pressed="false">Set as home</button>`) : c.text ? esc(c.text) : '<span class="ct-blank">—</span>'}</td>`; }).join('')}</tr>`).join('')
     : `<tr><td colspan="${cols.length + 1}" class="ct-none">No ${noun}s match “${esc(st.q.trim())}”.</td></tr>`;
   return head + `<div class="panel ct-wrap"><table class="ct-tbl"><thead><tr>${th('name', 'Name')}${cols.map((k) => th(k, colOf(k).label)).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
@@ -770,7 +770,7 @@ export function viewDashboards() {
   const home = homeId();
   const rows = dashesVisible().map((x) => dashRow(x, home));
   return `
-  <div class="head"><div class="ttl"><div><h1>Dashboards</h1><p class="sub">Saved reports and notes on one page, with a period and filters across the top. Your home dashboard opens when you start Formwright.</p></div></div>
+  <div class="head"><div class="ttl"><div><h1>Dashboards</h1><p class="sub">Saved reports and notes on one page, with a period and filters across the top. Your home dashboard opens when you start Wayholm Forms.</p></div></div>
     <div class="actions"><button class="btn" data-d="nav-reports">Reports</button><button class="btn primary" data-d="newdash">+ New dashboard</button></div></div>
   ${catalogHTML('dashes', rows, 'opendash', 'No dashboards yet. Press <b>New dashboard</b>, then add reports to it.')}`;
 }
@@ -1094,7 +1094,7 @@ function linkPickerHTML(x) {
   const forms = ctx().forms.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
   const groups = linkChoices(env, forms);
   const have = new Set((x.tiles || []).filter((t) => t.link).map((t) => linkKey(t.link)));
-  return `<div class="panel db-picker db-lpick"><div class="db-ph"><b>Add a shortcut</b><span class="help">A small tile that opens part of Formwright. Resize it by its corner like any tile.</span></div>
+  return `<div class="panel db-picker db-lpick"><div class="db-ph"><b>Add a shortcut</b><span class="help">A small tile that opens part of Wayholm Forms. Resize it by its corner like any tile.</span></div>
     ${groups.map((g) => `<section><h3 class="db-lgh">${esc(g.title)}${g.admin ? ' <span class="chip warn">Only administrators see these</span>' : ''}</h3><div class="db-plist">${g.items.map((i) => `<button type="button" class="db-pick db-lp" data-d="addlink" data-v="${esc(i.key)}"${have.has(i.key) ? ' disabled' : ''}>${linkIcon(i)}<span><b>${esc(i.title)}</b><small>${esc(i.sub)}${have.has(i.key) ? ' · already here' : ''}</small></span></button>`).join('')}</div></section>`).join('')}</div>`;
 }
 const linkIcon = (i, big) => (i.form ? (i.glyph ? `<span class="db-lic plus" style="background:${esc(colorOf(i.form))}" aria-hidden="true">${esc(i.glyph)}</span>` : badge(i.form)) : `<span class="glyph navg db-lic" aria-hidden="true">${esc(i.glyph)}</span>`).replace('class="', `class="${big ? 'big ' : ''}`);
@@ -1257,7 +1257,7 @@ document.addEventListener('click', async (e) => {
     case 'addto': D.confirm = D.confirm === 'addto' ? null : 'addto'; repaint(); break;
     case 'addtodash': await addTile(v, d.id); D.confirm = null; repaint(); break;
     case 'addtonew': { D.confirm = null; const rid = d.id; const id = await newDashboard(); if (id) { D.edit.tiles = []; await addTile(id, rid); } break; }
-    case 'sethome': try { await setHomeDashboard(v); toast(v ? 'This dashboard now opens when you start Formwright' : 'Home dashboard cleared'); } catch (err) { toast('Couldn’t save that. Try again.'); } break;
+    case 'sethome': try { await setHomeDashboard(v); toast(v ? 'This dashboard now opens when you start Wayholm Forms' : 'Home dashboard cleared'); } catch (err) { toast('Couldn’t save that. Try again.'); } break;
     case 'newdash': newDashboard(); break;
     case 'editdash': { const x = dashById(D.did); if (!x) return; D.edit = { id: x.id, ...dashData(x), dirty: false }; D.edit.tiles = resolveCanvas(D.edit.tiles, null, !!D.edit.filters?.floatUp); D.picker = !(x.tiles || []).length; repaint(); break; }
     case 'canceledit': D.edit = null; D.picker = false; D.fv[D.did] = null; repaint(); break;

@@ -62,7 +62,7 @@ function paint() {
       <div class="dm-l"><span>People</span><div class="dm-list">${users.map((u) => `<label class="opt"><input type="checkbox" data-dmf="person" value="${esc(u.id)}"${d.to.people.includes(u.id) ? ' checked' : ''}>${esc(nameOf(u))}</label>`).join('') || '<p class="help">No one yet.</p>'}</div></div>
       ${roles.length ? `<div class="dm-l"><span>Roles <small class="help">everyone in them, at the time</small></span><div class="dm-list dm-roles">${roles.map((x) => `<label class="opt"><input type="checkbox" data-dmf="role" value="${esc(x.id)}"${d.to.roles.includes(x.id) ? ' checked' : ''}>${esc(x.name || 'Untitled role')}</label>`).join('')}</div></div>` : ''}
       <label class="dm-l"><span>Other email addresses</span><input class="in" data-dmf="addresses" value="${esc(d.to.addresses)}" placeholder="name@example.com, …" autocomplete="off"></label>
-      <p class="help dm-warn">Everyone it goes to sees these numbers, even for forms they can’t open in Formwright.</p>
+      <p class="help dm-warn">Everyone it goes to sees these numbers, even for forms they can’t open in Wayholm Forms.</p>
     </fieldset>
     ${last}
     ${M.err ? `<p class="err" role="alert">${esc(M.err)}</p>` : ''}

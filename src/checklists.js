@@ -10,7 +10,7 @@ import { writeXlsx, readSheets } from './xlsx.js';
 import { exportSheets, templateSheets, planImport, copyName } from './checklistio.js';
 import { BUILT_IN, isBuiltIn, MAX_ITEMS, MAX_OPTIONS, FAIL_MODES, starterSets, cleanSet, setIssues, cleanItems, checklistIssues, snapshotOf, usesSet, maxOf, SET_COLORS, setColor, scoreBand } from './checklistlogic.js';
 const FAIL_WHAT = { comment: 'Comment', photo: 'Photo', task: 'Task' };
-const TASK_HELP = '<p class="help cl-fhelp">Task <b>Offer</b>: a fail shows “+ Add a task” (Cadence). <b>Required</b>: each fail needs one before the record can be saved.</p>';
+const TASK_HELP = '<p class="help cl-fhelp">Task <b>Offer</b>: a fail shows “+ Add a task” (Plan). <b>Required</b>: each fail needs one before the record can be saved.</p>';
 
 let D = null; // { tab, sel, cl (draft), sets (draft), typeNew, typeRen, confirm, busy }
 const fresh = () => ({ tab: 'checklists', sel: null, it: null, fold: new Set(), setEdit: null, pq: { cat: null, q: '', filter: 'all', sel: null, draft: null }, ask: null, picker: null, migrated: false, cl: null, sets: null, typeNew: null, typeRen: null, confirm: null, busy: false, issues: [] });

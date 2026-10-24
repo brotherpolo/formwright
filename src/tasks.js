@@ -284,14 +284,14 @@ export function assignChoices(people, me, current) {
  */
 export function taskRefusal(me, account, task, record, person, names = {}) {
   const out = [];
-  if (!account) return ['Your Formwright account wasn’t found on the server. Sign out and sign in again.'];
+  if (!account) return ['Your Wayholm Forms account wasn’t found on the server. Sign out and sign in again.'];
   const admin = account.role === 'admin';
-  if (!admin && account.cadence !== true) out.push('Cadence isn’t switched on for you. An administrator can turn on “Can use Cadence” for you in Users.');
+  if (!admin && account.cadence !== true) out.push('Plan isn’t switched on for you. An administrator can turn on “Can use Plan” for you in Users.');
   if (task.ownerEmail && task.ownerEmail !== normEmail(me.email)) out.push(`Your sign-in email (${normEmail(me.email) || 'none'}) doesn’t match the one on the task (${task.ownerEmail}). Sign out and sign in again.`);
   if (task.assigneeId) {
     const who = names.assignee || task.assigneeName || task.assigneeEmail;
-    if (!person) out.push(`${who} isn’t in Cadence’s people list under ${task.assigneeEmail}. They need to open Cadence once while signed in with that address.`);
-    else if (person.uid !== task.assigneeId) out.push(`Cadence’s people list has ${task.assigneeEmail} on a different account (${String(person.uid || 'none').slice(0, 8)}…) from the ${who} you picked (${String(task.assigneeId).slice(0, 8)}…). They should open Cadence once to fix it.`);
+    if (!person) out.push(`${who} isn’t in Plan’s people list under ${task.assigneeEmail}. They need to open Plan once while signed in with that address.`);
+    else if (person.uid !== task.assigneeId) out.push(`Plan’s people list has ${task.assigneeEmail} on a different account (${String(person.uid || 'none').slice(0, 8)}…) from the ${who} you picked (${String(task.assigneeId).slice(0, 8)}…). They should open Plan once to fix it.`);
   }
   if (task.assigneeRole && names.roleMissing) out.push(`The role ${task.assigneeRoleName || ''} was deleted. Pick someone else, or another role.`.replace('  ', ' '));
   if (task.recordId) {

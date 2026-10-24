@@ -47,12 +47,13 @@ test('Ctrl K results: pages and forms before records; empty shows recent records
 test('scheme and density: stored per device, default removes the setting', () => {
   const st = new Map(); const storage = { getItem: (k) => st.get(k) ?? null, setItem: (k, v) => st.set(k, v), removeItem: (k) => st.delete(k) };
   const doc = { documentElement: { dataset: {} } };
-  assert.equal(readScheme(storage), 'indigo');
+  assert.equal(readScheme(storage), 'wayholm');
   assert.equal(applyScheme(doc, 'spruce', storage), 'spruce');
   assert.equal(doc.documentElement.dataset.scheme, 'spruce'); assert.equal(readScheme(storage), 'spruce');
-  applyScheme(doc, 'indigo', storage);
+  applyScheme(doc, 'wayholm', storage);
   assert.equal(doc.documentElement.dataset.scheme, undefined); assert.equal(st.has('fw.scheme'), false);
-  assert.equal(applyScheme(doc, 'nonsense', storage), 'indigo');
+  assert.equal(applyScheme(doc, 'nonsense', storage), 'wayholm');
+  assert.equal(applyScheme(doc, 'indigo', storage), 'indigo', 'the old colours are still there to pick');
   applyDensity(doc, 'compact', storage);
   assert.equal(doc.documentElement.dataset.density, 'compact'); assert.equal(readDensity(storage), 'compact');
 });

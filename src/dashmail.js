@@ -62,7 +62,7 @@ export function recipients(s, people, roleHolders = () => []) {
 /* ---------- the email ---------- */
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const INK = '#141826', MUTED = '#5a6174', LINE = '#e3e5ec', BAR = '#3346c8', SOFT = '#f3f4f7';
+const INK = '#1e2528', MUTED = '#625d53', LINE = '#e6e0d5', BAR = '#2f5e9e', SOFT = '#f5f1ea';
 const COLORS = ['#3346c8', '#0f7b6c', '#c2410c', '#8a55d6', '#d23f6e', '#0e8fa8', '#a16207', '#5a6174'];
 const td = (s, x = '') => `<td style="padding:6px 8px;border-bottom:1px solid ${LINE};font-size:13px;color:${INK};${x}">${s}</td>`;
 const th = (s, x = '') => `<th style="padding:6px 8px;border-bottom:2px solid ${LINE};font-size:12px;color:${MUTED};text-align:left;font-weight:600;${x}">${s}</th>`;
@@ -154,7 +154,7 @@ export function dashEmail(c, dash, reports, { now = Date.now(), link = '', sched
     text.push(`${r.name || 'Report'}: ${b.text}`);
   });
   if (!parts.length) parts.push(`<tr><td style="font-size:13px;color:${MUTED}">This dashboard has no reports yet.</td></tr>`);
-  const foot = `${schedule ? esc(scheduleText(schedule)) + '. ' : ''}Sent by Formwright${company ? ' for ' + esc(String(company).replace(/\.$/, '')) : ''}. An administrator can change who gets this on the dashboard (Email schedule).`;
+  const foot = `${schedule ? esc(scheduleText(schedule)) + '. ' : ''}Sent by Wayholm Forms${company ? ' for ' + esc(String(company).replace(/\.$/, '')) : ''}. An administrator can change who gets this on the dashboard (Email schedule).`;
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:${SOFT}"><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:${SOFT}"><tr><td align="center" style="padding:20px 12px">
     <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:680px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
       <tr><td style="padding:0 0 14px"><div style="font-size:22px;font-weight:700;color:${INK}">${esc(dash.name || 'Dashboard')}</div><div style="font-size:13px;color:${MUTED};margin-top:2px">${esc(pName)} · ${esc(date)}${link ? ` · <a href="${esc(link)}" style="color:${BAR}">Open the dashboard</a>` : ''}</div></td></tr>

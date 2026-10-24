@@ -122,7 +122,7 @@ export function notifyLine(mentions, { task = false, off = new Set() } = {}) {
   const no = (mentions || []).filter((m) => off.has(m.uid));
   const bits = [];
   const nm = (m) => (isRoleId(m.uid) ? `everyone in ${m.name}` : first(m.name));
-  if (ok.length) bits.push(`${andList(ok.map(nm))} will get an email${task ? ' and a Cadence task' : ''}`);
+  if (ok.length) bits.push(`${andList(ok.map(nm))} will get an email${task ? ' and a Plan task' : ''}`);
   if (no.length) bits.push(`${andList(no.map((m) => first(m.name)))} can’t see this record`);
   return bits.join('. ') + (bits.length ? '.' : '');
 }

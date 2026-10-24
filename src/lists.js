@@ -545,7 +545,7 @@ function confirmDialog(form, selRecs, editable) {
     <div class="lv-facts">
       ${skipped ? `<p class="lv-fact warn">${plural(skipped, form)} you can’t edit will be skipped.</p>` : ''}
       ${kids ? `<p class="lv-fact">${kids} child record${kids === 1 ? ' belongs' : 's belong'} to these. ${kids === 1 ? 'It stays' : 'They stay'}, without a parent.</p>` : ''}
-      <p class="lv-fact">Cadence tasks linked to these keep their link, marked as removed.</p>
+      <p class="lv-fact">Plan tasks linked to these keep their link, marked as removed.</p>
       <p class="lv-fact">You’ll have a few seconds to undo.</p>
     </div>
     <div class="lv-dlgacts"><button class="btn" type="button" data-lv="del-cancel">Cancel</button><button class="btn lv-delfill" type="button" data-lv="del-go" id="lv-del-go">Delete ${plural(editable.length, form)}</button></div>

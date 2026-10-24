@@ -152,7 +152,7 @@ export function formatValue(val, opts = [], R = {}) {
       continue;
     }
     if (lo === 'plain') { blocks = null; continue; }
-    (R.warnings || (R.warnings = new Set())).add(`“${o}” isn’t an option Formwright knows`);
+    (R.warnings || (R.warnings = new Set())).add(`“${o}” isn’t an option Wayholm Forms knows`);
   }
   if (!String(text).trim() && !(blocks && blocks.some((b) => b.runs.some((r) => r.s.trim())))) return { text: orText ?? '', blocks: null };
   return { text, blocks };
@@ -744,7 +744,7 @@ export async function checkDocx(bytes, schema) {
         if (t.k === 'val') note(`{${t.raw}}`, sc.has(t.name), sc.has(t.name) ? '' : `No field called “${t.name}”`);
         else if (t.k === 'calc') { const e = sc.formula(t.expr); note(`{${t.raw}}`, !e, e || ''); }
         else if (t.k === 'img') { const ok = sc.image(t.name); note(`{${t.raw}}`, ok, ok ? '' : `No photo, signature or image upload called “${t.name}”`); }
-        if (t.k !== 'if' && t.k !== 'each') (t.opts || []).forEach((o) => { if (!OPT_OK(o, t.k)) note(`{${t.raw}}`, false, `“${o}” isn’t an option Formwright knows`); });
+        if (t.k !== 'if' && t.k !== 'each') (t.opts || []).forEach((o) => { if (!OPT_OK(o, t.k)) note(`{${t.raw}}`, false, `“${o}” isn’t an option Wayholm Forms knows`); });
         continue;
       }
       walk(n.kids, sc);
