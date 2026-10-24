@@ -6,6 +6,7 @@ import './checklists.css';
 import { store, checklistVersion } from './store.js';
 import { esc } from './ui.js';
 import { holderName } from './tasks.js';
+import { failFrom, questionStats } from './cltrend.js';
 import { visibleItems, summarize, missing, isFail, answered, answerText, rowsOf, cleanValue, isBlankValue, maxOf } from './checklistlogic.js';
 
 let H = { draftFor: () => null, markDirty: () => {}, repaint: () => {}, formOf: () => null, upload: null, dateText: (d) => d, toast: () => {},
@@ -26,6 +27,36 @@ export function snapFor(f, v) {
   const cur = store.checklists.find((c) => c.id === id);
   if (!cur || !cur.snap) return { state: store.checklistsReady ? 'missing' : 'loading' };
   return { snap: cur.snap, clId: id };
+}
+
+/** The checklist a field uses now (its latest version), or null: for listing its questions. */
+export const latestSnap = (f) => (f && f.checklist ? snapFor(f, null).snap || null : null);
+
+/** Fail rates per question over the last 12 weeks, from every record this person can see (cltrend.js). */
+export function questionTrends(records = store.records, formById = (id) => store.forms.find((f) => f.id === id)) {
+  return questionStats(records, { formById, failOf: failTester() });
+}
+/** failOf(questionId, answer, value) → true | false | null: from the version filled in on, else the question's answer set. */
+export function failTester() {
+  const sets = new Map(store.answerSets.map((x) => [x.id, x])), pool = new Map(store.checklistQuestions.map((q) => [q.id, q]));
+  const setOf = (q) => sets.get(pool.get(q)?.set) || null;
+  const tests = new Map();
+  return (q, ans, v) => {
+    const k = v.cl + '@' + v.ver;
+    if (!tests.has(k)) tests.set(k, failFrom(v.cl && v.ver ? checklistVersion(v.cl, v.ver) || null : null, setOf));
+    return tests.get(k)(q, ans);
+  };
+}
+/** Did this question fail on this record (any of its Checklist fields)? */
+export function failedOn(rec, q, form, failOf = failTester()) {
+  return (form?.fields || []).some((f) => { const v = f.type === 'checklist' && rec.values?.[f.id]; return !!(v && v.a && q in v.a && failOf(q, v.a[q], v)); });
+}
+/** A question's words: the pool's, else from a checklist that has it. */
+export function questionLabel(q) {
+  const p = store.checklistQuestions.find((x) => x.id === q);
+  if (p) return p.label;
+  for (const c of store.checklists) { const it = (c.items || []).find((x) => x.id === q); if (it) return it.label; }
+  return 'A deleted question';
 }
 
 /** Before saving: tidy every Checklist field's value (only showing answers, its summary). Returns the values. */

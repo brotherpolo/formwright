@@ -5,7 +5,7 @@
 //   brand: { name, logoKey }            company name and logo (Settings → PDF exports)
 //   accent: '#3346c8'                   the form's colour
 //   formName, title, meta: [string], parent: string|null
-//   items: [fieldItem…]                 from pdfdoc.fieldItem; image/signature items carry imgKey
+//   items: [fieldItem…]                 from pdfdoc.fieldItem (or checklistItem); image/signature items, and a checklist's photos, carry imgKey
 //   sections: [{ title, count, cols:[{label,num}], rows:[[text]], total:[text]|null, empty }]
 //   stamp: 'Exported 14 Oct 2026, 9:01 PM'
 // }
@@ -195,9 +195,94 @@ export async function drawPdf(L, model, imgs = new Map()) {
     return { h: labH + lines.length * VALH, lines, labH, font, drawLab, draw: (x, top) => { drawLab(x, top); lines.forEach((ln, i) => text(ln, x, top - labH - VAL - i * VALH + 1, font, VAL, INK)); } };
   }
 
+  /* ---------- a checklist: its score and result, then every answer as a table ---------- */
+  const RED = rgb(0.706, 0.137, 0.208), GREEN = rgb(0.294, 0.478, 0.235), WHITE = rgb(1, 1, 1);
+  function drawChecklist(it) {
+    const S = 9, LH = 11.5, PX = 5, PY = 4.5, TH = 34, TW = 46, GAP = 4;
+    ensure(LABH + 34 + 60);
+    text(one(it.label, F, LAB, CW), M, y - LAB, F, LAB, MUTE);
+    y -= LABH + 4;
+    const by = y - 15;
+    let x = M;
+    const big = T([it.score, it.pct].filter(Boolean).join('  ·  '));
+    if (big) { text(big, x, by, B, 16, INK); x += B.widthOfTextAtSize(big, 16) + 12; }
+    if (it.result) {
+      const pill = T(it.result === 'pass' ? 'PASS' : it.critical ? 'FAIL · A CRITICAL ITEM FAILED' : 'FAIL');
+      const pw = B.widthOfTextAtSize(pill, 8) + 14;
+      page.drawRectangle({ x, y: by - 4, width: pw, height: 16, color: it.result === 'pass' ? GREEN : RED });
+      text(pill, x + 7, by + 1, B, 8, WHITE);
+    }
+    const ans = T(it.answered || '');
+    text(ans, M + CW - F.widthOfTextAtSize(ans, 9), by, F, 9, MUTE);
+    y = by - 16;
+    const hasScore = (it.rows || []).some((r) => r.score);
+    const widths = (hasScore ? [0.35, 0.15, 0.1, 0.4] : [0.39, 0.17, 0, 0.44]).map((w) => w * CW);
+    const xs = widths.reduce((a, w, i) => (a.push(i ? a[i - 1] + widths[i - 1] : M), a), []);
+    const inner = (i) => Math.max(8, widths[i] - PX * 2);
+    const wrap = (s, i, font, size = S) => (s ? wrapText(T(s), inner(i), widthOf(font, size)) : []);
+    const headH = LH + PY * 2;
+    const drawHead = () => {
+      page.drawRectangle({ x: M, y: y - headH, width: CW, height: headH, color: FAINT });
+      ['Question', 'Answer', hasScore ? 'Score' : '', 'Comment, photos and tasks'].forEach((h, i) => {
+        if (!h) return;
+        const hw = B.widthOfTextAtSize(h, 8);
+        text(h, i === 2 ? xs[i] + widths[i] - PX - hw : xs[i] + PX, y - PY - 8, B, 8, MUTE);
+      });
+      y -= headH;
+      rule(y, MUTE, M, CW, 0.6);
+    };
+    const flow = (h) => { if (h > room()) { newPage(); text(one(T(it.label) + ' (continued)', B, 9, CW), M, y, B, 9, MUTE); y -= 10; drawHead(); } };
+    drawHead();
+    (it.rows || []).forEach((r) => {
+      if (r.section != null) {
+        const h = LH + PY * 2;
+        flow(h + LH * 2 + PY * 2); // a section stays with its first question
+        page.drawRectangle({ x: M, y: y - h, width: CW, height: h, color: FAINT });
+        text(one(r.section, B, S, CW - PX * 2), M + PX, y - PY - S + 1, B, S, INK);
+        y -= h;
+        rule(y);
+        return;
+      }
+      const q = wrap(r.label, 0, F), a = wrap(r.answer, 1, r.fail ? B : F), c = wrap(r.comment, 3, F);
+      const tasks = (r.tasks || []).flatMap((t) => wrap('Task: ' + t, 3, I));
+      const thumbs = (r.photos || []).map((p) => ({ p, pic: p.imgKey ? pics.get(p.imgKey) : null }));
+      const per = Math.max(1, Math.floor((inner(3) + GAP) / (TW + GAP)));
+      const shown = thumbs.filter((t) => t.pic), lost = thumbs.filter((t) => !t.pic).flatMap((t) => wrap(t.p.name + ' (photo not included)', 3, I));
+      const photoH = shown.length ? Math.ceil(shown.length / per) * (TH + GAP) : 0;
+      const qh = q.length * LH + (r.critical ? LH : 0);
+      const nh = c.length * LH + (photoH ? photoH + (c.length ? 3 : 0) : 0) + (lost.length + tasks.length) * LH;
+      const h = Math.max(qh, a.length * LH, LH, nh) + PY * 2;
+      flow(h);
+      const top = y - PY;
+      q.forEach((ln, i) => text(ln, xs[0] + PX, top - S - i * LH + 1, F, S, INK));
+      if (r.critical) text('CRITICAL', xs[0] + PX, top - S - q.length * LH + 1, B, 7, RED);
+      a.forEach((ln, i) => text(ln, xs[1] + PX, top - S - i * LH + 1, r.fail ? B : F, S, r.fail ? RED : INK));
+      if (hasScore && r.score) { const sc = T(r.score), sw = F.widthOfTextAtSize(sc, S); text(sc, xs[2] + widths[2] - PX - sw, top - S + 1, F, S, MUTE); }
+      let ny = top;
+      c.forEach((ln) => { text(ln, xs[3] + PX, ny - S + 1, F, S, INK); ny -= LH; });
+      if (shown.length) {
+        if (c.length) ny -= 3;
+        shown.forEach((t, i) => {
+          const col = i % per, rowi = Math.floor(i / per);
+          const fit = fitBox(t.pic.width, t.pic.height, TW, TH, 1);
+          const px = xs[3] + PX + col * (TW + GAP), py = ny - rowi * (TH + GAP) - TH;
+          page.drawRectangle({ x: px, y: py, width: TW, height: TH, color: FAINT });
+          page.drawImage(t.pic, { x: px + (TW - fit.w) / 2, y: py + (TH - fit.h) / 2, width: fit.w, height: fit.h });
+        });
+        ny -= photoH;
+      }
+      lost.forEach((ln) => { text(ln, xs[3] + PX, ny - S + 1, I, S, MUTE); ny -= LH; });
+      tasks.forEach((ln) => { text(ln, xs[3] + PX, ny - S + 1, I, S, ACC); ny -= LH; });
+      y -= h;
+      rule(y);
+    });
+    y -= ROWGAP + 6;
+  }
+
   const halfW = (CW - GUTTER) / 2;
   fieldRows(model.items || []).forEach((row) => {
     if (row.heading) { heading(row.heading.label, '', row.heading.help); return; }
+    if (row.cells.length === 1 && row.cells[0].kind === 'checklist') { drawChecklist(row.cells[0]); return; }
     const w = row.cells.length === 2 || row.cells[0].width === 'half' ? halfW : CW;
     const cs = row.cells.map((it) => cell(it, w));
     const h = Math.max(...cs.map((c) => c.h));

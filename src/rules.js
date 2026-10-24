@@ -19,6 +19,7 @@
 //     rules that depend on it are worked out again until nothing changes.
 import { shownName } from './fieldnames.js';
 import { headingOf } from './foldlogic.js';
+import { clField } from './clfields.js';
 
 export const ACTIONS = [
   { key: 'hide', label: 'Hide' },
@@ -163,7 +164,7 @@ export function evaluate(form, get) {
   let st = null;
   for (let pass = 0; pass < 6; pass++) {
     const look = (c) => {
-      if (!c.src || c.src === 'self') { const f = byId.get(c.field); if (!f) return null; return { f, v: blank.has(f.id) ? null : get('self', c.field)?.v }; }
+      if (!c.src || c.src === 'self') { const f = byId.get(c.field) || clField(form, c.field); if (!f) return null; return { f, v: blank.has(f.id) ? null : get('self', c.field)?.v }; }
       return get(c.src, c.field);
     };
     st = once(rules, fields, byId, under, look);
@@ -271,7 +272,7 @@ export function checkRules(form, ctx) {
     cs.forEach((c) => {
       if (!c.field) return;
       const pf = c.src && c.src !== 'self' ? ctx.parentFields?.get(c.src) : null;
-      const f = !c.src || c.src === 'self' ? fmap.get(c.field) : pf?.fields?.find((x) => x.id === c.field);
+      const f = !c.src || c.src === 'self' ? fmap.get(c.field) || clField(form, c.field) : pf?.fields?.find((x) => x.id === c.field) || clField(pf, c.field);
       if (!f) { out.push({ ruleId: r.id, text: `${n} uses a field that no longer exists. That condition never holds.` }); return; }
       const o = opOf(f, c.op);
       if (!o) { out.push({ ruleId: r.id, text: `${n}: pick how to compare ${f.label}.` }); return; }
@@ -308,7 +309,7 @@ export function checkRules(form, ctx) {
 /** "Status is Closed", "Job › Type is any of Repair, Install" */
 export function condText(c, ctx) {
   const pf = c.src && c.src !== 'self' ? ctx.parentFields?.get(c.src) : null;
-  const f = !c.src || c.src === 'self' ? (ctx.form?.fields || []).find((x) => x.id === c.field) : pf?.fields?.find((x) => x.id === c.field);
+  const f = !c.src || c.src === 'self' ? (ctx.form?.fields || []).find((x) => x.id === c.field) || clField(ctx.form, c.field) : pf?.fields?.find((x) => x.id === c.field) || clField(pf, c.field);
   if (!f) return 'a field that no longer exists';
   const o = opOf(f, c.op);
   const who = pf ? `${pf.name} › ${f.label}` : shownName(ctx.form, f);
@@ -332,7 +333,7 @@ export function ruleText(rule, ctx) {
 export function pruneRules(form, { targets, parentFields } = {}) {
   const tmap = new Map((targets || []).map((t) => [t.key, t]));
   const fids = new Set((form?.fields || []).map((f) => f.id));
-  const okCond = (c) => !c.field || ((!c.src || c.src === 'self') ? fids.has(c.field) : !!parentFields?.get(c.src)?.fields?.some((f) => f.id === c.field));
+  const okCond = (c) => !c.field || ((!c.src || c.src === 'self') ? fids.has(c.field) || !!clField(form, c.field) : !!parentFields?.get(c.src)?.fields?.some((f) => f.id === c.field) || !!clField(parentFields?.get(c.src), c.field));
   return (form?.rules || []).map((r) => ({
     ...r,
     name: String(r.name || '').trim().slice(0, 60) || undefined,

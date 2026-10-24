@@ -1,6 +1,7 @@
 // Automations: the wording and the checks. Pure functions (no DOM, no Firebase), unit-tested.
 // The server runs them (Cadence functions/automate.js); autos.js is the editor.
 import { condText } from './rules.js';
+import { clField, withClFields } from './clfields.js';
 import { scheduleText, scheduleProblems } from './autosched.js';
 
 export const TRIGGERS = [
@@ -42,7 +43,7 @@ export function blankAct(kind) {
 /** "When an Invoice changes Status to Approved" */
 export function triggerText(a, form) {
   const t = a.trigger || {}, it = itemOf(form).toLowerCase();
-  const field = (id) => (form?.fields || []).find((f) => f.id === id);
+  const field = (id) => (form?.fields || []).find((f) => f.id === id) || clField(form, id);
   if (t.type === 'created') return `When ${an(it)} is created`;
   if (t.type === 'emailed') return `When ${an(it)} is emailed`;
   if (t.type === 'schedule') return `${scheduleText(t)}, for each ${it}${t.approve ? ' (after you OK it)' : ''}`;
@@ -60,7 +61,7 @@ export function triggerText(a, form) {
 
 /** The whole automation as a sentence, for the list. */
 export function autoText(a, ctx) {
-  const form = ctx.formById(a.formId);
+  const form0 = ctx.formById(a.formId), form = ctx.snapOf ? withClFields(form0, { snapOf: ctx.snapOf }) : form0; // questions read by name
   const parentFields = new Map((ctx.parentsOf ? ctx.parentsOf(a.formId) : []).map((p) => [p.id, { name: p.name, fields: p.fields || [] }]));
   const conds = (a.conds || []).map((c) => (c.group ? '(' + (c.conds || []).filter((x) => x.field).map((x) => condText(x, { form, parentFields })).join(c.join === 'any' ? ' or ' : ' and ') + ')' : c.field ? condText(c, { form, parentFields }) : '')).filter((x) => x && x !== '()');
   const acts = (a.acts || []).map((x) => actText(x, form, ctx)).filter(Boolean);
@@ -90,7 +91,7 @@ export function checkAutomation(a, form, ctx = {}) {
   const out = [];
   if (!String(a.name || '').trim()) out.push('Give it a name.');
   if (!form) { out.push('Pick a form.'); return out; }
-  const has = (f, id) => (f?.fields || []).some((g) => g.id === id);
+  const has = (f, id) => (f?.fields || []).some((g) => g.id === id) || !!clField(f, id);
   const t = a.trigger || {};
   if (t.type === 'date' && !has(form, t.dateField)) out.push('Pick the date field it waits for.');
   if (t.type === 'changed' && t.field && !has(form, t.field)) out.push('The field it watches no longer exists.');

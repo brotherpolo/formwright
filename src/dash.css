@@ -538,3 +538,17 @@ button.db-li:hover{background:var(--accent-soft)}
 @media (max-width:700px){.db-cmode{width:100%}.db-cmode .db-lab{width:100%}.db-cmode .db-seg{flex:1}.db-cmode .db-seg button{flex:1 1 auto;justify-content:center;padding:0 10px;white-space:nowrap}}
 .db-filters .db-share{margin-left:auto}
 @media (max-width:700px){.db-filters .db-share{margin-left:0;width:100%;justify-content:center}}
+
+/* Failed questions: each checklist question's fail rate over 12 weeks */
+.db-clq{display:flex;flex-direction:column;gap:2px;overflow:auto;max-height:100%}
+.db-clqr{display:grid;grid-template-columns:minmax(0,1fr) minmax(60px,110px) 52px 76px;gap:10px;align-items:center;width:100%;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;font-size:13px;color:var(--fg);text-align:left;padding:7px 4px;cursor:pointer;border-radius:6px}
+.db-clqr:hover{background:var(--sunk)}
+.db-clql{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.db-clqs{width:100%;height:24px}
+.db-clqs path{fill:none;stroke:var(--k-amber,#b7791f);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.db-clqs path.up{stroke:var(--danger)}.db-clqs path.down{stroke:var(--ok)}
+.db-clqv{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.db-clqt{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;text-align:center;white-space:nowrap;background:var(--sunk);color:var(--muted)}
+.db-clqt.up{background:var(--danger-soft);color:var(--danger)}
+.db-clqt.down{background:var(--ok-soft);color:var(--ok)}
+@container (max-width:420px){.db-clqr{grid-template-columns:minmax(0,1fr) 46px 64px}.db-clqs{display:none}}

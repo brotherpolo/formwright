@@ -17,6 +17,7 @@
 
 import { startOf, nextOf, parseLocal } from './cal.js';
 import { shownName } from './fieldnames.js';
+import { clFields, fieldOrCl, clValue } from './clfields.js';
 export const GRID = 12;
 export const WIDTHS = [3, 4, 6, 8, 9, 12];
 export const MAX_ROWS = 4;
@@ -40,7 +41,7 @@ export function titleFieldOf(form) {
 const ASSIGNEE = { id: '_assignee', label: 'Person responsible', type: 'owner', system: true };
 export function reportFields(form) {
   const own = (form.fields || []).filter((f) => !['heading', 'instructions', 'signature'].includes(f.type));
-  return own.concat(SYSTEM, form.workflow?.on && (form.workflow.stages || []).length ? [ASSIGNEE] : []);
+  return own.concat(clFields(form, { report: true }), SYSTEM, form.workflow?.on && (form.workflow.stages || []).length ? [ASSIGNEE] : []);
 }
 
 export function fieldOf(ctx, ref) {
@@ -94,8 +95,9 @@ export function valueOf(ctx, rec, ref) {
   if (ref.id === '_owner') return r.ownerId;
   if (ref.id === '_assignee') return r.assignee || null;
   const form = ctx.formById(ref.form);
-  const f = form && (form.fields || []).find((x) => x.id === ref.id);
+  const f = form && fieldOrCl(form, ref.id);
   if (!f) return undefined;
+  if (f.virt) return clValue(f, r.values?.[f.virt.of]); // a checklist's Score, %, Result, Pass rate…
   if (f.type === 'formula' || f.type === 'lookup' || f.type === 'rollup') {
     const saved = r.values && r.values[f.id];
     if (saved !== undefined && saved !== null && saved !== '') return saved;

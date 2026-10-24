@@ -6,6 +6,8 @@ import { FREQS, WEEKDAYS, MONTHS, NTHS, DEFAULT_HOUR, normalize, hourText, nextR
 import { esc, uid, clone, toast, badge, itemName } from './ui.js';
 import { opsFor, opOf } from './rules.js';
 import { condsHTML, rulesClick, rulesChange, rulesCtx } from './rulesui.js';
+import { withClFields, clField } from './clfields.js';
+import { latestSnap } from './checklistui.js';
 import { TRIGGERS, ACTS, SET_MODES, NO_SET, MAX_ACTS, blankAutomation, blankAct, autoText, triggerText, checkAutomation } from './autologic.js';
 import { isLayout } from './fixedlogic.js';
 
@@ -15,7 +17,7 @@ export function initAutos(helpers) { H = { ...H, ...helpers }; }
 const AM = { id: null, draft: null, dirty: false, busy: false, armed: false, problems: null, runs: null, runsBusy: false, test: { recordId: '', busy: false, out: null, err: null }, leaveArmed: false, prev: { busy: false, out: null, err: null }, deciding: {} };
 const people = () => [...store.users].map((u) => ({ id: u.id, name: store.profiles[u.id]?.displayName || u.displayName || (u.email || '').split('@')[0] || 'Unnamed', email: u.email || '' })).sort((a, b) => a.name.localeCompare(b.name));
 const personName = (id) => people().find((p) => p.id === id)?.name || 'someone';
-const ctxText = { formById: (id) => H.formById(id), parentsOf: (id) => H.parentsOf(id), person: personName, role: (id) => (store.roles || []).find((r) => r.id === id)?.name || 'a removed role' };
+const ctxText = { formById: (id) => H.formById(id), snapOf: latestSnap, parentsOf: (id) => H.parentsOf(id), person: personName, role: (id) => (store.roles || []).find((r) => r.id === id)?.name || 'a removed role' };
 const when = (t) => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const fieldsOf = (f, pred = () => true) => (f?.fields || []).filter((x) => !isLayout(x) && pred(x));
 
@@ -110,8 +112,9 @@ function triggerHTML(a, form) {
   const sel = `<select class="in am-sel" data-am="ttype" aria-label="When">${TRIGGERS.map((x) => `<option value="${x.key}"${x.key === t.type ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select>`;
   let more = '';
   if (t.type === 'changed') {
-    const f = fieldsOf(form).find((x) => x.id === t.field);
-    more = `<div class="am-row"><span class="am-lab">Which field</span><select class="in am-sel" data-am="tfield"><option value="">Any field</option>${fieldsOf(form, (x) => !['formula'].includes(x.type)).map((x) => `<option value="${x.id}"${x.id === t.field ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select>
+    const wf = withClFields(form, { snapOf: latestSnap }); // a checklist's Score, %, Result and answers too
+    const f = fieldsOf(wf).find((x) => x.id === t.field) || clField(form, t.field);
+    more = `<div class="am-row"><span class="am-lab">Which field</span><select class="in am-sel" data-am="tfield"><option value="">Any field</option>${fieldsOf(wf, (x) => !['formula'].includes(x.type)).map((x) => `<option value="${x.id}"${x.id === t.field ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select>
       ${f ? `<select class="in am-sel" data-am="top" aria-label="Changes to"><option value="">changes to anything</option>${opsFor(f).map((o) => `<option value="${o.key}"${o.key === t.op ? ' selected' : ''}>becomes: ${esc(o.label)}</option>`).join('')}</select>${t.op && opOf(f, t.op)?.value ? valueControl(f, t.value, 'data-am="tval"') : ''}` : ''}</div>`;
   } else if (t.type === 'date') {
     const ds = fieldsOf(form, (x) => x.type === 'date' || x.type === 'datetime');
@@ -291,7 +294,7 @@ function previewHTML() {
 
 /* ---------- editing ---------- */
 const act = (el) => AM.draft?.acts?.[+el.dataset.a];
-const field = (f, id) => fieldsOf(f).find((x) => x.id === id);
+const field = (f, id) => fieldsOf(f).find((x) => x.id === id) || clField(f, id, latestSnap);
 function parseVal(f, el) {
   if (!f) return el.value;
   if (f.type === 'checkbox') return el.value === 'true';

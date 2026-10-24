@@ -88,7 +88,8 @@ test('the saved value: only what shows, comments only for fails, with its summar
   assert.equal(v.n, undefined, 'a comment on a pass isn’t kept');
   assert.equal(v.cl, 'cl1');
   assert.equal(v.ver, 3);
-  assert.deepEqual(v.s, { score: 5, max: 6, pct: 83.3, answered: 4, total: 4, result: 'pass' });
+  assert.deepEqual(v.s, { score: 5, max: 6, pct: 83.3, answered: 4, total: 4, result: 'pass', critical: false });
+  assert.equal(v.l.i1, 'Pass', 'the words of a choice answer are kept, for the server');
   assert.equal(summaryText(v), '5 / 6 · 83.3% · Pass · 4 of 4 answered');
   const f = cleanValue(snap, { a: { i1: FAIL }, n: { i1: ' Boxes ' }, p: { i1: [{ name: 'a.jpg' }] } }, 'cl1');
   assert.equal(f.n.i1, 'Boxes');

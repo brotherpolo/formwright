@@ -7,9 +7,10 @@
 //   kit.rulesFor(form, rec) → rules.evaluate state · kit.look(form, rec)(cond) for automation conditions
 //   kit.pdfModel(form, rec, { stamp }) → the model pdfdraw.js draws
 import { FX } from '../formulas.js';
-import { fieldItem } from '../pdfdoc.js';
+import { fieldItem, checklistItem } from '../pdfdoc.js';
 import { filesText, fileNames, fileLines } from '../filelist.js';
 import { summaryText } from '../checklistlogic.js';
+import { clValue, clField } from '../clfields.js';
 import { withFixed, isFixed, defaultFor, isLayout } from '../fixedlogic.js';
 import { lookupValue, lookupRecord, lookupTarget, shownField, withLookups } from '../lookuplogic.js';
 import { rollupValue, rollupOf, recordIndex } from '../rolluplogic.js';
@@ -133,6 +134,7 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
     });
   }
   function valOf(f, rec, form) {
+    if (f.virt) return clValue(f, rec.values?.[f.virt.of]); // a checklist's Score, %, Result or an answer (clfields.js)
     if (f.id === STAGE_FIELD) return stageName(form || formById(rec.formId), rec);
     if (f.type === 'autonumber') return rec.nums?.[f.id] ?? null;
     if (isFixed(f)) return defaultFor(f, new Date(), timeZone);
@@ -156,9 +158,9 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
     const byId = new Map((withStageField(form).fields || []).map((f) => [f.id, f]));
     const p = parent !== undefined ? parent : rec.parentId ? recById(rec.parentId) : null;
     return (src, fid) => {
-      if (src === 'self') { const f = byId.get(fid); return f ? { f, v: valOf(f, rec, form) } : null; }
+      if (src === 'self') { const f = byId.get(fid) || clField(form, fid); return f ? { f, v: valOf(f, rec, form) } : null; }
       if (!p || p.formId !== src) return null;
-      const pf = formById(src); const f = withStageField(pf)?.fields?.find((x) => x.id === fid);
+      const pf = formById(src); const f = withStageField(pf)?.fields?.find((x) => x.id === fid) || clField(pf, fid);
       return f ? { f, v: valOf(f, p, pf) } : null;
     };
   }
@@ -167,16 +169,19 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
   function look(form, rec) {
     const g = getter(form, rec);
     return (c) => {
-      if (!c.src || c.src === 'self') { const f = (withStageField(form).fields || []).find((x) => x.id === c.field); return f ? { f, v: valOf(f, rec, form) } : null; }
+      if (!c.src || c.src === 'self') { const f = (withStageField(form).fields || []).find((x) => x.id === c.field) || clField(form, c.field); return f ? { f, v: valOf(f, rec, form) } : null; }
       return g(c.src, c.field);
     };
   }
 
   /** The PDF model (as pdfdraw.js draws it), with the form's default columns. */
-  function pdfModel(form, rec, { stamp = '', userName = (id) => '' } = {}) {
+  // snapOf(field, value) → the checklist version a Checklist value was filled in on (for its answer table);
+  // tasksFor(fieldId, itemId) → the Plan tasks raised from that question
+  function pdfModel(form, rec, { stamp = '', userName = (id) => '', snapOf = null, tasksFor = null } = {}) {
     const rs = rulesFor(form, rec), sv = stageView(form, rec.stage); // what the rules and the record's stage hide is left out
     const items = (form.fields || []).filter((f) => f.type !== 'instructions' && !rs.hiddenFields.has(f.id) && !rs.hidden.has('f:' + f.id) && !sv.hide.has(f.id) && !sv.keys.has('f:' + f.id)).map((f) => {
       const v = f.type === 'heading' || rs.cleared.has(f.id) ? null : valOf(f, rec, form);
+      if (f.type === 'checklist' && v && snapOf) { const ci = checklistItem(f, v, snapOf(f, v), { dateText: (d) => fmt({ type: 'date' }, d), tasksFor: tasksFor ? (id) => tasksFor(f.id, id) : null }); if (ci) return ci; }
       const it = fieldItem(f, v, f.type === 'heading' ? '' : f.type === 'rating' ? (isEmpty(v) ? '' : `${v} of ${f.max || 5}`) : f.type === 'attachments' ? fileLines(v) : text(form, { ...rec, values: { ...rec.values, [f.id]: v } }, f), f.type === 'textarea' && v != null && !f.plain ? richBlocks(rec.values, f.id) : null);
       return it;
     });

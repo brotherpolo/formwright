@@ -5,6 +5,8 @@
 import { store, saveChecklistType, deleteChecklistType, saveAnswerSets, deleteAnswerSet, saveChecklist, deleteChecklist, savePoolWork } from './store.js';
 import { cleanQuestion, questionIssues, copyOf, changesMeaning, usedBy, poolMatch, syncItems, planSave, forkItem, planMigration, remapItems, searchPool } from './poollogic.js';
 import { renderMain, go } from './app.js';
+import { questionTrends } from './checklistui.js';
+import { sparkPath, WEEKS } from './cltrend.js';
 import { esc, uid, toast } from './ui.js';
 import { writeXlsx, readSheets } from './xlsx.js';
 import { exportSheets, templateSheets, planImport, copyName } from './checklistio.js';
@@ -683,6 +685,37 @@ function pickerView() {
     <div class="cl-foot"><span class="cl-grow"></span><button type="button" class="btn ghost" data-act="cl-pk-cancel">Cancel</button><button type="button" class="btn primary" data-act="cl-pk-go"${P.sel.size ? '' : ' disabled'}>Add ${P.sel.size} question${P.sel.size === 1 ? '' : 's'}</button></div></div>`;
 }
 
+/* ---------- fail rates, last 12 weeks (cltrend.js) ---------- */
+
+// worked out once per change of records or checklists, not on every keystroke
+let TR = { key: '', stats: new Map() };
+function trends() {
+  const key = [store.records.length, store.records.reduce((m, r) => Math.max(m, r.updatedAt || 0), 0), store.checklists.length, Object.keys(store.clVersions || {}).length, store.answerSets.length].join('|');
+  if (TR.key !== key) TR = { key, stats: questionTrends() };
+  return TR.stats;
+}
+const TREND = { rising: ['▲ rising', 'up'], steady: ['steady', 'flat'], falling: ['▼ falling', 'down'] };
+const trendChip = (t) => (TREND[t] ? `<span class="cl-tr ${TREND[t][1]}">${TREND[t][0]}</span>` : '');
+const spark = (s, w, h, cls) => { const d = s ? sparkPath(s.weeks, w, h) : ''; return `<svg class="${cls}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="${h - 1}" x2="${w}" y2="${h - 1}" class="cl-spb"/>${d ? `<path d="${d}" class="cl-spl${s.trend === 'rising' ? ' up' : s.trend === 'falling' ? ' down' : ''}"/>` : ''}</svg>`; };
+/** The list's Fails column: a little line and this stretch's fail rate. */
+function failCell(s) {
+  if (!s || !s.asked) return '<span class="cl-pqf none">No answers yet</span>';
+  return `<span class="cl-pqf" title="${esc(`${s.failed} of ${s.asked} answers failed in the last ${WEEKS} weeks`)}">${spark(s, 60, 18, 'cl-spk')}<b>${fmtRate(s.rate)}</b>${trendChip(s.trend)}</span>`;
+}
+const fmtRate = (r) => (r == null ? '–' : (Number.isInteger(r) ? r : r.toFixed(1)) + '%');
+/** In the question's panel: its fail rate week by week, and the records where it failed. */
+function failBox(s) {
+  const lab = `<span class="cl-lab">Fails, last ${WEEKS} weeks</span>`;
+  if (!s || !s.asked) return `<div>${lab}<p class="help">No records have answered it in the last ${WEEKS} weeks.</p></div>`;
+  const hits = s.hits.slice(0, 12);
+  const when = (t) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `<div class="cl-fbox">${lab}<div class="cl-fhead"><b>${fmtRate(s.rate)}</b><span>${s.failed} of ${s.asked} answer${s.asked === 1 ? '' : 's'} failed</span>${trendChip(s.trend)}</div>
+    ${spark(s, 300, 44, 'cl-spbig')}
+    <div class="cl-fax" aria-hidden="true"><span>${when(s.weeks[0].from)}</span><span>this week</span></div>
+    ${hits.length ? `<span class="cl-lab">Where it failed</span><div class="cl-uses">${hits.map((h) => { const f = store.forms.find((x) => x.id === h.rec.formId); return `<button type="button" class="cl-use" data-act="cl-pq-rec" data-id="${esc(h.rec.id)}" data-f="${esc(h.rec.formId)}"><span>${esc(recName(h.rec, f))}</span><small>${esc((f?.name || '') + ' · ' + when(h.rec.createdAt))}</small></button>`; }).join('')}${s.hits.length > hits.length ? `<p class="help">and ${s.hits.length - hits.length} more.</p>` : ''}</div>` : '<p class="help">It hasn’t failed. Good.</p>'}</div>`;
+}
+const recName = (r, f) => { const t = (f?.fields || []).find((x) => x.id === f.titleField) || (f?.fields || []).find((x) => x.type === 'text'); const v = t && r.values?.[t.id]; return v ? String(v) : 'Untitled ' + (f?.itemName || 'record').toLowerCase(); };
+
 /** Settings › Checklists › Questions. */
 function poolTab() {
   const P = D.pq, pool = store.checklistQuestions;
@@ -697,17 +730,19 @@ function poolTab() {
     <button type="button" class="cl-cat2 c-none${P.cat === '' ? ' on' : ''}" data-act="cl-pq-cat" data-v=""><i></i><span>No category</span><small>${count('')}</small></button>
     ${P.catNew != null ? `<div class="cl-catedit"><input class="in" id="cl-catname" value="${esc(P.catNew)}" maxlength="60" placeholder="e.g. Fire" aria-label="New category name"><span class="cl-catbtns"><button type="button" class="btn sm primary" data-act="cl-cat-save">Add</button><button type="button" class="btn sm ghost" data-act="cl-cat-cancel">Cancel</button></span></div>` : `<button type="button" class="btn sm cl-catadd" data-act="cl-cat-new">+ Category</button>`}</nav>`;
   const uses = new Map(pool.map((q) => [q.id, usedBy(q.id, store.checklists)]));
+  const st = trends();
   let list = searchPool(pool, P.q, { catId: P.cat, limit: 2000 });
   if (P.filter === 'unused') list = list.filter((q) => !uses.get(q.id).length);
   if (P.filter === 'multi') list = list.filter((q) => uses.get(q.id).length >= 2);
+  if (P.filter === 'failed') list = list.filter((q) => st.get(q.id)?.failed).sort((a, b) => st.get(b.id).rate - st.get(a.id).rate || st.get(b.id).failed - st.get(a.id).failed);
   const fchip = (v, l) => `<button type="button" class="cl-fchip${P.filter === v ? ' on' : ''}" data-act="cl-pq-filter" data-v="${v}">${l}</button>`;
   const row = (q) => {
     const c = catOf(q.catId), n = uses.get(q.id).length;
-    return `<button type="button" class="cl-pqr${P.sel === q.id ? ' sel' : ''}" data-act="cl-pq-pick" data-id="${esc(q.id)}"><span class="cl-pqt"><b>${esc(q.label)}</b>${q.help ? `<small>${esc(q.help)}</small>` : ''}</span><span>${c ? `<span class="cl-cat c-${catColor(c.id)}">${esc(c.name)}</span>` : '<span class="help">—</span>'}</span>${answerChip(q.set)}<span class="cl-pqu${n ? '' : ' none'}">${n ? `in <b>${n}</b> checklist${n === 1 ? '' : 's'}` : 'Not used yet'}</span></button>`;
+    return `<button type="button" class="cl-pqr${P.sel === q.id ? ' sel' : ''}" data-act="cl-pq-pick" data-id="${esc(q.id)}"><span class="cl-pqt"><b>${esc(q.label)}</b>${q.help ? `<small>${esc(q.help)}</small>` : ''}</span><span>${c ? `<span class="cl-cat c-${catColor(c.id)}">${esc(c.name)}</span>` : '<span class="help">—</span>'}</span>${answerChip(q.set)}${failCell(st.get(q.id))}<span class="cl-pqu${n ? '' : ' none'}">${n ? `in <b>${n}</b> checklist${n === 1 ? '' : 's'}` : 'Not used yet'}</span></button>`;
   };
-  const listHTML = `<div class="panel cl-pql"><div class="cl-pqbar"><input class="in" id="cl-pq-q" value="${esc(P.q)}" placeholder="Search questions" aria-label="Search questions" autocomplete="off">${fchip('all', 'All')}${fchip('unused', 'Not used')}${fchip('multi', 'Used in 2+')}<button type="button" class="btn sm primary" data-act="cl-pq-new">+ Question</button></div>
-    <div class="cl-pqh" aria-hidden="true"><span>Question</span><span>Category</span><span>Answers</span><span>Used in</span></div>
-    <div class="cl-pqrows">${list.map(row).join('') || `<p class="help cl-none">${pool.length ? 'No questions match.' : 'No questions yet. Add one here, or add questions to a checklist: they come into the pool.'}</p>`}</div></div>`;
+  const listHTML = `<div class="panel cl-pql"><div class="cl-pqbar"><input class="in" id="cl-pq-q" value="${esc(P.q)}" placeholder="Search questions" aria-label="Search questions" autocomplete="off">${fchip('all', 'All')}${fchip('unused', 'Not used')}${fchip('multi', 'Used in 2+')}${fchip('failed', 'Most failed')}<button type="button" class="btn sm primary" data-act="cl-pq-new">+ Question</button></div>
+    <div class="cl-pqh" aria-hidden="true"><span>Question</span><span>Category</span><span>Answers</span><span>Fails · ${WEEKS} weeks</span><span>Used in</span></div>
+    <div class="cl-pqrows">${list.map(row).join('') || `<p class="help cl-none">${P.filter === 'failed' && pool.length ? `Nothing has failed in the last ${WEEKS} weeks.` : pool.length ? 'No questions match.' : 'No questions yet. Add one here, or add questions to a checklist: they come into the pool.'}</p>`}</div></div>`;
   return `<div class="cl-cq"><div class="cl-pool${P.draft ? ' has-insp' : ''}">${cats}${listHTML}${P.draft ? questionPanel() : ''}</div></div>`;
 }
 function questionPanel() {
@@ -721,6 +756,7 @@ function questionPanel() {
     <div><label class="cl-lab" for="cl-pq-cat">Category</label>${catSelect(d.catId || '', 'id="cl-pq-cat" data-pqc="cat"')}</div>
     <div><span class="cl-lab">Answers</span><div class="cl-setpick">${store.answerSets.map((y) => `<button type="button" class="cl-sp c-${colorOfSet(y)}${y.id === d.set ? ' on' : ''}" aria-pressed="${y.id === d.set}" data-act="cl-pq-set" data-v="${esc(y.id)}"><i class="cl-sw"></i><span>${esc(y.name)}</span><span class="cl-mini">${(y.options || []).slice(0, 5).map((o) => `<em class="b-${scoreBand(o, y.options)}">${o.score ?? '–'}</em>`).join('')}</span></button>`).join('')}<div class="cl-builtins">${BUILT_IN.map(([k, l]) => `<button type="button" class="${d.set === k ? 'on' : ''}" aria-pressed="${d.set === k}" data-act="cl-pq-set" data-v="${k}">${BUILT_ICON[k]} ${l}</button>`).join('')}</div></div></div>
     ${canFail ? `<div class="cl-failbox"><span class="cl-lab">When the answer is a fail</span><div class="cl-frow">💬 Comment ${seg('comment')}</div><div class="cl-frow">📷 Photo ${seg('photo')}</div><div class="cl-frow">✅ Task ${seg('task')}</div>${TASK_HELP}</div>` : ''}
+    ${isNew ? '' : failBox(trends().get(d.id))}
     <div><span class="cl-lab">${users.length ? `Used in ${users.length} checklist${users.length === 1 ? '' : 's'}` : 'Not in a checklist yet'}</span>${users.length ? `<div class="cl-uses">${users.map((c) => { const x = c.items.find((y) => y.id === d.id); return `<button type="button" class="cl-use" data-act="cl-pq-open" data-id="${esc(c.id)}"><span>${esc(c.name)}</span><span>${x?.required ? '<span class="cl-b req">Required</span>' : ''}${x?.critical ? '<span class="cl-b crit">▲ Critical</span>' : ''}${!x?.required && !x?.critical ? '<small>optional</small>' : ''}</span></button>`; }).join('')}</div>` : '<p class="help">Add it to a checklist from that checklist’s “Add a question…” or ☰ From the pool.</p>'}</div>
     ${P.issues?.length ? `<div class="cl-issues" role="alert"><ul>${P.issues.map((m) => `<li>${esc(m)}</li>`).join('')}</ul></div>` : ''}
     <div class="cl-foot"><span class="cl-grow"></span>${d.dirty ? '<button type="button" class="btn ghost" data-act="cl-pq-discard">Discard</button>' : ''}<button type="button" class="btn primary" data-act="cl-pq-save"${d.dirty && !D.busy ? '' : ' disabled'}>${D.busy ? 'Saving…' : isNew ? 'Add to the pool' : 'Save question'}</button></div>
@@ -764,6 +800,7 @@ async function poolClick(a, el) {
     case 'cl-pq-pick': if (P.draft?.dirty && P.draft.id !== el.dataset.id) { toast('Save or discard the question you’re changing first.'); return true; } openQuestion(el.dataset.id); renderMain(); if (!drawerMode()) setTimeout(() => document.querySelector(`[data-act="cl-pq-pick"][data-id="${CSS.escape(el.dataset.id)}"]`)?.focus(), 0); else setTimeout(() => document.getElementById('cl-pq-label')?.focus(), 0); return true;
     case 'cl-pq-new': if (P.draft?.dirty) { toast('Save or discard the question you’re changing first.'); return true; } P.sel = null; P.issues = []; P.draft = { id: 'q' + uid(), label: '', help: '', set: store.answerSets[0]?.id || 'text', onFail: { comment: '', photo: '', task: '' }, catId: P.cat || '', dirty: true }; renderMain(); setTimeout(() => document.getElementById('cl-pq-label')?.focus(), 0); return true;
     case 'cl-pq-close': if (P.draft?.dirty) { toast('Save or discard your changes first.'); return true; } P.draft = null; P.sel = null; renderMain(); return true;
+    case 'cl-pq-rec': { if (isDirty()) { toast('Save or discard the question first.'); return true; } go({ name: 'record', formId: el.dataset.f, recordId: el.dataset.id }); return true; }
     case 'cl-pq-discard': if (store.checklistQuestions.some((q) => q.id === P.draft.id)) openQuestion(P.draft.id); else P.draft = null; renderMain(); return true;
     case 'cl-pq-save': await saveQuestion(); return true;
     case 'cl-pq-set': P.draft.set = el.dataset.v; { const s = store.answerSets.find((y) => y.id === el.dataset.v); if (!s || !s.options.some((o) => o.fail)) P.draft.onFail = { comment: '', photo: '', task: '' }; } P.draft.dirty = true; renderMain(); return true;

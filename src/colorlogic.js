@@ -12,6 +12,7 @@ import { opsFor, testCond, kindOf, isBlank } from './rules.js';
 import { shownField } from './lookuplogic.js';
 import { rollupOf } from './rolluplogic.js';
 import { addDays } from './layoutlogic.js';
+import { clFields } from './clfields.js';
 
 export const TINTS = [['red', 'Red'], ['amber', 'Amber'], ['green', 'Green'], ['blue', 'Blue'], ['purple', 'Purple'], ['grey', 'Grey']];
 const TINT = new Set(TINTS.map((t) => t[0]));
@@ -53,6 +54,7 @@ export function colorFields(form, formById, stage = null) {
     if (!f || kindOf(f) === 'other') return;
     out.push({ id: x.id, label: x.label || 'Untitled field', f });
   });
+  clFields(form).forEach((x) => out.push({ id: x.id, label: x.label, f: x })); // each checklist's Score, %, Result, Critical fail
   if (stage) out.push({ id: stage.id, label: stage.label || 'Stage', f: stage });
   return out;
 }

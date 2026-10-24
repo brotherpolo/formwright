@@ -19,6 +19,7 @@ import { richBlocks, cellRichHTML } from './richtext.js';
 import { titleFieldOf } from './reportlogic.js';
 import { isReadOnly } from './fixedlogic.js';
 import { cleanColors, colorsDoc } from './colorlogic.js';
+import { fieldOrCl, partFieldsOf, clValue, scoreText } from './clfields.js';
 
 export const NOCOL = new Set(['heading', 'instructions', 'signature']);
 export const NUMERIC = new Set(['number', 'decimal', 'currency', 'percent', 'range', 'rating']);
@@ -37,7 +38,7 @@ export const defaultViewId = (formId) => DEFAULT_PREFIX + formId;
 export const isDefaultViewId = (id) => typeof id === 'string' && id.startsWith(DEFAULT_PREFIX);
 
 const fieldsOf = (form) => (form?.fields || []).filter((f) => f.type !== 'heading' && f.type !== 'instructions');
-const fieldIn = (form, id) => (form?.fields || []).find((f) => f.id === id) || null;
+const fieldIn = (form, id) => fieldOrCl(form, id); // a checklist's Score, %, Result… too (clfields.js)
 const isNumField = (f) => !!f && (NUMERIC.has(f.type) || (f.type === 'formula' && f.format !== 'text'));
 
 /** The options a choice field offers for filtering or setting. */
@@ -57,7 +58,10 @@ export function columnCatalog(ctx) {
   const own = form.name || 'This form';
   fieldsOf(form)
     .filter((f) => !NOCOL.has(f.type) && f.id !== titleField?.id)
-    .forEach((f) => out.push({ key: 'f:' + f.id, label: shownName(form, f), group: own + ' fields', src: f.type === 'formula' ? 'Calculation' : 'Field', num: isNumField(f), field: f, sum: SUMMABLE.has(f.type) || (f.type === 'formula' && ['number', 'decimal', 'currency'].includes(f.format)) }));
+    .forEach((f) => {
+      out.push({ key: 'f:' + f.id, label: shownName(form, f), group: own + ' fields', src: f.type === 'formula' ? 'Calculation' : 'Field', num: isNumField(f), field: f, sum: SUMMABLE.has(f.type) || (f.type === 'formula' && ['number', 'decimal', 'currency'].includes(f.format)) });
+      if (f.type === 'checklist') partFieldsOf(f).forEach((p) => out.push({ key: 'f:' + p.id, label: p.label, group: own + ' fields', src: 'Checklist', num: isNumField(p), field: p }));
+    });
   const parents = ctx.parents || [];
   if (parents.length) {
     out.push({ key: 'parent', label: 'Belongs to', group: 'Parent record', src: 'Parent', num: false });
@@ -178,7 +182,7 @@ export function cellOf(key, rec, h) {
     const f = fieldIn(h.form, key.slice(2));
     if (!f) return { text: '', sort: null, num: false };
     const v = h.valOf(f, rec, h.form);
-    const text = oneLine(f, h.fmt(f, v));
+    const text = f.virt?.part === 'score' ? scoreText(rec.values?.[f.virt.of]) : oneLine(f, h.fmt(f, v));
     return { text, sort: relSort(f, v, h) ?? sortValueOf(f, v, text), num: isNumField(f), field: f, value: v, long: f.type === 'textarea', rich: richOf(f, rec) };
   }
   if (key.startsWith('p:')) {
@@ -216,7 +220,7 @@ export function filterRecords(recs, filters, form) {
   const fs = active.map(([fid, vals]) => [fieldIn(form, fid), new Set(vals)]).filter(([f]) => f);
   return recs.filter((r) =>
     fs.every(([f, set]) => {
-      const v = r.values?.[f.id];
+      const v = f.virt ? clValue(f, r.values?.[f.virt.of]) : r.values?.[f.id];
       if (f.type === 'checkbox') return set.has(v ? 'Yes' : 'No');
       if (f.type === 'multiselect') return Array.isArray(v) && v.some((x) => set.has(String(x)));
       return v != null && set.has(String(v));

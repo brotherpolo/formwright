@@ -26,6 +26,8 @@ import { headerButton as dmHeader } from './dashmailui.js';
 import { spanName, axisName, yearOf } from './cal.js';
 import { shareUrl, decodeShare } from './sharelink.js';
 import { copyText } from './qrlabel.js';
+import { questionTrends, failTester, failedOn, questionLabel } from './checklistui.js';
+import { mostFailed, sparkPath, WEEKS } from './cltrend.js';
 import { lfRefs, lfExtra, lfLabel, lfValues, lfChoices, lfMatches, lfThrough, dashForms, normalizeFilter, togglePick, fromOldFilters, refKeyOf, reachRef, lfAddable, isDateField, datePick, ME } from './lflogic.js';
 
 let H = { fmt: null, valOf: null, recTitle: null, go: null, openRecord: null, renderMain: null, openLink: null, linkEnv: () => ({}), starterForms: () => [] };
@@ -53,6 +55,7 @@ function ctx() {
   const forms = store.forms.filter((f) => canViewForm(store.me, f.id));
   const byId = new Map(store.records.map((r) => [r.id, r]));
   const fById = new Map(forms.map((f) => [f.id, f]));
+  let ft = null;
   const c = {
     forms, records: store.records, profiles: store.profiles,
     formById: (id) => fById.get(id) || null,
@@ -60,6 +63,10 @@ function ctx() {
     valOf: (f, rec, form) => (H.valOf ? H.valOf(f, rec, form) : rec.values?.[f.id]),
     fmt: (f, v) => (H.fmt ? H.fmt(f, v) : String(v)),
     recTitle: (rec) => (H.recTitle ? H.recTitle(rec) : rec.id),
+    // Failed questions (checklists): fail rates over some records, and whether one failed on a record
+    qTrends: (list) => questionTrends(list, (id) => fById.get(id) || null),
+    qFailed: (rec, q) => failedOn(rec, q, fById.get(rec.formId), ft || (ft = failTester())),
+    qLabel: questionLabel,
   };
   ctxCache = { r: store.records, f: store.forms, m: store.me, p: store.profiles, c };
   return c;
@@ -114,6 +121,20 @@ function both(c, def, v) {
   return `<span class="v-full">${esc(full)}</span><span class="v-short">${esc(fmtShort(c, def, v))}</span>`;
 }
 
+/* ---------- Failed questions: each checklist question's fail rate, last 12 weeks ---------- */
+
+const TRW = { rising: ['▲ rising', 'up'], steady: ['steady', 'flat'], falling: ['▼ falling', 'down'] };
+function clqTop(c, def, list) { return mostFailed(c.qTrends(list), +def.limit || 8); }
+function clqHTML(c, def, list, key, caption, form) {
+  if (!(form.fields || []).some((f) => f.type === 'checklist')) return { caption, html: `<p class="rp-empty">${esc(form.name)} has no Checklist field. Pick a form with one.</p>` };
+  const top = clqTop(c, def, list);
+  const cap = caption + ` · last ${WEEKS} weeks`;
+  if (!top.length) return { caption: cap, html: `<p class="rp-empty">No checklist question has failed on these records in the last ${WEEKS} weeks.</p>` };
+  const pct = (r) => (Number.isInteger(r) ? r : r.toFixed(1)) + '%';
+  return { caption: cap, html: `<div class="db-clq" role="list">${top.map((q, i) => { const t = TRW[q.trend]; const d = sparkPath(q.weeks, 100, 30); const lab = c.qLabel(q.id);
+    return `<button type="button" class="db-clqr db-dr" role="listitem" data-d="drill" data-k="${esc(key)}" data-i="${i}" title="${esc(`${lab}: ${q.failed} of ${q.asked} answers failed`)}"><span class="db-clql">${esc(lab)}</span><svg class="db-clqs" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">${d ? `<path d="${d}" class="${t ? t[1] : ''}"/>` : ''}</svg><span class="db-clqv">${pct(q.rate)}</span><span class="db-clqt ${t ? t[1] : ''}">${t ? t[0] : '–'}</span></button>`; }).join('')}</div>` };
+}
+
 /* ---------- one report's body ---------- */
 
 const COLORS = 8;
@@ -145,6 +166,7 @@ function bodyHTML(c, def, extra, key) {
   }
   const list = rowsFor(c, def, ex);
   const caption = captionOf(c, def, list.length, extra);
+  if (def.type === 'clq') return clqHTML(c, def, list, key, caption, form);
   if (!list.length) return { html: `<p class="rp-empty">No records match this report${extra?.range || (extra?.fields || []).some((x) => x.values?.length) ? ' with these filters' : ''}.</p>`, caption };
   if (def.type === 'bar') {
     const items = slicesOf(c, def, list);
@@ -269,6 +291,10 @@ function drillPick(data) {
     if (!p) return null;
     if (has('r') && p.rows[+data.r]) filters.push({ ref: def.group, keys: [p.rows[+data.r].key], title: p.rows[+data.r].key });
     if (has('c') && p.cols[+data.c] != null) filters.push({ ref: def.col, keys: [p.cols[+data.c]], title: p.cols[+data.c] });
+  } else if (def.type === 'clq') {
+    const q = clqTop(c, def, list())[+data.i];
+    if (!q) return null;
+    filters.push({ qfail: q.id, title: c.qLabel(q.id) + ' failed' });
   } else if (def.type === 'grouped' && has('i')) {
     const g = groupRows(c, def, def.group, list())[+data.i];
     if (!g) return null;
@@ -281,7 +307,7 @@ function openDrill(data) {
   if (D.edit && String(data.k).startsWith('t:')) return; // arranging the dashboard, not reading it
   const dd = drillPick(data);
   if (!dd) return;
-  if (clickMode() === 'filter' && dd.filters.length && String(dd.key).startsWith('t:')) { applyClick(dd); return; }
+  if (clickMode() === 'filter' && dd.filters.length && String(dd.key).startsWith('t:') && !dd.filters.some((f) => f.qfail)) { applyClick(dd); return; }
   D.drill = dd;
   repaint(() => document.querySelector('#db-dd .db-dd-x')?.focus());
 }
@@ -667,7 +693,11 @@ function settingsHTML(c, d) {
   const t = def.type;
   let h = `<div class="db-sec"><label class="db-lab" for="db-form">Data from</label>${sel('form', c.forms.map((f) => opt(f.id, f.name, def.form)).join(''), '', ' id="db-form"')}
     ${chainOf(c, def.form).length > 1 ? `<p class="help">Can also use fields of ${chainOf(c, def.form).slice(1).map((id) => esc(c.formById(id)?.name || '')).join(', ')}.</p>` : ''}</div>`;
-  if (t !== 'table') {
+  if (t === 'clq') {
+    const cur = String(def.limit ?? 8);
+    h += `<div class="db-sec"><label class="db-lab" for="db-limit">Questions shown</label>${sel('limit', [['8', 'The 8 that fail most'], ['12', 'The 12 that fail most'], ['20', 'The 20 that fail most']].map(([k, l]) => opt(k, l, cur)).join(''), '', ' id="db-limit"')}<p class="help">Each question’s share of failed answers on these records over the last ${WEEKS} weeks, week by week, and whether that’s rising or falling. A question on several checklists counts once. Click one to see the records where it failed.</p></div>`;
+  }
+  if (t !== 'table' && t !== 'clq') {
     const m = def.measure || { fn: 'count' };
     const cur = m.fn === 'count' || !m.ref ? 'count' : m.fn + '|' + refKey(m.ref);
     h += `<div class="db-sec"><label class="db-lab">Value</label>${sel('measure', opt('count', 'Count of records', cur) + nums.map((x) => opt('sum|' + refKey(x.ref), 'Total ' + lab(x), cur) + opt('avg|' + refKey(x.ref), 'Average ' + lab(x), cur)).join(''), '')}</div>`;

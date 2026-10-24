@@ -32,7 +32,8 @@ import { storeKey as subStoreKey, readSubs, prefsOf, setPrefs, colsFor, toggleCo
 import { colsTool, showMenu, sortMenu, toolBar, moreLine, headCell as subHead } from './subui.js';
 import { headingOf, readFolds, isFolded, setFold, setFolds, foldKeys } from './foldlogic.js';
 import { asFiles, filesText, fileNames, fileLines, fileKind, sizeText as fileSize } from './filelist.js';
-import { initChecklistUI, paintTaskLists as clPaintTasks, itemOf as clItemOf, blockHTML as clBlock, finalizeValues as clFinalize, checkField as clCheck, uploading as clUploading, summaryText as clSummary } from './checklistui.js';
+import { clValue, clField, withClFields, clFields } from './clfields.js';
+import { initChecklistUI, snapFor, paintTaskLists as clPaintTasks, itemOf as clItemOf, blockHTML as clBlock, finalizeValues as clFinalize, checkField as clCheck, uploading as clUploading, summaryText as clSummary } from './checklistui.js';
 import { sectionOrder, moveSection, TASKS as TASKS_KEY } from './sectionlogic.js';
 import { searchForms, allSearchable, designerMatch, pushRecent, sidebarFormList } from './navlogic.js';
 import * as palette from './palette.js';
@@ -45,7 +46,7 @@ import * as admin from './admin.js';
 import { leave as exportLeave } from './exportset.js';
 import { leave as calLeave } from './calset.js';
 import { initAudit } from './audit.js';
-import { fieldItem, fileName as pdfFileName } from './pdfdoc.js';
+import { fieldItem, checklistItem, fileName as pdfFileName } from './pdfdoc.js';
 import { copyValues, relinkRow } from './duplogic.js';
 import { shrinkPhoto } from './photo.js';
 import { evaluate as evalRules, toClear, withoutCleared, NO_RULES, holdsValue, pruneRules, impactOf, sameRules, changedRuleLabels } from './rules.js';
@@ -193,7 +194,9 @@ function evalFormula(form,f,rec,depth=0,check=false){
   return FX.ev(ast,ctx);
 }
 function calc(form,f,rec){try{const v=evalFormula(form,f,rec);return (typeof v==='number'&&!isFinite(v))?{e:'The result is too large or undefined.'}:{v}}catch(e){return {e:e.fx?e.message:'This formula could not be worked out.'}}}
-function valOf(f,rec,form){if(f.type==='lookup')return lookupValue(rec,f,LK_H);if(f.type==='rollup')return rollupValue(rec,f,ruH());if(f.type!=='formula')return rec.values?.[f.id];form=form||formById(rec.formId);const r=calc(form,f,rec);return r.e?null:r.v;}
+/** A checklist's Score, %, Result, Critical fail or one question's answer (clfields.js). live: from the answers as they are now (a record being filled in). */
+function clVal(f,rec,form,live=false){const x=f.virt;form=form||formById(rec.formId);const base=(form?.fields||[]).find(g=>g.id===x.of);const v=rec.values?.[x.of];if(!base||!v)return clValue(f,v);const need=live||!v.s||(x.part==='critical'&&v.s.critical===undefined)||(x.part==='q'&&x.k==='c'&&!v.l);return clValue(f,v,need?snapFor(base,v).snap||null:null);}
+function valOf(f,rec,form){if(f.virt)return clVal(f,rec,form);if(f.type==='lookup')return lookupValue(rec,f,LK_H);if(f.type==='rollup')return rollupValue(rec,f,ruH());if(f.type!=='formula')return rec.values?.[f.id];form=form||formById(rec.formId);const r=calc(form,f,rec);return r.e?null:r.v;}
 function fmtCalc(f,v){
   if(v==null||v==='')return '';
   if(typeof v==='boolean')return v?'Yes':'No';
@@ -1278,7 +1281,10 @@ function pdfText(f,v){if(f.type==='attachments')return fileLines(v);if(f.type===
 const pdfNum=f=>(NUMERIC.has(f.type)||f.type==='formula')&&f.type!=='rating';
 function pdfModel(form,rec){
   const rs=withStage(rulesOf(form,rec,rec.parentId?recById(rec.parentId):null),form,rec.stage); // what the rules and the stage hide is left out
-  const items=(form.fields||[]).filter(f=>f.type!=='instructions'&&!rs.hiddenFields.has(f.id)&&!rs.hidden.has('f:'+f.id)).map(f=>{const v=f.type==='heading'||rs.cleared.has(f.id)?null:valOf(f,rec,form);return fieldItem(f,v,f.type==='heading'?'':pdfText(f,v),v==null||f.plain?null:richBlocks(rec.values,f.id));});
+  const tks=tw.recordId===rec.id&&tw.status==='ready'?tw.tasks||[]:[];
+  const items=(form.fields||[]).filter(f=>f.type!=='instructions'&&!rs.hiddenFields.has(f.id)&&!rs.hidden.has('f:'+f.id)).map(f=>{const v=f.type==='heading'||rs.cleared.has(f.id)?null:valOf(f,rec,form);
+    if(f.type==='checklist'&&v){const ci=checklistItem(f,v,snapFor(f,v).snap,{dateText:d=>fmt({type:'date'},d),tasksFor:id=>tks.filter(t=>t.checklistItem===`${f.id}:${id}`)});if(ci)return ci;} // the answer table
+    return fieldItem(f,v,f.type==='heading'?'':pdfText(f,v),v==null||f.plain?null:richBlocks(rec.values,f.id));});
   const sections=[];
   const grels=gridRels(form),gmap=Object.fromEntries(grels.map(g=>[g.cf.id,g]));
   const kids=Object.fromEntries((form.children||[]).filter(c=>c.display!=='grid').map(c=>formById(c.formId)).filter(cf=>cf&&canViewForm(store.me,cf.id)).map(cf=>[cf.id,cf]));
@@ -1694,13 +1700,13 @@ function draftRec(d){return {id:d.recordId||null,formId:d.formId,values:d.values
    Worked out from what's on screen as people type (the record, its parent, a grid row's parent
    record). Hidden fields and fields a rule clears are emptied when the record is saved. */
 function parentGetter(parent){
-  return (src,fid)=>{if(!parent||parent.formId!==src)return null;const pf=formById(src);const f=withStageField(pf)?.fields?.find(x=>x.id===fid);if(!f)return null;return {f,v:fid===STAGE_FIELD?stageName(pf,parent):f.type==='autonumber'?recById(parent.id)?.nums?.[fid]:valOf(f,parent,pf)};};
+  return (src,fid)=>{if(!parent||parent.formId!==src)return null;const pf=formById(src);const f=withStageField(pf)?.fields?.find(x=>x.id===fid)||clField(pf,fid);if(!f)return null;return {f,v:fid===STAGE_FIELD?stageName(pf,parent):f.type==='autonumber'?recById(parent.id)?.nums?.[fid]:valOf(f,parent,pf)};};
 }
 function rulesOf(form,recLike,parent){
   if(!form?.rules?.length)return NO_RULES;
   const sf=withStageField(form);
   const pg=parentGetter(parent),byId=new Map((sf.fields||[]).map(f=>[f.id,f]));
-  return evalRules(sf,(src,fid)=>{if(src!=='self')return pg(src,fid);const f=byId.get(fid);if(!f)return null;return {f,v:fid===STAGE_FIELD?stageName(form,recLike):f.type==='autonumber'?(recLike.nums||recById(recLike.id)?.nums||{})[fid]:valOf(f,recLike,form)};});
+  return evalRules(sf,(src,fid)=>{if(src!=='self')return pg(src,fid);const f=byId.get(fid)||clField(form,fid);if(!f)return null;return {f,v:f.virt?clVal(f,recLike,form,true):fid===STAGE_FIELD?stageName(form,recLike):f.type==='autonumber'?(recLike.nums||recById(recLike.id)?.nums||{})[fid]:valOf(f,recLike,form)};});
 }
 /** The rules, plus what the record's workflow stage hides, shows read-only or needs before moving on. */
 function withStage(st,form,stage){
@@ -2580,7 +2586,7 @@ function ruleImpact(form,recs,parent){
   const sf=withStageField(form);
   const im=impactOf(sf,recs,r=>{
     const byId=new Map((sf.fields||[]).map(x=>[x.id,x])),pg=parentGetter(parent&&parent.id===r.parentId?parent:r.parentId?recById(r.parentId):null);
-    return (src,fid)=>{if(src!=='self')return pg(src,fid);const x=byId.get(fid);return x?{f:x,v:fid===STAGE_FIELD?stageName(form,r):x.type==='autonumber'?r.nums?.[fid]:valOf(x,r,form)}:null;};
+    return (src,fid)=>{if(src!=='self')return pg(src,fid);const x=byId.get(fid);const y=x||clField(form,fid);return y?{f:y,v:fid===STAGE_FIELD?stageName(form,r):y.type==='autonumber'?r.nums?.[fid]:valOf(y,r,form)}:null;};
   });
   return im;
 }

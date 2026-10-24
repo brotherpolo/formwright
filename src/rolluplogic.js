@@ -8,6 +8,7 @@
 // the viewer can see are in their data, so only those count. Pure, unit-tested; used by the app
 // and the server kit.
 import { testCond, opsFor } from './rules.js';
+import { withClFields, fieldOrCl } from './clfields.js';
 
 export const isRollup = (f) => !!f && f.type === 'rollup';
 export const AGGS = [['count', 'Count'], ['sum', 'Sum'], ['avg', 'Average'], ['min', 'Min'], ['max', 'Max'], ['latest', 'Latest'], ['earliest', 'Earliest'], ['list', 'List']];
@@ -21,7 +22,7 @@ const numberish = (g) => NUMERIC.has(g.type) || (g.type === 'formula' && !['date
 const dateish = (g) => DATEISH.has(g.type) || (g.type === 'formula' && g.format === 'date');
 /** Fields a rollup can show for an aggregate (lookups count as the field they show: shown(g) gives it). */
 export function ofFields(form, agg, shown = (g) => g) {
-  const fs = (form?.fields || []).filter((g) => !['heading', 'instructions'].includes(g.type));
+  const fs = (withClFields(form, { report: true })?.fields || []).filter((g) => !['heading', 'instructions'].includes(g.type)); // a checklist's Score, %, Pass rate… too
   if (agg === 'count') return [];
   if (['sum', 'avg', 'min', 'max'].includes(agg)) return fs.filter((g) => { const s = shown(g); return s && numberish(s); });
   if (agg === 'latest' || agg === 'earliest') return fs.filter((g) => { const s = shown(g); return s && dateish(s); });
@@ -84,7 +85,7 @@ export function rollupValue(rec, f, h, depth = 0) {
   const t = rollupTarget(form, f, h.formById);
   const agg = AGG_WORD[f.agg] ? f.agg : 'count';
   if (!t) return agg === 'count' || agg === 'sum' ? 0 : null;
-  const byId = new Map((t.form.fields || []).map((x) => [x.id, x]));
+  const byId = new Map((withClFields(t.form, { report: true }).fields || []).map((x) => [x.id, x]));
   const conds = (f.where || []).filter((c) => c && byId.has(c.field)).slice(0, MAX_WHERE);
   const recs = rollupRecords(rec, f, h).filter((r) => conds.every((c) => { const g = byId.get(c.field); return testCond(c, h.valOf(g, r, t.form), g); }));
   if (agg === 'count') return recs.length;
@@ -110,14 +111,14 @@ export function rollupValue(rec, f, h, depth = 0) {
 /** The field a rollup's value formats as (count: none). */
 export function rollupOf(form, f, formById) {
   const t = rollupTarget(form, f, formById);
-  return t && f.agg !== 'count' ? (t.form.fields || []).find((x) => x.id === f.of) || null : null;
+  return t && f.agg !== 'count' ? fieldOrCl(t.form, f.of) : null;
 }
 
 /** Words for what a rollup counts: "Count of Projects where Stage is In progress". */
 export function rollupSummary(form, f, forms, itemName) {
   const src = rollupSources(form, forms, itemName).find((s) => s.from.join('|') === pathOf(f).join('|'));
   if (!src) return 'Not set up yet';
-  const byId = new Map((src.form.fields || []).map((x) => [x.id, x]));
+  const byId = new Map((withClFields(src.form, { report: true }).fields || []).map((x) => [x.id, x]));
   const of = byId.get(f.of);
   const head = f.agg === 'count' || !f.agg ? `Count of ${src.form.name}` : `${AGG_WORD[f.agg]} of ${of ? of.label : '?'} across ${src.form.name}`;
   const ws = (f.where || []).filter((c) => byId.has(c.field)).map((c) => {

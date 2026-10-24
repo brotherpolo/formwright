@@ -4,6 +4,7 @@ export { drawPdf } from '../pdfdraw.js';
 export { fileName } from '../pdfdoc.js';
 export { fillTemplate } from '../emaillogic.js';
 export { ruleFires, testCond, opOf, ACTION_LABEL } from '../rules.js';
+export { clValue, clField } from '../clfields.js';
 export { wfOn, firstStage, assigneeFor, stageDue, dayKey, overdueStep, daysOverdue } from '../workflow.js';
 export { dashEmail, dueSlot, partsIn, recipients, scheduleText } from '../dashmail.js';
 export { setCalendar, normalizeCal } from '../cal.js';

@@ -6,6 +6,7 @@ import { watchRecTemplates, recTemplatesOf, renameRecTemplate, deleteRecTemplate
 import { templateMeta } from './templatelogic.js';
 import { store, saveListView, deleteListView, deleteRecords, setRecordsValue, setRecordsValues, setValuesEach, attachRecords, setOwner, moveStage } from './store.js';
 import { wfOn, stagesOf, stageById, stageIndex, stageName, canWork, assigneeFor, movesOf, missingToMove, STAGE_FIELD, withStageField } from './workflow.js';
+import { partFieldsOf, clValue } from './clfields.js';
 import { TINTS, MAX_COLOR_RULES, MAX_COLOR_CONDS, colorFields, colorOps, colorOp, colorFires, paintOf, paintClass } from './colorlogic.js';
 import { bindLayouts, layoutSeg, layoutTools, boardHTML, timelineHTML, afterLayout, onClick as llClick, onChange as llChange, onKey as llKey, closeMenus as llClose } from './listlayouts.js';
 import { cleanLayout } from './layoutlogic.js';
@@ -135,7 +136,7 @@ export function viewRecords(form) {
   const dirty = !sameConfig(cfg, view.cfg);
   const lay = cfg.layout?.kind || 'table';
   bindLayouts(layEnv(form, shown, cfg));
-  const filterable = (form.fields || []).filter((f) => FILTERABLE.has(f.type) && optionsOf(f).length);
+  const filterable = (form.fields || []).flatMap((f) => (f.type === 'checklist' ? partFieldsOf(f) : [f])).filter((f) => FILTERABLE.has(f.type) && optionsOf(f).length); // a checklist's Result and Critical fail too
   const settable = bulkFields(form);
 
   const scope = lvl.view === 'own'
@@ -255,7 +256,7 @@ function filterTool(fields, recs, cfg) {
     pop = `<div class="lv-pop"><h3>Filter</h3><p class="lv-hint">Show records with any ticked option. Every field you tick must match.</p>
       ${fields.map((f) => {
         const on = new Set(cfg.filters[f.id] || []);
-        const count = (o) => recs.filter((r) => { const v = r.values?.[f.id]; return f.type === 'checkbox' ? (v ? 'Yes' : 'No') === o : f.type === 'multiselect' ? Array.isArray(v) && v.includes(o) : v === o; }).length;
+        const count = (o) => recs.filter((r) => { const v = f.virt ? clValue(f, r.values?.[f.virt.of]) : r.values?.[f.id]; return f.type === 'checkbox' ? (v ? 'Yes' : 'No') === o : f.type === 'multiselect' ? Array.isArray(v) && v.includes(o) : v === o; }).length;
         return `<div class="lv-sec">${esc(f.label)}</div>${optionsOf(f).map((o) => `<label class="lv-crow"><input type="checkbox" data-lvc="filter" data-f="${esc(f.id)}" value="${esc(o)}"${on.has(o) ? ' checked' : ''}><span>${esc(o)}</span><span class="lv-src">${count(o)}</span></label>`).join('')}`;
       }).join('')}
       <div class="lv-popfoot"><button class="btn ghost" type="button" data-lv="filter-clear">Clear</button><button class="btn" type="button" data-lv="pop-close">Done</button></div></div>`;
@@ -291,7 +292,7 @@ function lookFor(form, fields) {
   return (rec) => (fid) => {
     const x = by.get(fid); if (!x) return null;
     if (fid === STAGE_FIELD) return { f: x.f, v: stageName(form, rec) };
-    const f = src.get(fid); if (!f) return null;
+    const f = src.get(fid) || (x.f.virt ? x.f : null); if (!f) return null;
     return { f: x.f, v: f.type === 'autonumber' ? rec.nums?.[fid] : H.valOf(f, rec, form) };
   };
 }
@@ -487,6 +488,9 @@ function cellHtml(cell) {
   if (cell.rich) return cell.rich;
   const t = cell.text;
   if (cell.field?.type === 'url' && t) return `<a href="${esc(/^https?:/i.test(t) ? t : 'https://' + t)}" target="_blank" rel="noopener" data-stop>${esc(t)}</a>`;
+  const part = cell.field?.virt?.part; // a checklist's Result and Critical fail read as pills
+  if (part === 'result' && t) return `<span class="lv-res ${t === 'Pass' ? 'pass' : 'fail'}">${esc(t)}</span>`;
+  if (part === 'critical') return cell.value ? '<span class="lv-res fail">Critical fail</span>' : '';
   return esc(t);
 }
 

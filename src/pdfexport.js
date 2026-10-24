@@ -21,10 +21,10 @@ export function dataUrlBytes(s) {
 }
 
 /** A photo as a JPEG the PDF can hold: turned upright and scaled down. Anything the browser can show works. */
-export async function photoBytes(blob) {
+export async function photoBytes(blob, maxPx = MAX_PX) {
   try {
     const bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' });
-    const s = Math.min(1, MAX_PX / Math.max(bmp.width, bmp.height));
+    const s = Math.min(1, maxPx / Math.max(bmp.width, bmp.height));
     const c = document.createElement('canvas');
     c.width = Math.max(1, Math.round(bmp.width * s));
     c.height = Math.max(1, Math.round(bmp.height * s));
@@ -73,6 +73,12 @@ export async function makeRecordPdf(model) {
       console.warn('[formwright] PDF picture left out:', it.label, e);
       missing++;
     }
+  }));
+
+  // a checklist's photos, as thumbnails in its answer table (at most 60 in all)
+  const photos = (model.items || []).filter((it) => it.kind === 'checklist').flatMap((it) => it.rows.flatMap((r) => r.photos || [])).slice(0, 60);
+  await Promise.all(photos.map(async (p, i) => {
+    try { imgs.set('c' + i, await photoBytes(await fileBlob(p.src), 360)); /* small: they print as thumbnails */ p.imgKey = 'c' + i; } catch (e) { console.warn('[formwright] PDF checklist photo left out:', p.name, e); missing++; }
   }));
 
   const bytes = await drawPdf(L, model, imgs);

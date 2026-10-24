@@ -16,9 +16,10 @@
 //           to a set don't change it). Older versions: checklistVersions/{id}@{ver}.
 //
 // On a record, a Checklist field's value:
-//   { cl, ver, a: { itemId: answer }, n: { itemId: comment }, p: { itemId: [file] }, s: Summary }
+//   { cl, ver, a: { itemId: answer }, n: { itemId: comment }, p: { itemId: [file] }, l: { itemId: words }, s: Summary }
+//   l: the words of each choice answer (so the server can compare answers without the checklist)
 //   answer: an option id (choice), text, 'YYYY-MM-DD', or a number (decimal, percent)
-//   Summary { score, max, pct, answered, total, result: 'pass' | 'fail' | '' }, worked out when saved
+//   Summary { score, max, pct, answered, total, result: 'pass' | 'fail' | '', critical }, worked out when saved
 //   so lists, reports and the server can use it without the checklist.
 
 export const BUILT_IN = [['text', 'Text'], ['date', 'Date'], ['decimal', 'Decimal'], ['percent', 'Percent']];
@@ -202,7 +203,7 @@ export function missing(snap, value, tasksFor = null) {
 /** The value to save: answers only for items showing, comments and photos only for fails, and the summary. */
 export function cleanValue(snap, value, clId) {
   const a = value?.a || {}, n = value?.n || {}, p = value?.p || {}, vis = visibleItems(snap, a);
-  const out = { cl: clId || value?.cl || '', ver: snap?.ver ?? value?.ver ?? 1, a: {}, n: {}, p: {} };
+  const out = { cl: clId || value?.cl || '', ver: snap?.ver ?? value?.ver ?? 1, a: {}, n: {}, p: {}, l: {} };
   itemsOf(snap).forEach((x) => {
     if (!vis.has(x.id) || !answered(x, a[x.id])) return;
     let v = a[x.id];
@@ -210,6 +211,7 @@ export function cleanValue(snap, value, clId) {
     else if (x.type === 'text') v = String(v).slice(0, MAX_TEXT);
     else if (x.type === 'date') v = String(v).slice(0, 10);
     out.a[x.id] = v;
+    if (x.type === 'choice') { const o = optOf(x, v); if (o?.label) out.l[x.id] = String(o.label).slice(0, 200); }
     if (isFail(x, v)) {
       if (x.onFail?.comment && str(n[x.id], MAX_TEXT)) out.n[x.id] = str(n[x.id], MAX_TEXT);
       if (x.onFail?.photo && Array.isArray(p[x.id]) && p[x.id].length) out.p[x.id] = p[x.id].slice(0, 10);
@@ -217,8 +219,9 @@ export function cleanValue(snap, value, clId) {
   });
   if (!Object.keys(out.n).length) delete out.n;
   if (!Object.keys(out.p).length) delete out.p;
+  if (!Object.keys(out.l).length) delete out.l;
   const s = summarize(snap, out);
-  out.s = { score: s.score, max: s.max, pct: s.pct, answered: s.answered, total: s.total, result: s.result };
+  out.s = { score: s.score, max: s.max, pct: s.pct, answered: s.answered, total: s.total, result: s.result, critical: !!s.critical };
   return out;
 }
 

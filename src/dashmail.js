@@ -5,6 +5,7 @@ import { fieldOf, bucketsOf, measureOf, refLabel, INTERVALS } from './reportlogi
 import { bucketName, dayName } from './cal.js';
 import { periodName, periodRange, rowsFor, kpiOf, slicesOf, groupRows, pivotOf, sortRecs, normalizeDef, readingOrder, canvasTiles, groupLabel } from './dashlogic.js';
 import { fmtMeasure, measureLabel, cellText, isNumRef } from './dashfmt.js';
+import { mostFailed } from './cltrend.js';
 
 export const FREQS = [['weekdays', 'Every weekday'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['daily', 'Every day']];
 export const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -82,6 +83,12 @@ export function reportBlock(c, def, extra, now) {
   }
   const list = rowsFor(c, def, extra);
   if (!list.length) return { html: `<p style="color:${MUTED};font-size:13px;margin:0">No records match this report.</p>`, text: 'No records match.' };
+  if (def.type === 'clq') { // Failed questions: worked out from the checklists, which the email doesn't load
+    if (!c.qTrends) return { html: `<p style="color:${MUTED};font-size:13px;margin:0">Open the dashboard to see which checklist questions fail most.</p>`, text: 'Open the dashboard to see which checklist questions fail most.' };
+    const top = mostFailed(c.qTrends(list), +def.limit || 8);
+    const rows = top.map((q) => `<tr>${td(esc(c.qLabel(q.id)), 'width:56%')}${td(barCell(q.rate, 100, '#b42335'), 'width:26%')}${td(esc(q.rate + '%') + (q.trend ? ` <span style="color:${MUTED}">${q.trend}</span>` : ''), 'text-align:right;white-space:nowrap')}</tr>`).join('');
+    return { html: rows ? table(rows) : `<p style="color:${MUTED};font-size:13px;margin:0">No question failed in the last 12 weeks.</p>`, text: top.map((q) => `${c.qLabel(q.id)}: ${q.rate}%`).join('; ') };
+  }
   if (def.type === 'bar' || def.type === 'donut') {
     const items = slicesOf(c, def, list).filter((x) => def.type === 'bar' || x.value > 0);
     const shown = items.slice(0, 15);

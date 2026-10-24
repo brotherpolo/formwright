@@ -1,5 +1,7 @@
 // A record as a PDF: the pure part. Turns fields and values into printable items, wraps text,
 // sizes table columns and names the file. No DOM, no Firebase, no PDF library (pdfdraw.js draws).
+import { summarize, rowsOf as clRows, summaryText as clSummaryText, isBlankValue as clBlank } from './checklistlogic.js';
+
 
 /** How each field type prints. */
 export function fieldKind(type) {
@@ -50,6 +52,32 @@ export function fieldItem(f, v, text, rich = null) {
     default:
       return kind === 'long' && rich && rich.length ? { ...base, rich } : base;
   }
+}
+
+/**
+ * A Checklist field as an answer table (pdfdraw.js draws it), or null when its checklist isn't to
+ * hand (it then prints as its summary line, like before).
+ *   { kind: 'checklist', label, width: 'full', text, score: '14 / 18', pct: '78%', result: 'pass' | 'fail' | '',
+ *     critical, answered: '9 of 10 answered',
+ *     rows: [{ section } | { label, answer, score, fail, critical, comment, photos: [{ src, name }], tasks: [text] }] }
+ * opts: { dateText(d), tasksFor(itemId) → [task] (Plan tasks raised from that question), today: 'YYYY-MM-DD' }
+ */
+export function checklistItem(f, v, snap, { dateText = (d) => d, tasksFor = null } = {}) {
+  if (!snap || clBlank(v)) return null;
+  const s = summarize(snap, v);
+  const n = (x) => (Number.isInteger(x) ? String(x) : x.toFixed(1).replace(/\.0$/, ''));
+  const photo = (x) => (x && (x.path || x.url) && /^image\//.test(x.type || 'image/') && !/\.(pdf|docx?|xlsx?|zip)$/i.test(x.name || '') ? { src: { path: x.path || '', url: x.url || '' }, name: x.name || 'Photo' } : null);
+  const taskText = (t) => [t.title || 'Task', t.assigneeId || t.assigneeRole ? (t.assigneeName || t.assigneeRoleName || '') : '', t.done ? 'done' : t.due ? 'due ' + dateText(t.due) : ''].filter(Boolean).join(' · ');
+  const rows = clRows(snap, v, dateText).map((r) => (r.section != null ? { section: r.section } : {
+    label: r.label, answer: r.answer, score: r.score, fail: !!r.fail, critical: !!r.critical, comment: r.comment || '',
+    photos: (r.files || []).map(photo).filter(Boolean).slice(0, 6),
+    tasks: tasksFor ? (tasksFor(r.id) || []).map(taskText) : [],
+  }));
+  return {
+    kind: 'checklist', label: f.label || 'Checklist', width: 'full', text: clSummaryText(v),
+    score: s.max > 0 ? `${n(s.score)} / ${n(s.max)}` : '', pct: typeof s.pct === 'number' ? `${n(s.pct)}%` : '',
+    result: s.result || '', critical: !!s.critical, answered: `${s.answered} of ${s.total} answered`, rows,
+  };
 }
 
 /**

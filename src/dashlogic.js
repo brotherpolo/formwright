@@ -18,7 +18,7 @@ import {
 
 export const TYPES = [
   ['table', 'Table'], ['grouped', 'Grouped table'], ['pivot', 'Pivot'], ['bar', 'Bar'],
-  ['line', 'Line'], ['area', 'Area'], ['donut', 'Donut'], ['kpi', 'KPI'],
+  ['line', 'Line'], ['area', 'Area'], ['donut', 'Donut'], ['kpi', 'KPI'], ['clq', 'Failed questions'],
 ];
 /** Dashboard periods, in the order the picker lists them (grouped as PERIOD_GROUPS). */
 export const PERIODS = [
@@ -285,6 +285,7 @@ export function baseRows(ctx, def, extra = {}, now = Date.now()) {
 
 /** Does a record fall under a drill filter? { ref, keys } (a group, or several) or { ref, from, to } (a stretch of time). */
 export function drillHit(ctx, rec, flt) {
+  if (flt.qfail) return ctx.qFailed ? ctx.qFailed(rec, flt.qfail) : true; // Failed questions: where that question failed
   const f = fieldOf(ctx, flt.ref);
   if (!f) return true;
   const v = valueOf(ctx, rec, flt.ref);
@@ -299,6 +300,7 @@ export function drillRows(ctx, def, extra, filters, now = Date.now()) {
 
 /** "Stage is Done", "Date in Oct 2026", "Invoice # is one of 5" */
 export function drillLabel(ctx, flt) {
+  if (flt.qfail) return flt.title || 'The question failed';
   const f = fieldOf(ctx, flt.ref);
   const name = f ? f.label : 'Value';
   if (flt.from != null) return `${name} in ${flt.text}`;
