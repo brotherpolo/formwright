@@ -9,6 +9,7 @@
 import { FX } from '../formulas.js';
 import { fieldItem } from '../pdfdoc.js';
 import { filesText, fileNames, fileLines } from '../filelist.js';
+import { summaryText } from '../checklistlogic.js';
 import { withFixed, isFixed, defaultFor, isLayout } from '../fixedlogic.js';
 import { lookupValue, lookupRecord, lookupTarget, shownField, withLookups } from '../lookuplogic.js';
 import { rollupValue, rollupOf, recordIndex } from '../rolluplogic.js';
@@ -17,7 +18,7 @@ import { fieldByName } from '../fieldnames.js';
 import { richBlocks } from '../richtext.js';
 import { withStageField, stageName, STAGE_FIELD, stageView } from '../workflow.js';
 
-const POPUP = new Set(['textarea', 'file', 'image', 'signature', 'location', 'multiselect', 'attachments']);
+const POPUP = new Set(['textarea', 'file', 'image', 'signature', 'location', 'multiselect', 'attachments', 'checklist']);
 export const COLORS = ['#3346c8', '#0f7b6c', '#b4531a', '#8a3fb8', '#b42367', '#3d6b1f', '#56607a', '#0b6aa2'];
 const isEmpty = (v) => v == null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.values(v).some((x) => x != null && x !== ''));
 const lc = (s) => String(s || '').trim().toLowerCase();
@@ -88,6 +89,7 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
         case 'location': return v.address || (v.lat != null ? `${v.lat}, ${v.lng}` : '');
         case 'file': case 'image': return v.name || 'File';
         case 'attachments': return filesText(v);
+        case 'checklist': return summaryText(v); // "14 / 18 · 78% · Fail · 9 of 10 answered"
         case 'signature': return 'Signed';
         case 'autonumber': return String(v);
         case 'relation': { const r = recById(v); return r ? recTitle(r) : '(removed)'; }
@@ -107,6 +109,7 @@ export function makeKit({ forms = [], records: stored = [], locale = 'en-CA', ti
     if (f.type === 'location') return v?.address || '';
     if (f.type === 'file' || f.type === 'image') return v?.name || '';
     if (f.type === 'attachments') return fileNames(v).join(', ');
+    if (f.type === 'checklist') return v?.s?.pct ?? null; // in calculations: its score, %
     return v ?? null;
   }
   function evalFormula(form, f, rec, depth = 0) {

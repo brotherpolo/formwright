@@ -37,14 +37,22 @@ export const queueDel = (id) => tx('readwrite', (s) => s.delete(id));
 /** Where a stand-in value sits: [{ recordId, fieldId }] (a record's own fields, Attachments lists too; grid rows are records too). */
 export function findPending(records, id) {
   const out = [];
-  const has = (v) => v && typeof v === 'object' && v.pending === id;
-  (records || []).forEach((r) => Object.entries(r.values || {}).forEach(([fid, v]) => { if (has(v) || (Array.isArray(v) && v.some(has))) out.push({ recordId: r.id, fieldId: fid }); }));
+  (records || []).forEach((r) => Object.entries(r.values || {}).forEach(([fid, v]) => { if (holds(v, id)) out.push({ recordId: r.id, fieldId: fid }); }));
   return out;
 }
 /** A field's value with the waiting file `id` uploaded to `url` (a single file, or one in an Attachments list). */
-export function fillUploaded(v, id, url) {
-  if (Array.isArray(v)) return v.map((x) => (x && x.pending === id ? uploaded(x, url) : x));
-  return v && v.pending === id ? uploaded(v, url) : v;
+export function fillUploaded(v, id, url, depth = 0) {
+  if (v && typeof v === 'object' && v.pending === id) return uploaded(v, url);
+  if (depth > 4 || !v || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map((x) => fillUploaded(x, id, url, depth + 1));
+  if (!holds(v, id)) return v;
+  return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fillUploaded(x, id, url, depth + 1)])); // a Checklist field's photos: { p: { item: [file] } }
+}
+/** Does a value hold the waiting file `id` (a file, a list of them, or nested, like a checklist's photos)? */
+function holds(v, id, depth = 0) {
+  if (!v || typeof v !== 'object' || depth > 4) return false;
+  if (v.pending === id) return true;
+  return (Array.isArray(v) ? v : Object.values(v)).some((x) => holds(x, id, depth + 1));
 }
 /** The value once uploaded: the stand-in with its url, and no longer pending. */
 export function uploaded(v, url) {

@@ -36,6 +36,7 @@ const TYPE_WORDS = [
   ['multiselect', 'multiple choice', ['multi choice', 'multiselect']],
   ['file', 'file', ['file upload']],
   ['attachments', 'attachments', ['files', 'attachment list']],
+  ['checklist', 'checklist', ['inspection']],
   ['instructions', 'instructions', ['note', 'notes block']],
   ['lookup', 'lookup', ['look up']],
   ['rollup', 'rollup', ['roll up']],
@@ -53,7 +54,7 @@ export const SETTING_WORDS = ['required', 'half', 'full', 'in list', 'help', 'pl
 export const TYPE_LIST = TYPE_WORDS.filter(([k]) => k !== 'relation').map(([, w]) => w).concat(['link to <form name>']);
 
 const CHOICE = new Set(['select', 'radio', 'multiselect']);
-const FULL_BY_DEFAULT = new Set(['heading', 'instructions', 'textarea', 'location', 'multiselect', 'file', 'signature', 'attachments']);
+const FULL_BY_DEFAULT = new Set(['heading', 'instructions', 'textarea', 'location', 'multiselect', 'file', 'signature', 'attachments', 'checklist']);
 const FORMATS = ['decimal', 'number', 'currency', 'percent', 'days', 'text'];
 const defaultWidth = (type) => (FULL_BY_DEFAULT.has(type) ? 'full' : 'half');
 const widthOf = (f) => (f.width === 'half' ? 'half' : 'full');

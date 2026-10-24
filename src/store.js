@@ -93,6 +93,8 @@ export const store = {
   dashMails: {}, // admins: scheduled dashboard emails, by dashboard id
   pendingSends: [], // admins: scheduled automations waiting for an OK (approve first)
   mentions: [], // My work → Mentions: comments where someone @mentioned you, newest first
+  checklists: [], answerSets: [], checklistTypes: [], checklistsReady: false, // Settings › Checklists (checklistlogic.js)
+  clVersions: {}, // checklistVersions/{id}@{ver} loaded so far (older versions records were filled in on)
   recordsLoading: new Set(),
   onChange: () => {},
   onError: () => {},
@@ -191,6 +193,12 @@ export function startData(user) {
   memberParts.push({ start: () => onSnapshot(collection(db, 'profiles'), (s) => onProfiles(s.docs), fail('profiles')), empty: () => onProfiles([]) });
   // roles: everyone with access reads their names (a workflow stage or a stage history line names them)
   const onRoles = (docs) => { store.roles = docs.map((d) => ({ ...d.data(), id: d.id })).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))); changed(); };
+  // Checklists: the library everyone fills in from (older rules: none, quietly)
+  const clReady = { checklists: false, answerSets: false, checklistTypes: false };
+  ['checklists', 'answerSets', 'checklistTypes'].forEach((col) => {
+    const on = (docs) => { store[col] = docs.map((d) => ({ ...d.data(), id: d.id })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.name || '').localeCompare(String(b.name || ''))); clReady[col] = true; store.checklistsReady = Object.values(clReady).every(Boolean); changed(); };
+    memberParts.push({ start: () => onSnapshot(collection(db, col), (s) => on(s.docs), (err) => { console.warn('[formwright] ' + col, err?.code || err); on([]); }), empty: () => on([]) });
+  });
   memberParts.push({ start: () => onSnapshot(collection(db, 'roles'), (s) => onRoles(s.docs), (err) => { console.warn('[formwright] roles', err?.code || err); onRoles([]); }), empty: () => onRoles([]) });
 
   /**
@@ -256,6 +264,7 @@ export function stopData() {
   if (assignedSub) { assignedSub(); assignedSub = null; }
   roleSubs.forEach((u) => u()); roleSubs.clear(); roleRecs.clear();
   assigned = [];
+  Object.assign(store, { checklists: [], answerSets: [], checklistTypes: [], checklistsReady: false, clVersions: {} });
   Object.assign(store, { ready: false, user: null, me: null, forms: [], records: [], profiles: {}, groups: [], users: [], reports: [], reportsReady: false, listViews: [], listViewsReady: false, imports: [], reportDefs: [], dashboards: [], dashReady: false, homeDefault: '', homeDefaultReady: false, mentions: [], problems: [], problemNotify: [], backup: null, starred: [] });
   store.recordsLoading.clear();
 }
@@ -463,6 +472,40 @@ export async function setProblemEmail(on) {
 }
 
 /* ---------- Dates and time (settings/calendar) ---------- */
+
+/* ---------- Checklists (Settings › Checklists) ---------- */
+const stamp = () => ({ by: store.user.uid, at: Date.now() });
+export async function saveChecklistType(id, name, order = 0) { await setDoc(doc(db, 'checklistTypes', id), { name: String(name).trim().slice(0, 80), order, ...stamp() }); }
+export async function deleteChecklistType(id) { await deleteDoc(doc(db, 'checklistTypes', id)); }
+/** Save answer sets, and the checklists that use them as new versions: [{ id, data }], [{ id, data, snap }]. */
+export async function saveAnswerSets(sets, checklists = []) {
+  const b = writeBatch(db);
+  sets.forEach((x) => b.set(doc(db, 'answerSets', x.id), { ...x.data, ...stamp() }));
+  checklists.forEach((c) => {
+    b.set(doc(db, 'checklists', c.id), { ...c.data, ...stamp() });
+    b.set(doc(db, 'checklistVersions', c.id + '@' + c.data.ver), { clId: c.id, ver: c.data.ver, snap: c.data.snap, ...stamp() });
+  });
+  await b.commit();
+}
+export async function deleteAnswerSet(id) { await deleteDoc(doc(db, 'answerSets', id)); }
+/** Save a checklist as its next version (data.ver, data.snap), keeping a copy of that version. */
+export async function saveChecklist(id, data) {
+  const b = writeBatch(db);
+  b.set(doc(db, 'checklists', id), plain({ ...data, ...stamp() }));
+  b.set(doc(db, 'checklistVersions', id + '@' + data.ver), plain({ clId: id, ver: data.ver, snap: data.snap, ...stamp() }));
+  await b.commit();
+}
+export async function deleteChecklist(id) { await deleteDoc(doc(db, 'checklists', id)); }
+/** A checklist as it was at version ver: the current one, one loaded already, or loaded now (then store.onChange). */
+export function checklistVersion(id, ver) {
+  const cur = store.checklists.find((c) => c.id === id);
+  if (cur && cur.ver === ver && cur.snap) return cur.snap;
+  const k = id + '@' + ver;
+  if (k in store.clVersions) return store.clVersions[k];
+  store.clVersions[k] = null; // loading
+  getDoc(doc(db, 'checklistVersions', k)).then((s) => { store.clVersions[k] = s.exists() ? s.data().snap : false; changed(); }, () => { store.clVersions[k] = false; changed(); });
+  return null;
+}
 
 export async function saveCalendar(c) {
   const x = normalizeCal(c);

@@ -10,10 +10,11 @@ import * as calset from './calset.js';
 import * as audit from './audit.js';
 import * as autos from './autos.js';
 import * as schedules from './schedules.js';
+import * as checklists from './checklists.js';
 import { personAv } from './avatar.js';
 import { LEVELS, NONE, PRESETS, normalize, describeLevel, levelFor, isAdmin, accessParents } from './access.js';
 
-const VIEWS = new Set(['dates', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'exports', 'audit', 'automations', 'automation', 'schedules']);
+const VIEWS = new Set(['checklists', 'dates', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 let gdraft = null;
 let rdraft = null;        // the role being edited: { id, name, description, members, isNew, dirty }
 let confirmDel = false;
@@ -26,7 +27,7 @@ const VIEW_LABEL = { none: 'Can’t see', own: 'Only their own', all: 'All recor
 const EDIT_LABEL = { none: 'Can’t edit', own: 'Their own', all: 'All records' };
 
 export const handles = (view) => VIEWS.has(view.name);
-export const isDirty = (view) => (view.name === 'groupEdit' && !!gdraft?.dirty && !leaveArmed) || (view.name === 'roleEdit' && !!rdraft?.dirty && !leaveArmed) || (view.name === 'exports' && exportset.isDirty()) || (view.name === 'dates' && calset.isDirty()) || autos.isDirty(view);
+export const isDirty = (view) => (view.name === 'groupEdit' && !!gdraft?.dirty && !leaveArmed) || (view.name === 'roleEdit' && !!rdraft?.dirty && !leaveArmed) || (view.name === 'exports' && exportset.isDirty()) || (view.name === 'dates' && calset.isDirty()) || autos.isDirty(view) || (view.name === 'checklists' && checklists.isDirty());
 
 const userName = (u) => store.profiles[u.id]?.displayName || u.displayName || (u.email || '').split('@')[0] || 'Unnamed user';
 const sortedUsers = () => [...store.users].sort((a, b) => userName(a).localeCompare(userName(b)));
@@ -43,6 +44,7 @@ export function renderView(view) {
   if (view.name === 'roleEdit') return { title: 'Edit role', html: viewRoleEdit() };
   if (view.name === 'exports') return { title: 'PDF exports', html: exportset.viewExports() };
   if (view.name === 'dates') return { title: 'Dates and time', html: calset.viewCalendar() };
+  if (view.name === 'checklists') return { title: 'Checklists', html: checklists.viewChecklists() };
   if (view.name === 'audit') return { title: 'Audit trail', html: audit.viewAudit(view) };
   if (view.name === 'automations') return { title: 'Automations', html: autos.viewAutomations() };
   if (view.name === 'automation') return { title: 'Automation', html: autos.viewAutomation() };
@@ -264,6 +266,7 @@ function removedHTML() {
 export async function onClick(el, a, id) {
   if (a.startsWith('ex-') && (await exportset.onClick(a))) return;
   if (a.startsWith('cal-') && (await calset.onClick(a, el))) return;
+  if (a.startsWith('cl-') && (await checklists.onClick(a, el))) return;
   if (a.startsWith('au-') && (await audit.onClick(a, el))) return;
   if (a.startsWith('am-') && (await autos.onClick(a, el))) return;
   if (a.startsWith('sc-') && (await schedules.onClick(a, el))) return;
@@ -408,8 +411,11 @@ async function saveDraft() {
 
 /** Open a security group or a role from its web address (#/settings/groups/<id>); false when it isn't there (yet). */
 export function openGroupById(id) { if (!store.groups.some((g) => g.id === id)) return false; openGroup(id); gdraft.dirty = false; go({ name: 'groupEdit', groupId: id }, false); return true; }
+export const openChecklistById = (id) => checklists.openById(id);
+export const checklistsLeave = () => checklists.leave();
 export function openRoleById(id) { if (!(store.roles || []).some((r) => r.id === id)) return false; openRole(id); go({ name: 'roleEdit', roleId: id }, false); return true; }
 export function onInput(t) {
+  if (checklists.onInput(t)) return;
   if (exportset.onInput(t)) return;
   if (audit.onInput(t)) return;
   if (autos.onInput(t)) return;
@@ -423,6 +429,7 @@ export function onInput(t) {
 export async function onChange(t) {
   if (await exportset.onChange(t)) return;
   if (calset.onChange(t)) return;
+  if (checklists.onChange(t)) return;
   if (audit.onChange(t)) return;
   if (autos.onChange(t)) return;
   if (t.dataset.gacc != null && gdraft) {

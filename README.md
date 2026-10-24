@@ -90,6 +90,9 @@ src/
   fixedlogic.js            Default values, Read only fields and Instructions: what's fixed, today/now, stored or not (unit-tested)
   filelist.js              Attachments fields: the list of files, tiles, "3 files", what was added or removed (unit-tested)
   layoutlogic.js           Board and Timeline: columns, moves, spans, the axis (pure, unit-tested)
+  checklistlogic.js        Checklists: answer sets, items, versions, Only if, scores, pass mark, critical items (unit-tested)
+  checklists.js            Settings › Checklists: types, checklists and answer sets
+  checklistui.js, checklists.css  The Checklist field on a record
   colorlogic.js            Colour rules in lists: comparisons (dates against today), first match wins, saved views (unit-tested)
   listlayouts.js           A form's list as a Board or a Timeline, with dragging
   dash.js, dash.css        Reports and dashboards screens (charts reuse reports.css)
@@ -579,6 +582,24 @@ A template is a saved starting point for new records: "Standard kitchen refit" w
 - **Not copied:** auto numbers (the copy gets its own when saved), signatures (they belong to one record), calculations (worked out again), child records and Tasks.
 - **Sub-form grids:** their rows are copied as new rows of the copy.
 - Nothing is saved until you click **Save**; Back without saving leaves no trace. A line under the title says what it's a copy of.
+
+## Checklists (Settings › Checklists, and the Checklist field under Choices)
+
+Reusable checklists with scored answers, for inspections, audits and walk-throughs. Administrators keep the library in **Settings › Checklists**; any form uses one with a **Checklist** field (in the form itself, under a section heading, on a child form, or in a grid row, where it opens in the row's pop-up). A form that's only a few header fields and a Checklist field is a checklist form.
+
+- **Answer sets** (tab): reusable choices with scores, like *Pass 1 · Fail 0 · N/A (not counted)*. Leave a score empty for answers that don't count. Tick **Fail** on the answers that are failures. **Add the usual ones** adds Pass / Fail / N/A, Yes / No and Condition 1–5. Text, Date, Decimal and Percent are always available and aren't scored.
+- **Types** group checklists (*Safety inspections*, *Vehicle checks*): **+ Type**, ✎ to rename, ✕ to delete an empty one.
+- **A checklist:** a name, its type, a **Pass at** percent (empty: no pass mark), and **sections** and **items**. Each item has a question, an answer set (or Text, Date, Decimal, Percent), and:
+  - **Required:** it must be answered before the record can be saved.
+  - **Critical:** a fail here fails the whole checklist, whatever the score.
+  - **On fail:** ask for (or require) a **comment** and/or a **photo** when the answer is a fail.
+  - **Help:** a line under the question saying what to check.
+  - **Show only if** an earlier answer is one of the ticked answers (for example, *Expiry date* only if *Extinguishers in date* is Fail).
+- **Scores:** each answered, counted item adds its answer's score out of the best score in its answer set; N/A answers and hidden items don't count. The record shows *Score 14 / 18 · 78% · pass at 80%*, **Pass** or **Fail** (once the required items are answered, or straight away when a critical item fails), and *9 of 10 answered*. Pressing a chosen answer again clears it.
+- **Versions:** saving a checklist makes its next version, and changing an answer set makes a new version of every checklist that uses it. Records keep the version they were filled in on (old records still show their questions and answers); new records get the latest. A checklist a form uses can't be deleted.
+- **Elsewhere:** in lists the field shows its score line and sorts by score; in calculations `{Site walk}` is its score %; PDFs, emails and the audit trail show the score line. Imports, automations' Set a field, rollups, colour rules and dashboards leave Checklist fields out for now.
+- Photos use the same uploads as Attachments, including with no signal (they upload when you're back).
+- Stored as `checklistTypes`, `answerSets`, `checklists` (with the current version, `snap`) and `checklistVersions/{id}@{version}` (never changed once saved). Administrators change them; everyone in a security group reads them. A record's value: `{ cl, ver, a: answers, n: comments, p: photos, s: { score, max, pct, answered, total, result } }`.
 
 ## Rollup fields (a field type under Relations)
 

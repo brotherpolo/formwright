@@ -16,7 +16,7 @@ import { addDays } from './layoutlogic.js';
 export const TINTS = [['red', 'Red'], ['amber', 'Amber'], ['green', 'Green'], ['blue', 'Blue'], ['purple', 'Purple'], ['grey', 'Grey']];
 const TINT = new Set(TINTS.map((t) => t[0]));
 export const MAX_COLOR_RULES = 20, MAX_COLOR_CONDS = 5;
-const SKIP = new Set(['heading', 'instructions', 'signature', 'file', 'photo', 'attachments', 'richtext']);
+const SKIP = new Set(['heading', 'instructions', 'signature', 'file', 'photo', 'attachments', 'richtext', 'checklist']);
 
 /** Days against today (date fields only). value 'days': a whole number of days. */
 export const TODAY_OPS = [

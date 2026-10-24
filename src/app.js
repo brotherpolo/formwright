@@ -31,6 +31,7 @@ import { storeKey as subStoreKey, readSubs, prefsOf, setPrefs, colsFor, toggleCo
 import { colsTool, showMenu, sortMenu, toolBar, moreLine, headCell as subHead } from './subui.js';
 import { headingOf, readFolds, isFolded, setFold, setFolds, foldKeys } from './foldlogic.js';
 import { asFiles, filesText, fileNames, fileLines, fileKind, sizeText as fileSize } from './filelist.js';
+import { initChecklistUI, blockHTML as clBlock, finalizeValues as clFinalize, checkField as clCheck, uploading as clUploading, summaryText as clSummary } from './checklistui.js';
 import { sectionOrder, moveSection, TASKS as TASKS_KEY } from './sectionlogic.js';
 import { searchForms, allSearchable, designerMatch, pushRecent, sidebarFormList } from './navlogic.js';
 import * as palette from './palette.js';
@@ -76,16 +77,16 @@ import { signOutUser } from './auth.js';
 import { $, esc, uid, clone, isEmpty, toast, COLORS, colorOf, itemName, badge, lazy } from './ui.js';
 import examples from './examples.json';
 
-const ADMIN_VIEWS = new Set(['settings', 'dates', 'problems', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
+const ADMIN_VIEWS = new Set(['settings', 'checklists', 'dates', 'problems', 'designer', 'formEdit', 'users', 'groups', 'groupEdit', 'roles', 'roleEdit', 'import', 'imports', 'exports', 'audit', 'automations', 'automation', 'schedules']);
 
 // other words people search field types by
-const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',attachments:'attachments files documents many multiple upload drag drop pdf photos',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',lookup:'lookup look up value from linked related record parent pull show',rollup:'rollup roll up count sum total average min max latest earliest list children child records summary aggregate',heading:'section heading title divider group fold',instructions:'instructions note guidance help explanation text block read only'};
+const TYPE_WORDS={text:'short single line string name title',textarea:'long paragraph notes description multi line memo comments',email:'mail address',phone:'telephone mobile cell number',url:'website link web address',location:'address map gps place',number:'integer whole count quantity',decimal:'float number fraction',currency:'money price cost dollar amount',percent:'percentage rate',rating:'stars score',range:'slider scale',formula:'calculation calculated computed formula sum total',autonumber:'auto number automatic sequence serial counter invoice id reference numbering',date:'day calendar',time:'clock hour',datetime:'timestamp date time when',checkbox:'yes no toggle boolean switch tick check',select:'dropdown choice pick list menu options',radio:'single choice option buttons one of',multiselect:'multiple choice checkboxes tags many',file:'upload attachment document pdf',attachments:'attachments files documents many multiple upload drag drop pdf photos',checklist:'inspection audit score pass fail questions survey',image:'photo picture camera',signature:'sign autograph',color:'colour',relation:'link to record lookup reference relationship connect',lookup:'lookup look up value from linked related record parent pull show',rollup:'rollup roll up count sum total average min max latest earliest list children child records summary aggregate',heading:'section heading title divider group fold',instructions:'instructions note guidance help explanation text block read only'};
 const TYPES=[
  ['text','Short text','Aa','Text'],['textarea','Long text','¶','Text'],
  ['email','Email','@','Contact'],['phone','Phone','+1','Contact'],['url','Website','//','Contact'],['location','Location','⌖','Contact'],
  ['number','Whole number','12','Numbers'],['decimal','Decimal','1.5','Numbers'],['currency','Currency','$','Numbers'],['percent','Percent','%','Numbers'],['rating','Rating','★','Numbers'],['autonumber','Auto number','#','Numbers'],['range','Slider','⟷','Numbers'],['formula','Calculation','ƒx','Numbers'],
  ['date','Date','D','Date & time'],['time','Time','T','Date & time'],['datetime','Date & time','DT','Date & time'],
- ['checkbox','Yes / No','✓','Choices'],['select','Dropdown','▾','Choices'],['radio','Single choice','◉','Choices'],['multiselect','Multiple choice','☰','Choices'],
+ ['checkbox','Yes / No','✓','Choices'],['select','Dropdown','▾','Choices'],['radio','Single choice','◉','Choices'],['multiselect','Multiple choice','☰','Choices'],['checklist','Checklist','☑','Choices'],
  ['file','File upload','⇪','Media'],['attachments','Attachments','⧉','Media'],['image','Photo','▣','Media'],['signature','Signature','✎','Media'],['color','Color','◐','Media'],
  ['relation','Link to record','↗','Relations'],['lookup','Lookup','⇢','Relations'],['rollup','Rollup','Σ','Relations'],['heading','Section heading','§','Layout'],['instructions','Instructions','ℹ','Layout']];
 const T=Object.fromEntries(TYPES.map(t=>[t[0],{label:t[1],glyph:t[2],group:t[3]}]));
@@ -141,6 +142,7 @@ function fmt(f,v){
     case 'location':return v.address||(v.lat!=null?`${v.lat}, ${v.lng}`:'');
     case 'file':case 'image':return v.name||'File';
     case 'attachments':return filesText(v);
+    case 'checklist':return clSummary(v);
     case 'signature':return 'Signed';
     case 'autonumber':return String(v);
     case 'relation':{const r=recById(v);return r?recTitle(r):'(removed)';}
@@ -165,6 +167,7 @@ function rawFor(f,rec,form,depth,check){
   if(f.type==='location')return v?.address||'';
   if(f.type==='file'||f.type==='image')return v?.name||'';
   if(f.type==='attachments')return fileNames(v).join(', ');
+  if(f.type==='checklist')return v?.s?.pct??null; // its score, %
   return v??null;
 }
 function evalFormula(form,f,rec,depth=0,check=false){
@@ -347,6 +350,7 @@ function openRoute(r){
     if(r.id){
       if(pg==='groups'){go({name:'groups'},false);return admin.openGroupById(r.id)||(store.groups.length?(toast('That security group isn’t there any more.'),true):false);}
       if(pg==='roles'){go({name:'roles'},false);return admin.openRoleById(r.id)||((store.roles||[]).length?(toast('That role isn’t there any more.'),true):false);}
+      if(pg==='checklists'){go({name:'checklists',clId:r.id},false);return admin.openChecklistById(r.id)||(store.checklistsReady?(toast('That checklist isn’t there any more.'),true):false);}
       if(pg==='automations'){if(!store.automations.some(a=>a.id===r.id))return false;/* still arriving (or gone: given up on after a few seconds) */go({name:'automations'},false);openAutomation(r.id);return true;}
     }
     go({name:pg},false);return true;
@@ -591,6 +595,7 @@ function settingsGroups(){return [
     {act:'nav-designer',on:['designer'],t:'Form designer',g:'⚙',n:store.forms.length,d:'Build forms, fields, sections and workflows.'},
     {act:'nav-imports',on:['imports'],t:'Import history',g:'⇪',n:store.imports.length,d:'Past imports and rule changes, with Undo for 7 days.'},
     {act:'nav-exports',on:['exports'],t:'PDF exports',g:'⇩',d:'Company name and logo on PDF and Word exports.'},
+    {act:'nav-checklists',on:['checklists'],t:'Checklists',g:'☑',n:store.checklists.length,d:'Reusable checklists with scored answers, for the Checklist field.'},
     {act:'nav-dates',on:['dates'],t:'Dates and time',g:'☼',d:'Time zone, the day weeks start and the fiscal year, for reports and dashboards.'}]},
   {h:'People and access',items:[
     {act:'nav-users',on:['users'],t:'Users',g:'☺',n:store.users.length,d:'Who has an account, their groups, roles and Cadence access.'},
@@ -1412,7 +1417,7 @@ function recordFoldKeys(form,rec){
 }
 const SORT_H={valOf:(f,r,fm)=>valOf(f,r,fm),fmt:(f,v)=>fmt(f,v),recTitle:(r,fm)=>recTitle(r,fm),recById:id=>recById(id),formById:id=>formById(id)};
 const DETACH_ICON='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 4 8"/><path d="M8 12h3"/><path d="M3 3l18 18"/></svg>';
-const POPUP_TYPES=new Set(['textarea','file','image','signature','location','multiselect','attachments']);
+const POPUP_TYPES=new Set(['textarea','file','image','signature','location','multiselect','attachments','checklist']);
 const GRID_SUM=new Set(['number','decimal','currency']);
 let cdraft=null;
 function gridRels(form){return (form.children||[]).filter(c=>c.display==='grid').map(rel=>({rel,cf:formById(rel.formId)})).filter(x=>x.cf&&x.cf.id!==form.id&&canViewForm(store.me,x.cf.id));}
@@ -1583,6 +1588,7 @@ function fieldBlock(f,v,err,scope,locked){
   if(f.type==='lookup')return lkBlock(f,scope,id);
   if(f.type==='rollup')return ruBlock(f,scope,id);
   if(f.type==='attachments'&&attOwn(f,scope))return attSection(f,v,err,scope,locked,id);
+  if(f.type==='checklist'){const d=draftFor(scope);return clBlock(f,v,err,scope,locked===true?'cleared':locked==='view'?'view':(scope==='record'&&rdraft?.reading)||d?.readOnly||isReadOnly(f)?'read':'edit');}
   if(isReadOnly(f)&&locked!==true)return roBlock(f,isFixed(f)?defaultFor(f):v,id,scope);
   if(scope==='record'&&rdraft?.reading&&locked!==true)return `<div class="fld rd w-${f.width==='half'?'half':'full'}" id="fb-${scope}-${f.id}"><span class="flabel">${esc(f.label)}</span><div class="rdv">${readValue(f,v,id,scope)}</div></div>`;
   const lab=['radio','multiselect','rating','checkbox','formula','autonumber'].includes(f.type)?`<span class="flabel" id="lb-${id}">${esc(f.label)}${f.required?'<span class="req">*</span>':''}</span>`:`<label class="flabel" for="${id}">${esc(f.label)}${f.required?'<span class="req">*</span>':''}${f.type==='attachments'&&asFiles(v).length?`<span class="att-n"> · ${asFiles(v).length}</span>`:''}</label>`;
@@ -2024,6 +2030,7 @@ function validate(form,vals,st){
   (form.fields||[]).forEach(f=>{
     if(isLayout(f)||f.type==='formula'||f.type==='autonumber'||f.type==='lookup'||f.type==='rollup'||isReadOnly(f))return;const v=vals[f.id];
     if(st.blank.has(f.id)||st.hiddenFields.has(f.id)||st.view?.has(f.id))return; // hidden, cleared or view only: nothing to check
+    if(f.type==='checklist'){const m=clCheck(f,v);if(m)errs[f.id]=m;else if(st.required(f)&&(!v||!v.a||!Object.keys(v.a).length))errs[f.id]='Answer at least one item.';return;}
     if(st.required(f)&&(f.type==='checkbox'?!v:isEmpty(v))){errs[f.id]=f.type==='checkbox'?'This must be switched on.':f.type==='attachments'?'Add at least one file.':'This field is required.';return;}
     if(isEmpty(v))return;
     if(f.type==='email'&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))errs[f.id]='Enter an email like name@example.com.';
@@ -2041,7 +2048,7 @@ function validate(form,vals,st){
 }
 async function saveRecord(){
   const d=rdraft,form=formById(d.formId);if(d.readOnly){toast('This record is read only for you.');return;}
-  if(Object.values(d._attUp||{}).some(a=>a.length)){toast('Files are still uploading. Save when they’ve finished.');return;}
+  if(Object.values(d._attUp||{}).some(a=>a.length)||clUploading(d)){toast('Files are still uploading. Save when they’ve finished.');return;}
   const rs=draftRules(d);const errs=validate(form,d.values,rs);
   if(Object.keys(errs).length){d.errors=errs;renderMain();toast('Fix the highlighted fields, then save.');document.querySelector('.fld.bad')?.scrollIntoView({block:'center',behavior:'smooth'});return;}
   // sub-form rows: check, then work out their calculations
@@ -2055,6 +2062,7 @@ async function saveRecord(){
     g.rows.forEach(row=>{
       if(row.attached){if(rel?.copy)Object.assign(row.values,copyPatch(form,cf,d.values,row.values));Object.assign(row.values,linkPatch(cf,form.id,id,row.fromParent,row.values));}
       let changed=row.isNew||row.dirty;
+      if(changed)clFinalize(cf,row.values);
       if(cf.rules?.length){const gone=toClear(cf,row.values,rowRules(cf,row,d));if(gone.length){row.values=withoutCleared(row.values,gone);changed=true;}}
       const r=rowRec(row,cf,d);
       (cf.fields||[]).filter(f=>f.type==='formula').forEach(f=>{const c=calc(cf,f,r);const v=c.e?null:c.v;if(row.values[f.id]!==v){row.values[f.id]=v;changed=true;}});
@@ -2068,6 +2076,7 @@ async function saveRecord(){
     });
     removed.push(...g.removed);});
   const gone=toClear(form,d.values,rs);if(gone.length)d.values=withoutCleared(d.values,gone); // hidden or cleared by a rule
+  clFinalize(form,d.values); // checklists: only the answers showing, and their score
   (form.fields||[]).filter(f=>f.type==='formula').forEach(f=>{const r=calc(form,f,draftRec(d));d.values[f.id]=r.e?null:r.v;});
   const rec={id,formId:form.id,values:d.values,parentId:d.parentId||null,parentFormId:d.parentFormId||null,createdAt:old?.createdAt||now,updatedAt:now};
   try{if(rowsOut.length||removed.length)await saveRecordBundle(rec,rowsOut,removed);else await store.put('records',rec);}
@@ -2138,7 +2147,7 @@ function viewDesigner(){
   :`<div class="panel empty"><h2>No forms yet</h2><p>Create your first form, or load a set of connected example forms (Clients, Projects, Site visits, Contacts) to see how relationships work.</p><div class="actions"><button class="btn" data-act="load-examples">Load example forms</button><button class="btn primary" data-act="new-form">+ New form</button></div></div>`}`;
 }
 function newField(type){
-  const f={id:uid('x'),type,label:T[type].label,required:false,inList:false,width:['heading','instructions','textarea','location','multiselect','file','signature','attachments'].includes(type)?'full':'half',help:''};
+  const f={id:uid('x'),type,label:T[type].label,required:false,inList:false,width:['heading','instructions','textarea','location','multiselect','file','signature','attachments','checklist'].includes(type)?'full':'half',help:''};
   if(type==='instructions'){f.label='';f.width='full';f.text='';f.html=null;}
   if(type==='lookup'){f.via=[];f.show='';}
   if(type==='rollup'){f.from=[];f.where=[];f.agg='count';f.of='';}
@@ -2392,6 +2401,7 @@ function fieldEditor(x){
   if(x.type==='autonumber')h+=autoEditor(x,P,inp,num,sw);
   if(x.type==='lookup')h+=lkEditor(x);
   if(x.type==='rollup')h+=ruEditor(x);
+  if(x.type==='checklist')h+=P('Checklist',`<select class="in" data-prop="checklist"><option value="">Choose a checklist…</option>${store.checklistTypes.concat([{id:'',name:'No type'}]).map(t=>{const cs=store.checklists.filter(c=>t.id?c.typeId===t.id:!store.checklistTypes.some(y=>y.id===c.typeId));return cs.length?`<optgroup label="${esc(t.name)}">${cs.map(c=>`<option value="${esc(c.id)}"${c.id===x.checklist?' selected':''}>${esc(c.name)}</option>`).join('')}</optgroup>`:'';}).join('')}${x.checklist&&!store.checklists.some(c=>c.id===x.checklist)?'<option value="" selected>(deleted checklist)</option>':''}</select>`,'full')+`<div class="prop full"><p class="help">${store.checklists.length?'':'No checklists yet. '}Make and change checklists in <button type="button" class="linkbtn" data-act="nav-checklists">Settings › Checklists</button>. Records keep the version they were filled in on. <b>Required</b> here means at least one answer; each item’s own Required is set in the checklist.</p></div>`;
   if(x.type==='relation')h+=P('Links to form',`<select class="in" data-prop="relForm"><option value="">Choose a form…</option>${[...store.forms].sort(byOrder).map(o=>`<option value="${o.id}"${o.id===x.relForm?' selected':''}>${esc(o.name)}</option>`).join('')}</select>`);
   if(canDefault(x))h+=defaultEditor(x);
   if(x.type==='url'&&x.readOnly)h+=P('Button text',inp('linkText',x.linkText,'maxlength="80" placeholder="e.g. Open the safety checklist"')+'<small class="help">A read-only website shows as a button with these words. Empty: the address.</small>','full');
@@ -2626,6 +2636,7 @@ document.addEventListener('click',async e=>{
     case 'nav-problems':enterProblems();go({name:'problems'});break;
     case 'nav-automations':go({name:'automations'});break;
     case 'nav-schedules':go({name:'schedules'});break;
+    case 'nav-checklists':go({name:'checklists'});break;
     case 'nav-settings':go({name:'settings'});break;
     case 'nav-dates':if(view.name!=='dates')calLeave();go({name:'dates'});break;
     case 'tpl-save-open':{const rec=view.recordId?recById(view.recordId):null,form=rec&&formById(rec.formId);if(!rec||!form||!isAdmin(store.me))return;ui.recMore=false;watchRecTemplates(form.id);ui.tplSave={recId:rec.id,name:recTitle(rec,form),mode:'new',replaceId:'',keepDates:false,busy:false};renderMain();setTimeout(()=>{const i=document.getElementById('tpl-name');if(i){i.focus();i.select();}},0);break;}
@@ -3161,6 +3172,7 @@ document.addEventListener('pointercancel',endFmDrag);
 export function startApp(){
   booted=false;pendingRoute=null;view={name:'loading'};hist=[];rdraft=fdraft=pdraft=null;
   initReports({fmt,valOf,recTitle,go,renderMain,openLink,linkEnv,starterForms:()=>sidebarForms(),openRecord:(id)=>{const r=recById(id);if(r)goRec(null,{name:'record',formId:r.formId,recordId:r.id});}});
+  initChecklistUI({draftFor,markDirty,repaint,formOf:formOfDraft,upload:uploadFile,dateText:d=>fmt({type:'date'},d),toast});
   initLists({ruleImpact,applyRuleChange,fmt,valOf,recTitle,titleFieldOf,parentsOf,formById,recById,recordsOf,renderMain,withFormulas,search:()=>ui.search,
     canWork:r=>canWork(r,{...store.me,uid:store.user?.uid}),stageMove:boardStageMove,cardExtra:boardCardExtra,colorOf,today:()=>dayKeyOf(Date.now()),dayOf:t=>dayKeyOf(t),weekStart:()=>getCalendar().weekStart});
   initAudit({fmt,formById,recById,recTitle:(r,f)=>recTitle(r,f),go,renderMain});

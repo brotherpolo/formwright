@@ -130,6 +130,7 @@ export function sortValueOf(f, v, text) {
   if (v == null || v === '') return null;
   if (f && (NUMERIC.has(f.type) || f.type === 'formula') && typeof v === 'number') return v;
   if (f && f.type === 'checkbox') return v ? 1 : 0;
+  if (f && f.type === 'checklist') return typeof v.s?.pct === 'number' ? v.s.pct : null; // by score
   if (f && (f.type === 'date' || f.type === 'datetime' || f.type === 'time')) return String(v);
   return text ? text.toLowerCase() : null;
 }

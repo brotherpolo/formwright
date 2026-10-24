@@ -25,7 +25,7 @@ export function ofFields(form, agg, shown = (g) => g) {
   if (agg === 'count') return [];
   if (['sum', 'avg', 'min', 'max'].includes(agg)) return fs.filter((g) => { const s = shown(g); return s && numberish(s); });
   if (agg === 'latest' || agg === 'earliest') return fs.filter((g) => { const s = shown(g); return s && dateish(s); });
-  return fs.filter((g) => !['signature', 'file', 'image', 'attachments'].includes(g.type));
+  return fs.filter((g) => !['signature', 'file', 'image', 'attachments', 'checklist'].includes(g.type));
 }
 
 /** One step, statically: the form it reaches (null when it no longer fits). */

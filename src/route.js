@@ -7,7 +7,8 @@
 //   #/calendar                  Calendar             #/problems               Problems (admins)
 //   #/designer                  Form designer        #/designer/<formId>[/<tab>]  one form's designer
 //   #/settings[/<page>]         Settings (admins): users, groups[/<id>], roles[/<id>],
-//                               automations[/<id>], schedules, dates, imports, exports, audit, problems
+//                               automations[/<id>], schedules, dates, imports, exports, audit, problems,
+//                               checklists[/<id>]
 // Step 1 of clean addresses: the app writes these # addresses, and also opens the same address
 // without the # (/settings/users), which hosting already serves (firebase.json rewrites).
 // Pure functions: no DOM, no Firebase.
@@ -15,7 +16,7 @@
 const ID = '([^/?#]+)';
 const TABS = { fields: 'fields', relationships: 'relations', rules: 'rules', workflow: 'workflow', settings: 'settings', preview: 'preview', history: 'history' };
 const TAB_URL = Object.fromEntries(Object.entries(TABS).map(([k, v]) => [v, k]));
-export const SETTINGS_PAGES = ['users', 'groups', 'roles', 'automations', 'schedules', 'dates', 'imports', 'exports', 'audit', 'problems'];
+export const SETTINGS_PAGES = ['users', 'groups', 'roles', 'automations', 'schedules', 'dates', 'imports', 'exports', 'audit', 'problems', 'checklists'];
 const dec = (s) => { try { const v = decodeURIComponent(s); return v || null; } catch (e) { return null; } };
 
 /** '#/record/abc' -> { kind: 'record', id: 'abc' }, '#/settings/users' -> { kind: 'settings', page: 'users' }; anything else -> null */
@@ -37,7 +38,7 @@ export function parseRoute(hash) {
   if (/^#\/settings$/.test(h)) return { kind: 'settings' };
   if ((m = new RegExp(`^#/settings/([a-z]+)(?:/${ID})?$`).exec(h))) {
     if (!SETTINGS_PAGES.includes(m[1])) return null;
-    if (m[2]) { if (!['groups', 'roles', 'automations'].includes(m[1])) return null; const id = dec(m[2]); return id ? { kind: 'settings', page: m[1], id } : null; }
+    if (m[2]) { if (!['groups', 'roles', 'automations', 'checklists'].includes(m[1])) return null; const id = dec(m[2]); return id ? { kind: 'settings', page: m[1], id } : null; }
     return { kind: 'settings', page: m[1] };
   }
   if ((m = new RegExp(`^#/record/${ID}/history$`).exec(h))) { const id = dec(m[1]); return id ? { kind: 'recordHistory', id } : null; }
@@ -81,6 +82,7 @@ export function routeFor(view) {
     case 'roleEdit': return view.roleId ? '#/settings/roles/' + e(view.roleId) : '#/settings/roles';
     case 'automation': return view.autoId && !view.isNew ? '#/settings/automations/' + e(view.autoId) : '#/settings/automations';
     case 'import': return '#/settings/imports';
+    case 'checklists': return '#/settings/checklists' + (view.clId ? '/' + e(view.clId) : '');
     default: return SETTINGS_PAGES.includes(view.name) ? '#/settings/' + view.name : '';
   }
 }
