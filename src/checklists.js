@@ -5,6 +5,8 @@
 import { store, saveChecklistType, deleteChecklistType, saveAnswerSets, deleteAnswerSet, saveChecklist, deleteChecklist } from './store.js';
 import { renderMain, go } from './app.js';
 import { esc, uid, toast } from './ui.js';
+import { writeXlsx, readSheets } from './xlsx.js';
+import { exportSheets, templateSheets, planImport, copyName } from './checklistio.js';
 import { BUILT_IN, isBuiltIn, MAX_ITEMS, MAX_OPTIONS, FAIL_MODES, starterSets, cleanSet, setIssues, cleanItems, checklistIssues, snapshotOf, usesSet, maxOf } from './checklistlogic.js';
 
 let D = null; // { tab, sel, cl (draft), sets (draft), typeNew, typeRen, confirm, busy }
@@ -35,21 +37,23 @@ export function viewChecklists() {
   if (D.cl && !D.cl.isNew && !D.cl.dirty) { const c = store.checklists.find((x) => x.id === D.cl.id); if (c && c.ver > D.cl.ver) pick(c.id); } // follow saves from elsewhere
   if (D.sets && !D.sets.dirty) D.sets = null;
   const head = `<div class="head"><div class="ttl"><div><h1>Checklists</h1><p class="sub">Reusable checklists with scored answers. Put one on any form with the <b>Checklist</b> field in the Form designer.</p></div></div></div>
-  <div class="tabs cl-tabs" role="tablist"><button type="button" role="tab" class="tab${D.tab === 'checklists' ? ' on' : ''}" aria-selected="${D.tab === 'checklists'}" data-act="cl-tab" data-v="checklists">Checklists <span class="cl-n">${store.checklists.length}</span></button><button type="button" role="tab" class="tab${D.tab === 'sets' ? ' on' : ''}" aria-selected="${D.tab === 'sets'}" data-act="cl-tab" data-v="sets">Answer sets <span class="cl-n">${store.answerSets.length}</span></button></div>`;
+  <div class="tabs cl-tabs" role="tablist"><button type="button" role="tab" class="tab${D.tab === 'checklists' ? ' on' : ''}" aria-selected="${D.tab === 'checklists'}" data-act="cl-tab" data-v="checklists">Checklists <span class="cl-n">${store.checklists.length}</span></button><button type="button" role="tab" class="tab${D.tab === 'sets' ? ' on' : ''}" aria-selected="${D.tab === 'sets'}" data-act="cl-tab" data-v="sets">Answer sets <span class="cl-n">${store.answerSets.length}</span></button><span class="cl-io"><button type="button" class="btn sm ghost" data-act="cl-tpl">⇩ Download template</button><button type="button" class="btn sm" data-act="cl-imp">⇧ Import…</button></span></div>`;
   if (!store.checklistsReady) return head + '<div class="panel empty"><p>Loading checklists…</p></div>';
+  if (D.imp) return head + importView();
   return head + (D.tab === 'sets' ? setsTab() : checklistsTab());
 }
 
 function tree() {
   const groups = [...store.checklistTypes.map((t) => ({ id: t.id, name: t.name })), { id: '', name: 'No type' }];
-  const row = (c) => `<button type="button" class="cl-ti${D.sel === c.id ? ' on' : ''}" data-act="cl-pick" data-id="${esc(c.id)}"${D.sel === c.id ? ' aria-current="true"' : ''}>${esc(c.name)} <small>v${c.ver || 1}</small></button>`;
+  const menu = (k, items) => `<span class="cl-menuw"><button type="button" class="ibtn cl-dots" data-act="cl-menu" data-v="${esc(k)}" aria-haspopup="menu" aria-expanded="${D.menu === k}" aria-label="More">⋯</button>${D.menu === k ? `<span class="cl-menu" role="menu">${items}</span>` : ''}</span>`;
+  const row = (c) => `<div class="cl-tirow"><button type="button" class="cl-ti${D.sel === c.id ? ' on' : ''}" data-act="cl-pick" data-id="${esc(c.id)}"${D.sel === c.id ? ' aria-current="true"' : ''}>${esc(c.name)} <small>v${c.ver || 1}</small></button>${menu('c:' + c.id, `<button type="button" role="menuitem" data-act="cl-exp" data-id="${esc(c.id)}">⇩ Export this checklist</button>`)}</div>`;
   const known = new Set(store.checklistTypes.map((t) => t.id));
   const html = groups.map((g) => {
     const cs = store.checklists.filter((c) => (g.id ? c.typeId === g.id : !known.has(c.typeId)));
     if (!g.id && !cs.length) return '';
     const ren = D.typeRen === g.id && g.id;
     const hd = ren ? `<div class="cl-th cl-ren"><input class="in" id="cl-typename" value="${esc(g.name)}" maxlength="80" aria-label="Type name"><button type="button" class="btn sm primary" data-act="cl-type-save" data-id="${esc(g.id)}">Save</button><button type="button" class="btn sm ghost" data-act="cl-type-cancel">Cancel</button></div>`
-      : `<div class="cl-th"><span>${esc(g.name)}</span>${g.id ? `<span class="cl-tact"><button type="button" class="ibtn" data-act="cl-type-ren" data-id="${esc(g.id)}" aria-label="Rename ${esc(g.name)}" title="Rename">✎</button>${cs.length ? '' : `<button type="button" class="ibtn" data-act="cl-type-del" data-id="${esc(g.id)}" aria-label="Delete ${esc(g.name)}" title="Delete (it’s empty)">✕</button>`}<button type="button" class="ibtn" data-act="cl-new" data-id="${esc(g.id)}" aria-label="New checklist in ${esc(g.name)}" title="New checklist here">＋</button></span>` : ''}</div>`;
+      : `<div class="cl-th"><span>${esc(g.name)}</span>${g.id ? `<span class="cl-tact"><button type="button" class="ibtn" data-act="cl-type-ren" data-id="${esc(g.id)}" aria-label="Rename ${esc(g.name)}" title="Rename">✎</button>${cs.length ? '' : `<button type="button" class="ibtn" data-act="cl-type-del" data-id="${esc(g.id)}" aria-label="Delete ${esc(g.name)}" title="Delete (it’s empty)">✕</button>`}<button type="button" class="ibtn" data-act="cl-new" data-id="${esc(g.id)}" aria-label="New checklist in ${esc(g.name)}" title="New checklist here">＋</button>${menu('t:' + g.id, `${cs.length ? `<button type="button" role="menuitem" data-act="cl-exp" data-type="${esc(g.id)}">⇩ Export the whole type</button>` : ''}<button type="button" role="menuitem" data-act="cl-imp" data-type="${esc(g.id)}">⇧ Import into this type…</button>`)}</span>` : ''}</div>`;
     return `<div class="cl-tg">${hd}${cs.map(row).join('') || '<p class="help cl-none">No checklists yet.</p>'}</div>`;
   }).join('');
   const add = D.typeNew != null ? `<div class="cl-th cl-ren"><input class="in" id="cl-typename" value="${esc(D.typeNew)}" maxlength="80" placeholder="e.g. Safety inspections" aria-label="New type name"><button type="button" class="btn sm primary" data-act="cl-type-save">Add</button><button type="button" class="btn sm ghost" data-act="cl-type-cancel">Cancel</button></div>` : '';
@@ -210,8 +214,16 @@ export async function onClick(a, el) {
   if (!a.startsWith('cl-')) return false;
   S();
   if (a !== 'cl-del') D.confirm = null;
+  if (a !== 'cl-menu') D.menu = null;
   switch (a) {
-    case 'cl-tab': D.tab = el.dataset.v; D.issues = []; renderMain(); return true;
+    case 'cl-menu': D.menu = D.menu === el.dataset.v ? null : el.dataset.v; renderMain(); return true;
+    case 'cl-tpl': await downloadTemplate(); return true;
+    case 'cl-exp': await exportFile(el.dataset.id ? store.checklists.filter((c) => c.id === el.dataset.id) : store.checklists.filter((c) => c.typeId === el.dataset.type)); renderMain(); return true;
+    case 'cl-imp': if (isDirty()) { toast('Save or discard your changes first.'); renderMain(); return true; } D.imp = { intoType: el.dataset.type || '', plan: null, choice: {}, err: '', busy: false, fileName: '' }; renderMain(); setTimeout(() => document.getElementById('cl-impfile')?.focus(), 0); return true;
+    case 'cl-imp-cancel': D.imp = null; renderMain(); return true;
+    case 'cl-imp-again': D.imp = { ...D.imp, plan: null, err: '', fileName: '' }; renderMain(); return true;
+    case 'cl-imp-go': await applyImport(); return true;
+    case 'cl-tab': D.tab = el.dataset.v; D.issues = []; D.imp = null; renderMain(); return true;
     case 'cl-pick': if (D.cl?.dirty && D.cl.id !== el.dataset.id) { toast('You have unsaved changes. Save or discard them first.'); return true; } pick(el.dataset.id); go({ name: 'checklists', clId: el.dataset.id }, true); renderMain(); return true;
     case 'cl-new': { if (D.cl?.dirty) { toast('Save or discard your changes first.'); return true; } const id = 'cl' + uid(); D.sel = id; D.issues = []; D.cl = { id, name: '', typeId: el.dataset.id || '', passAt: 80, items: [blankItem()], ver: 0, isNew: true, dirty: true }; renderMain(); focusLater('.cl-name'); return true; }
     case 'cl-discard': pick(D.cl.id); renderMain(); return true;
@@ -300,3 +312,130 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); saveType(D.typeRen || ''); }
   else if (e.key === 'Escape') { e.preventDefault(); D.typeNew = null; D.typeRen = null; renderMain(); }
 });
+
+/* ---------- import and export (checklistio.js) ---------- */
+
+function saveFile(bytes, name) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name.replace(/[\\/:*?"<>|]+/g, ' ');
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+async function downloadTemplate() {
+  try { saveFile(await writeXlsx(templateSheets()), 'Checklists template.xlsx'); toast('Downloaded the checklists template, with an example to copy.'); }
+  catch (e) { console.error(e); toast('The template couldn’t be made. Try again.'); }
+}
+async function exportFile(list) {
+  if (!list.length) { toast('Nothing to export yet.'); return; }
+  const types = store.checklistTypes, name = list.length === 1 ? list[0].name : (types.find((t) => t.id === list[0].typeId)?.name || 'Checklists');
+  try { saveFile(await writeXlsx(exportSheets({ checklists: list, types, sets: store.answerSets })), `${name} checklist${list.length === 1 ? '' : 's'}.xlsx`); toast(`Downloaded ${list.length === 1 ? `“${list[0].name}”` : `${list.length} checklists`}. Change it in Excel and import it back to update.`); }
+  catch (e) { console.error(e); toast('The export couldn’t be made. Try again.'); }
+}
+async function readImportFile(file) {
+  if (!file || !D?.imp) return;
+  D.imp.err = ''; D.imp.reading = true; renderMain();
+  try {
+    if (file.size > 25 * 1024 * 1024) throw new Error('This file is over 25 MB. Split it into smaller files.');
+    const sheets = await readSheets(new Uint8Array(await file.arrayBuffer()), file.name);
+    const plan = planImport(sheets, { types: store.checklistTypes, sets: store.answerSets, checklists: store.checklists }, { intoType: D.imp.intoType, uid });
+    if (plan.error) throw new Error(plan.error);
+    D.imp.plan = plan; D.imp.fileName = file.name; D.imp.choice = {};
+  } catch (e) { if (!/^[A-Z]/.test(e?.message || '')) console.error(e); D.imp.err = e?.message && /^[A-Z]/.test(e.message) ? e.message : 'This file couldn’t be read. Use an .xlsx or .csv file.'; }
+  D.imp.reading = false; renderMain();
+}
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+function importView() {
+  const m = D.imp, into = m.intoType && store.checklistTypes.find((t) => t.id === m.intoType);
+  const title = `<h2 class="cl-imph">Import checklists${into ? ` into “${esc(into.name)}”` : ''}</h2>`;
+  if (!m.plan) {
+    return `<div class="panel cl-imp">${title}
+      <p class="help">An Excel (.xlsx) or CSV file: one row per item on a <b>Checklists</b> sheet, and any new answer sets on an <b>Answer sets</b> sheet. ${into ? 'The Type column can be left empty: everything goes into this type.' : ''} <button type="button" class="linkbtn" data-act="cl-tpl">Download the template</button> to see the layout, or export a checklist to change it.</p>
+      <label class="cl-drop" id="cl-drop"><span><b>Drop the file here</b> or</span><span class="btn sm">Browse…<input type="file" id="cl-impfile" accept=".xlsx,.xlsm,.csv,text/csv" hidden></span>${m.reading ? '<span class="help">Reading…</span>' : ''}</label>
+      ${m.err ? `<p class="err" role="alert">${esc(m.err)}</p>` : ''}
+      <div class="cl-foot"><span class="cl-grow"></span><button type="button" class="btn ghost" data-act="cl-imp-cancel">Cancel</button></div></div>`;
+  }
+  const p = m.plan, ch = (k, d) => m.choice[k] || d;
+  const useCl = p.checklists.filter((c) => ch(c.key, 'update') !== 'skip');
+  const typesUsed = new Set(useCl.map((c) => c.typeKey));
+  const newTypes = p.types.filter((t) => t.status === 'new' && typesUsed.has(t.key));
+  const sel = (k, opts, d) => `<select class="in cl-impch" data-clic="${esc(k)}" aria-label="What to do">${opts.map(([v, l]) => `<option value="${v}"${ch(k, d) === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+  const chip = (st) => `<span class="cl-st ${st}">${{ new: 'New', update: 'Update', same: 'Same', changed: 'Changed', newtype: 'New type' }[st]}</span>`;
+  const items = (c) => c.items.filter((x) => x.kind === 'item').length;
+  const rows = [
+    ...p.checklists.map((c) => {
+      const t = p.types.find((x) => x.key === c.typeKey);
+      const live = store.checklists.find((x) => x.id === c.existingId);
+      const what = c.status === 'update' ? (ch(c.key, 'update') === 'update' ? `becomes v${(live?.ver || c.existingVer) + 1}` : ch(c.key, 'update') === 'copy' ? 'a copy' : 'left as it is') : '';
+      return `<div class="cl-impli">${chip(c.status === 'new' && t?.status === 'new' ? 'newtype' : c.status)}<b class="cl-grow">${esc(c.typeName)} › ${esc(c.name)}</b><span class="help">${plural(items(c), 'item')}${c.passAt != null ? ` · pass at ${c.passAt}%` : ''}${what ? ' · ' + what : ''}</span>${c.status === 'update' ? sel(c.key, [['update', 'Update it'], ['copy', 'Add a copy'], ['skip', 'Skip']], 'update') : ''}</div>`;
+    }),
+    ...p.sets.filter((s) => s.status !== 'bad').map((s) => `<div class="cl-impli">${chip(s.status)}<b class="cl-grow">Answer set: ${esc(s.name)}</b><span class="help">${s.status === 'same' ? 'already here, unchanged' : plural(s.options.length, 'answer') + (s.status === 'changed' ? ': different from yours' : '')}</span>${s.status === 'changed' ? sel(s.key, [['update', 'Update mine'], ['keep', 'Keep mine'], ['copy', 'Add a copy']], 'update') : ''}</div>`),
+  ].join('');
+  const nSets = p.sets.filter((s) => s.status === 'new' || (s.status === 'changed' && ch(s.key, 'update') !== 'keep')).length;
+  const probs = p.problems.length ? `<div class="cl-impprob" role="status"><b>${plural(p.problems.length, 'thing')} to know</b> (rows with a problem are left out; fix the file and import again, or import the rest):<ul>${p.problems.slice(0, 30).map((x) => `<li>${esc(x.sheet)} row ${x.row}: ${esc(x.msg)}</li>`).join('')}${p.problems.length > 30 ? `<li>…and ${p.problems.length - 30} more.</li>` : ''}</ul></div>` : '';
+  return `<div class="panel cl-imp">${title}<p class="help">${esc(m.fileName)} · nothing changes until you press Import. <button type="button" class="linkbtn" data-act="cl-imp-again">Pick another file</button></p>
+    <div class="cl-impsum"><div><b>${p.types.length}</b><small>type${p.types.length === 1 ? '' : 's'}${newTypes.length ? ` (${newTypes.length} new)` : ''}</small></div><div><b>${p.checklists.length}</b><small>checklist${p.checklists.length === 1 ? '' : 's'} (${p.checklists.filter((c) => c.status === 'new').length} new, ${p.checklists.filter((c) => c.status === 'update').length} already here)</small></div><div><b>${nSets}</b><small>answer set${nSets === 1 ? '' : 's'} added or changed</small></div><div><b>${p.checklists.reduce((t, c) => t + items(c), 0)}</b><small>items</small></div></div>
+    <div class="cl-impls">${rows || '<p class="help">Nothing to import from this file.</p>'}</div>${probs}
+    <div class="cl-foot"><span class="cl-grow"></span><button type="button" class="btn ghost" data-act="cl-imp-cancel"${m.busy ? ' disabled' : ''}>Cancel</button><button type="button" class="btn primary" data-act="cl-imp-go"${m.busy || (!useCl.length && !nSets) ? ' disabled' : ''}>${m.busy ? 'Importing…' : useCl.length ? `Import ${plural(useCl.length, 'checklist')}` : `Import ${plural(nSets, 'answer set')}`}</button></div></div>`;
+}
+
+async function applyImport() {
+  const m = D.imp; if (!m?.plan || m.busy) return;
+  const p = m.plan, ch = (k) => m.choice[k] || 'update';
+  const exSets = store.answerSets, remap = {}, setsOut = [], keep = new Set();
+  p.sets.forEach((s) => {
+    if (s.status === 'bad' || s.status === 'same') return;
+    const data = cleanSet(s);
+    if (s.status === 'new') setsOut.push({ id: s.id, data });
+    else if (ch(s.key) === 'update') setsOut.push({ id: s.id, data: { ...data, name: exSets.find((x) => x.id === s.id)?.name || data.name } });
+    else if (ch(s.key) === 'copy') { const id = 'as' + uid(); remap[s.id] = id; setsOut.push({ id, data: { ...data, name: copyName(data.name, exSets.map((x) => x.name)) } }); }
+    else keep.add(s.id);
+  });
+  const setMap = new Map([...exSets.map((s) => [s.id, s]), ...setsOut.map((s) => [s.id, { id: s.id, ...s.data }])]);
+  const todo = p.checklists.filter((c) => ch(c.key) !== 'skip');
+  const typesUsed = new Set(todo.map((c) => c.typeKey));
+  const newTypes = p.types.filter((t) => t.status === 'new' && typesUsed.has(t.key));
+  const out = todo.map((c) => {
+    const items = c.items.map((x) => {
+      if (x.kind !== 'item') return x;
+      const y = { ...x, set: remap[x.set] || x.set };
+      if (y.showIf) { const src = c.items.find((z) => z.id === y.showIf.item); const opts = (setMap.get(remap[src?.set] || src?.set)?.options || []).map((o) => o.id); y.showIf = { ...y.showIf, any: y.showIf.any.filter((id) => opts.includes(id)) }; if (!y.showIf.any.length) y.showIf = null; }
+      return y;
+    });
+    const live = c.status === 'update' && ch(c.key) === 'update' ? store.checklists.find((x) => x.id === c.existingId) : null;
+    const id = live ? live.id : 'cl' + uid(), ver = (live?.ver || 0) + 1;
+    const name = c.status === 'update' && ch(c.key) === 'copy' ? copyName(c.name, store.checklists.filter((x) => x.typeId === c.typeId).map((x) => x.name)) : c.name;
+    const base = { name, typeId: c.typeId, passAt: c.passAt, items: cleanItems(items) };
+    return { id, data: { ...base, ver, snap: snapshotOf(base, setMap, ver), createdAt: live?.createdAt || Date.now() } };
+  });
+  // checklists already here that use an answer set this changes: their next version, as editing the set does
+  const changed = setsOut.map((s) => s.id).filter((id) => exSets.some((x) => x.id === id));
+  const doneIds = new Set(out.map((o) => o.id));
+  const rever = store.checklists.filter((c) => !doneIds.has(c.id) && changed.some((id) => usesSet(c, id))).map((c) => {
+    const ver = (c.ver || 0) + 1, base = { name: c.name, typeId: c.typeId || '', passAt: c.passAt ?? null, items: c.items };
+    return { id: c.id, data: { ...base, ver, snap: snapshotOf(base, setMap, ver), createdAt: c.createdAt || Date.now() } };
+  });
+  m.busy = true; renderMain();
+  try {
+    let order = store.checklistTypes.length;
+    for (const t of newTypes) await saveChecklistType(t.id, t.name, order++);
+    if (setsOut.length || rever.length) await saveAnswerSets(setsOut, rever);
+    for (const o of out) await saveChecklist(o.id, o.data);
+    const nNew = out.filter((o) => o.data.ver === 1).length, nUp = out.length - nNew;
+    toast([out.length ? `Imported ${plural(out.length, 'checklist')}${nUp ? ` (${nUp} updated to a new version)` : ''}` : '', newTypes.length ? plural(newTypes.length, 'new type') : '', setsOut.length ? plural(setsOut.length, 'answer set') + ' added or changed' : '', rever.length ? `${plural(rever.length, 'other checklist')} updated for the changed answers` : ''].filter(Boolean).join(', ') + '.', { duration: 7000 });
+    D.imp = null; D.tab = 'checklists';
+    if (out[0]) { D.sel = out[0].id; D.cl = { id: out[0].id, name: out[0].data.name, typeId: out[0].data.typeId, passAt: out[0].data.passAt ?? '', items: JSON.parse(JSON.stringify(out[0].data.items)), ver: out[0].data.ver, isNew: false, dirty: false }; D.issues = []; }
+  } catch (e) { console.error(e); m.busy = false; toast(e?.code === 'permission-denied' ? 'Only administrators can import checklists. (If you are one, deploy the latest Cadence rules.)' : 'The import stopped partway: check your connection, then import the same file again (what came in is updated, not doubled).', { duration: 9000 }); }
+  renderMain();
+}
+
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.id === 'cl-impfile') { readImportFile(t.files && t.files[0]); return; }
+  if (t.dataset && t.dataset.clic && D?.imp) { D.imp.choice[t.dataset.clic] = t.value; renderMain(); document.querySelector(`[data-clic="${CSS.escape(t.dataset.clic)}"]`)?.focus(); }
+});
+document.addEventListener('dragover', (e) => { const d = e.target.closest && e.target.closest('#cl-drop'); if (!d) return; e.preventDefault(); d.classList.add('over'); });
+document.addEventListener('dragleave', (e) => { const d = e.target.closest && e.target.closest('#cl-drop'); if (d) d.classList.remove('over'); });
+document.addEventListener('drop', (e) => { const d = e.target.closest && e.target.closest('#cl-drop'); if (!d) return; e.preventDefault(); d.classList.remove('over'); readImportFile(e.dataTransfer?.files?.[0]); });
+document.addEventListener('click', (e) => { if (D?.menu && !(e.target.closest && e.target.closest('.cl-menuw'))) { D.menu = null; renderMain(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && D?.menu) { D.menu = null; renderMain(); } });
