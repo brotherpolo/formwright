@@ -8,6 +8,7 @@
 // Only records the person may change can move. Saving goes through lists.js (applySet), which
 // checks the form's rules first, like setting a field on several records.
 
+import { paintClass } from './colorlogic.js';
 import { esc } from './ui.js';
 import {
   LAYOUTS, ZOOMS, boardChoices, sumChoices, dateChoices, colorChoices, boardColumns, targetsOf, keyOf, colSum,
@@ -64,9 +65,10 @@ export function boardHTML(form, rows, cfg, env) {
     const vals = (r?.cells || []).map((c, i) => ({ c, key: env.cols[i]?.key })).filter((x) => x.c.text && !skip.has(x.key)).slice(0, 3);
     const sumV = sumF ? env.H.valOf(sumF, rec, form) : null;
     const extra = env.cardExtra ? env.cardExtra(rec, form) : '';
-    return `<div class="bd-card${canMove ? ' can-move' : ''}" data-rec="${esc(rec.id)}" role="listitem">
-      <button type="button" class="bd-open" data-act="open-record" data-id="${esc(rec.id)}">${esc(r?.title || 'Untitled')}</button>
-      ${vals.length ? `<dl class="bd-vals">${vals.map((x) => `<div><dt>${esc(env.cols.find((c) => c.key === x.key)?.label || '')}</dt><dd>${esc(x.c.text)}</dd></div>`).join('')}</dl>` : ''}
+    const p = r?.paint, pc = (key) => (p && p.cells[key] ? ` class="cr-cell ${paintClass(p.cells[key])}"` : ''); // colour rules (colorlogic.js)
+    return `<div class="bd-card${canMove ? ' can-move' : ''}${p?.row ? ' cr-row ' + paintClass(p.row) : ''}" data-rec="${esc(rec.id)}" role="listitem">
+      <button type="button" class="bd-open${p?.cells.title ? ' cr-cell ' + paintClass(p.cells.title) : ''}" data-act="open-record" data-id="${esc(rec.id)}">${esc(r?.title || 'Untitled')}</button>
+      ${vals.length ? `<dl class="bd-vals">${vals.map((x) => `<div><dt>${esc(env.cols.find((c) => c.key === x.key)?.label || '')}</dt><dd${pc(x.key)}>${esc(x.c.text)}</dd></div>`).join('')}</dl>` : ''}
       ${sumV != null && sumV !== '' ? `<b class="bd-sum">${esc(env.H.fmt(sumF, sumV))}</b>` : ''}${extra}
       ${canMove ? `<button type="button" class="ibtn bd-more" data-ll="menu" data-v="${esc(rec.id)}" aria-haspopup="menu" aria-expanded="${LL.menu === rec.id}" aria-label="Move ${esc(r?.title || '')} to another column">${ICON.more}</button>` : ''}
       ${LL.menu === rec.id ? menuHTML(form, l.by, rec, cols) : ''}

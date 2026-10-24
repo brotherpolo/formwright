@@ -11,12 +11,14 @@
 //   sort     { key, dir: 'asc' | 'desc' }  key is 'title' or a column key
 //   filters  { <fieldId>: [option, …] }    choice fields only; a record matches any ticked option
 //   density  'cozy' | 'compact'
+//   colors   colour rules for rows and cells (colorlogic.js); [] for none
 
 import { cleanLayout } from './layoutlogic.js';
 import { shownName } from './fieldnames.js';
 import { richBlocks, cellRichHTML } from './richtext.js';
 import { titleFieldOf } from './reportlogic.js';
 import { isReadOnly } from './fixedlogic.js';
+import { cleanColors, colorsDoc } from './colorlogic.js';
 
 export const NOCOL = new Set(['heading', 'instructions', 'signature']);
 export const NUMERIC = new Set(['number', 'decimal', 'currency', 'percent', 'range', 'rating']);
@@ -82,11 +84,11 @@ export function defaultConfig(ctx) {
     .filter((f) => f.inList && !NOCOL.has(f.type) && f.id !== titleField?.id)
     .slice(0, 5)
     .forEach((f) => cols.push('f:' + f.id));
-  return { cols, sort: { key: 'sys:updated', dir: 'desc' }, filters: {}, density: 'cozy', layout: cleanLayout({ kind: 'table' }, form) };
+  return { cols, sort: { key: 'sys:updated', dir: 'desc' }, filters: {}, density: 'cozy', layout: cleanLayout({ kind: 'table' }, form), colors: [] };
 }
 
 /** A config with anything that no longer exists on the form taken out. */
-export function cleanConfig(cfg, catalog, form) {
+export function cleanConfig(cfg, catalog, form, colorFieldList = null) {
   const keys = new Set(catalog.map((c) => c.key));
   const seen = new Set();
   const cols = (Array.isArray(cfg?.cols) ? cfg.cols : []).filter((k) => typeof k === 'string' && keys.has(k) && !seen.has(k) && seen.add(k)).slice(0, MAX_COLS);
@@ -100,12 +102,12 @@ export function cleanConfig(cfg, catalog, form) {
     const keep = vals.filter((v) => opts.has(v));
     if (keep.length) filters[fid] = keep;
   });
-  return { cols, sort, filters, density: DENSITIES.has(cfg?.density) ? cfg.density : 'cozy', layout: cleanLayout(cfg?.layout, form) };
+  return { cols, sort, filters, density: DENSITIES.has(cfg?.density) ? cfg.density : 'cozy', layout: cleanLayout(cfg?.layout, form), colors: cleanColors(cfg?.colors, colorFieldList, new Set(['title', ...keys])) };
 }
 
 export function sameConfig(a, b) {
   const lay = (l) => (!l || l.kind === 'table' ? { kind: 'table' } : l); // a table doesn't care how its board or timeline was set
-  const norm = (c) => JSON.stringify({ cols: c.cols, sort: c.sort, filters: Object.keys(c.filters).sort().map((k) => [k, [...c.filters[k]].sort()]), density: c.density, layout: lay(c.layout) });
+  const norm = (c) => JSON.stringify({ cols: c.cols, sort: c.sort, filters: Object.keys(c.filters).sort().map((k) => [k, [...c.filters[k]].sort()]), density: c.density, layout: lay(c.layout), colors: c.colors || [] });
   return norm(a) === norm(b);
 }
 
@@ -257,7 +259,7 @@ export function columnTotal(col, rows, idx) {
 
 /** The saved fields of a view document, as a config. */
 export function configOfDoc(d) {
-  return { cols: d.cols || [], sort: d.sort || { key: 'sys:updated', dir: 'desc' }, filters: d.filters || {}, density: d.density || 'cozy', layout: d.layout || { kind: 'table' } };
+  return { cols: d.cols || [], sort: d.sort || { key: 'sys:updated', dir: 'desc' }, filters: d.filters || {}, density: d.density || 'cozy', layout: d.layout || { kind: 'table' }, colors: Array.isArray(d.colors) ? d.colors : [] };
 }
 
 /**
@@ -305,6 +307,7 @@ export function viewDoc({ formId, name, ownerId, shared, cfg, createdAt, now }) 
     sort: { key: cfg.sort.key, dir: cfg.sort.dir },
     filters: JSON.parse(JSON.stringify(cfg.filters || {})),
     density: cfg.density,
+    ...(cfg.colors && cfg.colors.length ? { colors: colorsDoc(cfg.colors) } : {}), // colour rules (colorlogic.js)
     // a Board or Timeline view keeps how it's set (a table view saves as before)
     ...(cfg.layout && cfg.layout.kind && cfg.layout.kind !== 'table' ? { layout: { kind: cfg.layout.kind, by: cfg.layout.by || '', sum: cfg.layout.sum || '', start: cfg.layout.start || '', end: cfg.layout.end || '', color: cfg.layout.color || '', zoom: cfg.layout.zoom || 'month' } } : {}),
     createdAt: createdAt || now,

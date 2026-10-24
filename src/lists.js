@@ -5,7 +5,8 @@ import './lists.css';
 import { watchRecTemplates, recTemplatesOf, renameRecTemplate, deleteRecTemplate } from './store.js';
 import { templateMeta } from './templatelogic.js';
 import { store, saveListView, deleteListView, deleteRecords, setRecordsValue, setRecordsValues, setValuesEach, attachRecords, setOwner, moveStage } from './store.js';
-import { wfOn, stagesOf, stageById, stageIndex, stageName, canWork, assigneeFor, movesOf, missingToMove } from './workflow.js';
+import { wfOn, stagesOf, stageById, stageIndex, stageName, canWork, assigneeFor, movesOf, missingToMove, STAGE_FIELD, withStageField } from './workflow.js';
+import { TINTS, MAX_COLOR_RULES, MAX_COLOR_CONDS, colorFields, colorOps, colorOp, colorFires, paintOf, paintClass } from './colorlogic.js';
 import { bindLayouts, layoutSeg, layoutTools, boardHTML, timelineHTML, afterLayout, onClick as llClick, onChange as llChange, onKey as llKey, closeMenus as llClose } from './listlayouts.js';
 import { cleanLayout } from './layoutlogic.js';
 import { openPickParent } from './attach.js';
@@ -46,7 +47,8 @@ function ctxFor(form) {
   c.catalog = columnCatalog(c);
   c.byKey = new Map(c.catalog.map((x) => [x.key, x]));
   c.base = defaultConfig(c);
-  c.views = viewsFor(form, store.listViews, me(), c.base).map((v) => ({ ...v, cfg: cleanConfig(v.cfg, c.catalog, form) }));
+  c.colorFields = colorFields(form, H.formById, wfOn(form) ? withStageField(form).fields.find((x) => x.id === STAGE_FIELD) : null);
+  c.views = viewsFor(form, store.listViews, me(), c.base).map((v) => ({ ...v, cfg: cleanConfig(v.cfg, c.catalog, form, c.colorFields) }));
   return c;
 }
 
@@ -90,7 +92,7 @@ function sync(c) {
     if (sameConfig(LV.cfg, LV.base)) LV.cfg = structuredClone(v.cfg);
     LV.base = structuredClone(v.cfg);
   }
-  LV.cfg = cleanConfig(LV.cfg, c.catalog, form);
+  LV.cfg = cleanConfig(LV.cfg, c.catalog, form, c.colorFields);
   return v || views[0];
 }
 
@@ -117,6 +119,8 @@ export function viewRecords(form) {
   const sk = cfg.sort.key, si = shown.findIndex((x) => x.key === sk);
   rows.forEach((r) => { r.sortVal = sk === 'title' ? cellOf('title', r.rec, h).sort : si >= 0 ? r.cells[si].sort : cellOf(sk, r.rec, h).sort; });
   rows = sortRows(rows, cfg.sort.dir);
+  // colour rules (colorlogic.js): what each row and cell gets
+  if ((cfg.colors || []).length) { const look = lookFor(form, c.colorFields), today = todayKey(); rows.forEach((r) => { r.paint = paintOf(cfg.colors, look(r.rec), today); }); }
 
   // selection: drop anything that no longer exists
   const live = new Map(all.map((r) => [r.id, r]));
@@ -158,6 +162,7 @@ export function viewRecords(form) {
       ${sortChip(c, shown, cfg)}
       ${LV.sheet ? '' : `<span class="ph-hide lv-tool">${filterable.length ? filterTool(filterable, all, cfg) : ''}</span>
       <span class="ph-hide lv-tool">${columnsTool(c, shown)}</span>
+      ${lay !== 'timeline' ? `<span class="ph-hide lv-tool">${colorsTool(c, cfg, all, admin)}</span>` : ''}
       ${lay === 'table' ? densitySeg(cfg, 'ph-hide') : ''}`}
       <span class="lv-count ph-hide">${rows.length} of ${all.length}</span>
     </div>
@@ -234,7 +239,7 @@ function sheetHTML(form, c, shown, cfg, filterable, all, view, admin, dirty = fa
   return `<div class="lv-sheetbg" data-lv="sheet-bg"><div class="lv-sheet" role="dialog" aria-modal="true" aria-labelledby="lv-sheet-h">
     <span class="lv-grab" aria-hidden="true"></span>
     <div class="lv-sheet-h"><b id="lv-sheet-h">List options</b><button type="button" class="ibtn" data-lv="sheet-close" aria-label="Close">✕</button></div>
-    <div class="lv-sheet-row">${filterable.length ? filterTool(filterable, all, cfg) : ''}${columnsTool(c, shown)}</div>
+    <div class="lv-sheet-row">${filterable.length ? filterTool(filterable, all, cfg) : ''}${columnsTool(c, shown)}${(cfg.layout?.kind || 'table') !== 'timeline' ? colorsTool(c, cfg, all, admin) : ''}</div>
     <div class="lv-sheet-sec"><span class="lv-sheet-l">Sort</span>${sortTool(c, shown, cfg)}</div>
     <div class="lv-sheet-sec"><span class="lv-sheet-l">Row height</span>${densitySeg(cfg)}</div>
     ${items.length ? `<div class="lv-sheet-sec"><span class="lv-sheet-l">This view</span>${items.join('')}</div>` : ''}
@@ -275,6 +280,119 @@ function columnsTool(c, shown) {
       <div class="lv-popfoot"><button class="btn ghost" type="button" data-lv="cols-reset">Reset columns</button><button class="btn" type="button" data-lv="pop-close">Done</button></div></div>`;
   }
   return `<div class="lv-anchor"><button class="btn${open ? ' on' : ''}" type="button" data-lv="pop" data-v="cols" aria-expanded="${open}">${ICON.cols}Columns<span class="lv-n">${shown.length + 1}</span></button>${pop}</div>`;
+}
+
+/* ---------- ◐ Colours: colour rules for rows and cells (colorlogic.js) ---------- */
+
+/** look(rec)(fieldId) → { f, v } for colour rules: what the list shows (lookups, rollups, calculations, Stage). */
+function lookFor(form, fields) {
+  const by = new Map((fields || []).map((x) => [x.id, x]));
+  const src = new Map((form.fields || []).map((f) => [f.id, f]));
+  return (rec) => (fid) => {
+    const x = by.get(fid); if (!x) return null;
+    if (fid === STAGE_FIELD) return { f: x.f, v: stageName(form, rec) };
+    const f = src.get(fid); if (!f) return null;
+    return { f: x.f, v: f.type === 'autonumber' ? rec.nums?.[fid] : H.valOf(f, rec, form) };
+  };
+}
+const ICON_COLORS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>';
+const crDone = (r) => (r.color || r.bold) && r.conds.some((x) => x.field && x.op);
+
+function crValue(x, cd, at) {
+  const o = colorOp(x.f, cd.op);
+  if (!o || !o.value) return '';
+  const v = cd.value, opts = x.f.options || [];
+  switch (o.value) {
+    case 'one': return `<select class="in cr-v" ${at} data-k="value" aria-label="Value"><option value="">Pick…</option>${opts.map((op) => `<option${op === v ? ' selected' : ''}>${esc(op)}</option>`).join('')}${v && !opts.includes(v) ? `<option selected>${esc(v)}</option>` : ''}</select>`;
+    case 'many': { const have = Array.isArray(v) ? v : []; return `<span class="cr-many" role="group" aria-label="Values">${opts.map((op) => `<label class="rl-chk"><input type="checkbox" ${at} data-k="many" value="${esc(op)}"${have.includes(op) ? ' checked' : ''}><span>${esc(op)}</span></label>`).join('')}</span>`; }
+    case 'num': return `<input class="in cr-v cr-nv" type="number" step="any" inputmode="decimal" ${at} data-k="value" value="${esc(v ?? '')}" aria-label="Number">`;
+    case 'days': return `<input class="in cr-v cr-nv" type="number" min="0" max="3660" step="1" inputmode="numeric" ${at} data-k="value" value="${esc(v ?? '')}" aria-label="Number of days"><span class="cr-w">days</span>`;
+    case 'date': return `<input class="in cr-v" type="date" ${at} data-k="value" value="${esc(v ?? '')}" aria-label="Date">`;
+    case 'time': return `<input class="in cr-v" type="time" ${at} data-k="value" value="${esc(v ?? '')}" aria-label="Time">`;
+    case 'record': { const tf = H.formById(x.f.relForm); const rs = tf ? H.recordsOf(tf.id).map((r) => ({ r, t: H.recTitle(r, tf) })).sort((a, b) => a.t.localeCompare(b.t)).slice(0, 500) : []; return `<select class="in cr-v" ${at} data-k="value" aria-label="Record"><option value="">Pick…</option>${rs.map(({ r, t }) => `<option value="${esc(r.id)}"${r.id === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`; }
+    default: return `<input class="in cr-v" type="text" ${at} data-k="value" value="${esc(v ?? '')}" aria-label="Text" maxlength="200">`;
+  }
+}
+
+function crRule(c, r, i, n, cols, matches) {
+  const ri = `data-i="${i}"`;
+  const conds = r.conds.map((cd, ci) => {
+    const at = `data-lvc="cr" ${ri} data-c="${ci}"`;
+    const x = c.colorFields.find((y) => y.id === cd.field);
+    const fsel = `<select class="in cr-f" ${at} data-k="field" aria-label="Field"><option value="">Pick a field…</option>${c.colorFields.map((y) => `<option value="${esc(y.id)}"${y.id === cd.field ? ' selected' : ''}>${esc(y.label)}</option>`).join('')}</select>`;
+    const osel = x ? `<select class="in cr-op" ${at} data-k="op" aria-label="Comparison">${colorOps(x.f).map((o) => `<option value="${o.key}"${o.key === cd.op ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>` : '';
+    return `<div class="cr-cond"><span class="cr-w">${ci ? 'and' : '<b>When</b>'}</span>${fsel}${osel}${x ? crValue(x, cd, at) : ''}${r.conds.length > 1 ? `<button type="button" class="ibtn cr-x" data-lv="cr" data-do="delc" ${ri} data-c="${ci}" aria-label="Remove this condition">✕</button>` : ''}</div>`;
+  }).join('');
+  const sw = [['', 'No colour'], ...TINTS].map(([k, l]) => `<button type="button" class="cr-dot cr-${k || 'none'}${(r.color || '') === k ? ' on' : ''}" role="radio" aria-checked="${(r.color || '') === k}" aria-label="${l}" title="${l}" data-lv="cr" data-do="color" ${ri} data-v="${k}"></button>`).join('');
+  const known = new Set(cols.map((x) => x.key));
+  const scope = `<select class="in cr-scope" data-lvc="cr" ${ri} data-k="cell" aria-label="What it colours"><option value="">the whole row</option>${cols.map((x) => `<option value="${esc(x.key)}"${r.cell === x.key ? ' selected' : ''}>just the ${esc(x.label)} cell</option>`).join('')}${r.cell && !known.has(r.cell) ? `<option value="${esc(r.cell)}" selected>just the ${esc(c.byKey.get(r.cell)?.label || 'hidden')} cell (column not shown)</option>` : ''}</select>`;
+  const done = crDone(r);
+  return `<div class="cr-rule${done ? '' : ' unfinished'}" data-cr="${i}">
+    <div class="cr-top"><span class="cr-num">${i + 1}</span><span class="cr-moves"><button type="button" class="lv-mv" data-lv="cr" data-do="up" ${ri} aria-label="Move rule ${i + 1} up"${i === 0 ? ' disabled' : ''}>${ICON.up}</button><button type="button" class="lv-mv" data-lv="cr" data-do="down" ${ri} aria-label="Move rule ${i + 1} down"${i === n - 1 ? ' disabled' : ''}>${ICON.down}</button><button type="button" class="lv-mv" data-lv="cr" data-do="delr" ${ri} aria-label="Delete rule ${i + 1}">${ICON.trash}</button></span></div>
+    <div class="cr-conds">${conds}${r.conds.length < MAX_COLOR_CONDS ? `<button type="button" class="btn sm ghost cr-and" data-lv="cr" data-do="addc" ${ri}>+ and</button>` : ''}</div>
+    <div class="cr-how"><span class="cr-sw" role="radiogroup" aria-label="Colour">${sw}</span><label class="cr-bold"><input type="checkbox" data-lvc="cr" ${ri} data-k="bold"${r.bold ? ' checked' : ''}><b>Bold</b></label>${scope}</div>
+    <div class="cr-foot"><span class="cr-prev ${paintClass(r)}">${done ? 'Looks like this' : 'Pick a field and a colour or Bold'}</span>${done ? `<small class="cr-count">${matches.toLocaleString()} ${matches === 1 ? 'record matches' : 'records match'}</small>` : ''}</div>
+  </div>`;
+}
+
+function colorsTool(c, cfg, all, admin) {
+  const open = LV.pop === 'colors', list = cfg.colors || [];
+  const n = list.filter(crDone).length;
+  let pop = '';
+  if (open) {
+    const cols = [{ key: 'title', label: c.titleField?.label || 'Title' }, ...cfg.cols.map((k) => c.byKey.get(k)).filter(Boolean)];
+    const look = lookFor(c.form, c.colorFields), today = todayKey(), looks = all.map((rec) => look(rec));
+    const view = c.views.find((v) => v.id === LV.viewId);
+    pop = `<div class="lv-pop right lv-crpop" role="group" aria-label="Colour rules"><h3>Colour rules</h3>
+      <p class="lv-hint">The first rule that matches a record colours its row; a cell rule colours one cell, on top. ${view?.shared ? (admin ? 'Saving this view applies them for everyone.' : 'Save as a new view to keep them.') : 'Saved with this view.'}</p>
+      ${list.map((r, i) => crRule(c, r, i, list.length, cols, crDone(r) ? looks.filter((lk) => colorFires(r, lk, today)).length : 0)).join('') || `<p class="lv-hint cr-none">No colour rules yet. Add one, like “Due date is before today: red”.</p>`}
+      <div class="lv-popfoot">${list.length < MAX_COLOR_RULES ? '<button class="btn" type="button" data-lv="cr" data-do="add">+ Add a colour rule</button>' : '<span></span>'}<button class="btn" type="button" data-lv="pop-close">Done</button></div></div>`;
+  }
+  return `<div class="lv-anchor"><button class="btn${n ? ' on' : ''}" type="button" data-lv="pop" data-v="colors" aria-expanded="${open}">${ICON_COLORS}Colours${n ? `<span class="lv-n">${n}</span>` : ''}</button>${pop}</div>`;
+}
+
+const crSelOf = (el) => '.lv-crpop ' + ['lv', 'do', 'lvc', 'i', 'c', 'k'].filter((a) => el.dataset[a] != null).map((a) => `[data-${a}="${CSS.escape(el.dataset[a])}"]`).join('') + (el.dataset.v != null ? `[data-v="${CSS.escape(el.dataset.v)}"]` : el.value && el.type === 'checkbox' ? `[value="${CSS.escape(el.value)}"]` : '');
+/** Change the colour rules on screen (Save view keeps them). */
+function crSet(list, focusSel) {
+  LV.cfg = { ...LV.cfg, colors: list }; repaint();
+  if (focusSel) document.querySelector('#lv ' + focusSel)?.focus();
+}
+const crCopy = () => structuredClone(LV.cfg.colors || []);
+function crClick(el) {
+  const list = crCopy(), i = +el.dataset.i, r = list[i], d = el.dataset.do;
+  if (d === 'add') {
+    if (list.length >= MAX_COLOR_RULES) return;
+    list.push({ id: uid('cr'), conds: [{ field: '', op: '', value: '' }], color: 'red', bold: false, cell: '' });
+    return crSet(list, `.lv-crpop [data-i="${list.length - 1}"][data-c="0"][data-k="field"]`);
+  }
+  if (!r) return;
+  if (d === 'delr') { list.splice(i, 1); return crSet(list, '.lv-crpop [data-do="add"]'); }
+  if (d === 'up' || d === 'down') { const j = i + (d === 'up' ? -1 : 1); if (j < 0 || j >= list.length) return; [list[i], list[j]] = [list[j], list[i]]; return crSet(list, `.lv-crpop [data-do="${d}"][data-i="${j}"]:not(:disabled)`); }
+  if (d === 'addc') { if (r.conds.length >= MAX_COLOR_CONDS) return; r.conds.push({ field: '', op: '', value: '' }); return crSet(list, `.lv-crpop [data-i="${i}"][data-c="${r.conds.length - 1}"][data-k="field"]`); }
+  if (d === 'delc') { r.conds.splice(+el.dataset.c, 1); return crSet(list, `.lv-crpop [data-do="addc"][data-i="${i}"]`); }
+  if (d === 'color') { r.color = el.dataset.v || ''; return crSet(list, `.lv-crpop [data-do="color"][data-i="${i}"][data-v="${el.dataset.v || ''}"]`); }
+}
+/** A change in the colour pop. quiet: update without redrawing (a value being typed). */
+function crChange(t, quiet = false) {
+  const form = formNow(); if (!form) return;
+  const list = crCopy(), i = +t.dataset.i, r = list[i], k = t.dataset.k; if (!r) return;
+  const sel = `.lv-crpop [data-i="${i}"]${t.dataset.c != null ? `[data-c="${t.dataset.c}"]` : ''}[data-k="${k}"]`;
+  if (k === 'bold') { r.bold = t.checked; return crSet(list, sel); }
+  if (k === 'cell') { r.cell = t.value; return crSet(list, sel); }
+  const cd = r.conds[+t.dataset.c]; if (!cd) return;
+  const fields = ctxFor(form).colorFields, x = fields.find((y) => y.id === (k === 'field' ? t.value : cd.field));
+  if (k === 'field') { cd.field = t.value; const ops = x ? colorOps(x.f) : []; cd.op = ops[0]?.key || ''; cd.value = ''; return crSet(list, `.lv-crpop [data-i="${i}"][data-c="${t.dataset.c}"][data-k="op"]`); }
+  if (k === 'op') { const was = x && colorOp(x.f, cd.op), now = x && colorOp(x.f, t.value); cd.op = t.value; if (!now || !now.value || (was && was.value !== now.value)) cd.value = now && now.value === 'many' ? [] : ''; return crSet(list, now?.value ? `.lv-crpop [data-i="${i}"][data-c="${t.dataset.c}"][data-k="${now.value === 'many' ? 'many' : 'value'}"]` : sel); }
+  if (k === 'many') { const have = new Set(Array.isArray(cd.value) ? cd.value : []); if (t.checked) have.add(t.value); else have.delete(t.value); cd.value = (x?.f.options || []).filter((o) => have.has(o)); return crSet(list, `.lv-crpop [data-i="${i}"][data-c="${t.dataset.c}"][data-k="many"][value="${CSS.escape(t.value)}"]`); }
+  if (k === 'value') {
+    const o = x && colorOp(x.f, cd.op);
+    cd.value = o && (o.value === 'num' || o.value === 'days') ? (t.value === '' ? '' : Number(t.value)) : t.value;
+    LV.cfg = { ...LV.cfg, colors: list };
+    if (quiet) { LV.crStale = true; return; } // a click in the pop is on its way and will redraw
+    // typed, then Tab or Enter: redraw, and keep focus where it went
+    setTimeout(() => { const ae = document.activeElement; const to = ae && ae !== t && ae.closest && ae.closest('.lv-crpop') ? crSelOf(ae) : sel; crSet(LV.cfg.colors, to); }, 0);
+    return;
+  }
 }
 
 /* ---------- + New ▾: start from a template (templatelogic.js) ---------- */
@@ -381,7 +499,9 @@ function table(form, c, shown, rows, allOn, someOn, cfg) {
     <thead><tr><th class="lv-ck"><label class="lv-cklab"><input type="checkbox" data-lvc="all" aria-label="Select all shown"${allOn ? ' checked' : ''}${someOn ? ' data-mixed="1"' : ''}></label></th>${headCell({ key: 'title' }, titleLabel, cfg)}${shown.map((col) => headCell(col, col.label, cfg)).join('')}</tr></thead>
     <tbody>${rows.map((r) => {
       const sel = LV.sel.has(r.rec.id);
-      return `<tr data-act="open-record" data-id="${r.rec.id}"${sel ? ' class="sel"' : ''}><td class="lv-ck" data-stop><label class="lv-cklab"><input type="checkbox" data-lvc="sel" data-v="${r.rec.id}" aria-label="Select ${esc(r.title)}"${sel ? ' checked' : ''}></label></td><td class="title" title="${esc(r.title)}">${esc(r.title)}</td>${r.cells.map((cell) => `<td${cell.num ? ' class="num"' : cell.rich ? ' class="lv-rich"' : cell.long ? ` class="lv-long" title="${esc(cell.text)}"` : cell.text && cell.text.length > 30 ? ` title="${esc(cell.text)}"` : ''}>${cellHtml(cell)}</td>`).join('')}</tr>`;
+      const p = r.paint, rc = [sel ? 'sel' : '', p?.row ? 'cr-row ' + paintClass(p.row) : ''].filter(Boolean).join(' ');
+      const pc = (key) => (p && p.cells[key] ? ' cr-cell ' + paintClass(p.cells[key]) : '');
+      return `<tr data-act="open-record" data-id="${r.rec.id}"${rc ? ` class="${rc}"` : ''}><td class="lv-ck" data-stop><label class="lv-cklab"><input type="checkbox" data-lvc="sel" data-v="${r.rec.id}" aria-label="Select ${esc(r.title)}"${sel ? ' checked' : ''}></label></td><td class="title${pc('title')}" title="${esc(r.title)}">${esc(r.title)}</td>${r.cells.map((cell, i) => { const cls = (cell.num ? 'num' : cell.rich ? 'lv-rich' : cell.long ? 'lv-long' : '') + pc(shown[i].key); const tip = !cell.num && !cell.rich && (cell.long || (cell.text && cell.text.length > 30)) ? ` title="${esc(cell.text)}"` : ''; return `<td${cls.trim() ? ` class="${cls.trim()}"` : ''}${tip}>${cellHtml(cell)}</td>`; }).join('')}</tr>`;
     }).join('')}</tbody>
     ${showTotals ? `<tfoot><tr><td></td><td>Total</td>${shown.map((col, i) => `<td class="num">${esc(fmtTotal(col, totals[i]))}</td>`).join('')}</tr></tfoot>` : ''}
   </table></div></div>`;
@@ -407,8 +527,9 @@ function cards(form, shown, rows, allOn, count = '', density = 'cozy') {
     <div class="lv-allrow"><label class="lv-sw lv-allcard"><input type="checkbox" data-lvc="all"${allOn ? ' checked' : ''}>Select all</label>${count ? `<span class="lv-ccount">${esc(count)}</span>` : ''}</div>
     ${rows.map((r) => {
       const sel = LV.sel.has(r.rec.id);
-      const meta = shown.map((col, i) => (r.cells[i].rich ? `<span class="lv-richm">${esc(col.label)}:${r.cells[i].rich}</span>` : r.cells[i].text ? `<span${r.cells[i].long ? ' class="lv-long"' : ''}>${esc(col.label)}: ${esc(r.cells[i].text)}</span>` : '')).filter(Boolean).slice(0, 4).join('');
-      return `<div class="lv-card${sel ? ' sel' : ''}"><label class="lv-cklab"><input type="checkbox" data-lvc="sel" data-v="${r.rec.id}" aria-label="Select ${esc(r.title)}"${sel ? ' checked' : ''}></label><button class="card" data-act="open-record" data-id="${r.rec.id}">${compact ? tight(r) : `<b>${esc(r.title)}</b>${meta ? `<div class="meta">${meta}</div>` : ''}`}</button></div>`;
+      const p = r.paint, pc = (key) => (p && p.cells[key] ? 'cr-cell ' + paintClass(p.cells[key]) : '');
+      const meta = shown.map((col, i) => (r.cells[i].rich ? `<span class="lv-richm">${esc(col.label)}:${r.cells[i].rich}</span>` : r.cells[i].text ? `<span class="${[r.cells[i].long ? 'lv-long' : '', pc(col.key)].filter(Boolean).join(' ')}">${esc(col.label)}: ${esc(r.cells[i].text)}</span>` : '')).filter(Boolean).slice(0, 4).join('').replace(/ class=""/g, '');
+      return `<div class="lv-card${sel ? ' sel' : ''}${p?.row ? ' cr-row ' + paintClass(p.row) : ''}"><label class="lv-cklab"><input type="checkbox" data-lvc="sel" data-v="${r.rec.id}" aria-label="Select ${esc(r.title)}"${sel ? ' checked' : ''}></label><button class="card" data-act="open-record" data-id="${r.rec.id}">${compact ? tight(r) : `<b${pc('title') ? ` class="${pc('title')}"` : ''}>${esc(r.title)}</b>${meta ? `<div class="meta">${meta}</div>` : ''}`}</button></div>`;
     }).join('')}
   </div>`;
 }
@@ -836,7 +957,8 @@ document.addEventListener('click', async (e) => {
   }
   if (!inLv) return;
   if (LV.confirmView && !(el && el.dataset.lv === 'view-del')) LV.confirmView = false;
-  if (!el) return;
+  const stale = LV.crStale; LV.crStale = false;
+  if (!el) { if (stale) repaint(); return; }
   const a = el.dataset.lv, v = el.dataset.v;
   if (a === 'del-cancel' && el.classList.contains('lv-scrim') && e.target !== el) return; // clicks inside the dialog
   if (a === 'sheet-bg' && e.target !== el) return; // clicks inside the sheet
@@ -846,6 +968,7 @@ document.addEventListener('click', async (e) => {
     case 'view': pickView(v); break;
     case 'pop': LV.pop = LV.pop === v ? null : v; LV.setF = null; LV.tplRen = null; LV.tplDel = null; repaint(); break;
     case 'pop-close': LV.pop = null; repaint(); break;
+    case 'cr': crClick(el); break;
     case 'density': setCfg({ density: v }); break;
     case 'sortdir': {
       const cur = LV.cfg.sort;
@@ -940,7 +1063,11 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (k === 'newshared' && LV.naming) { LV.naming.shared = t.checked; }
+  if (k === 'cr') crChange(t, LV.crDown && t.dataset.k === 'value' && t.tagName === 'INPUT');
 });
+// colour pop: a press inside it means a click is coming, so a typed value can wait for it
+document.addEventListener('pointerdown', (e) => { LV.crDown = !!(e.target.closest && e.target.closest('.lv-crpop')); }, true);
+document.addEventListener('keydown', () => { LV.crDown = false; }, true);
 
 document.addEventListener('input', (e) => {
   if (e.target.id === 'lv-name' && LV.naming) LV.naming.name = e.target.value;

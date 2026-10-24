@@ -90,6 +90,7 @@ src/
   fixedlogic.js            Default values, Read only fields and Instructions: what's fixed, today/now, stored or not (unit-tested)
   filelist.js              Attachments fields: the list of files, tiles, "3 files", what was added or removed (unit-tested)
   layoutlogic.js           Board and Timeline: columns, moves, spans, the axis (pure, unit-tested)
+  colorlogic.js            Colour rules in lists: comparisons (dates against today), first match wins, saved views (unit-tested)
   listlayouts.js           A form's list as a Board or a Timeline, with dragging
   dash.js, dash.css        Reports and dashboards screens (charts reuse reports.css)
   dashlogic.js             Report types, filters, periods, sharing, moving old reports (pure, unit-tested)
@@ -346,6 +347,16 @@ Each form's list can be set up from the list itself.
 - **Phones:** the list shows cards with tick boxes. The toolbar is compact: **+ New**, a view picker, **⋯**, then search and a **sort chip** (↓ Date ▾: tap the arrow to reverse, ▾ to sort by another field, including Last updated and Created). **⋯** opens a sheet with Filter, Columns, Sort, Row height, the view's actions (rename, share, delete, save changes) and, for administrators, Edit form and Import and templates. When a view has unsaved changes, one line says "Changed from …" with **Reset** and **Save…** (Save… opens the sheet's save choices).
 
 A view only decides how the list looks. It never shows anyone records they couldn't already see.
+
+## Colour rules (a form's list)
+
+**◐ Colours**, next to Filter and Columns (on phones, in the **⋯** sheet), colours records that need attention: "Due date is before today → red", "Stage is Done → green", "Budget more than 100,000 → bold, just the Budget cell".
+
+- Each rule: **When** a field, a comparison and a value, with **+ and** for more conditions (all must match). Comparisons are the same as the form's rules, plus, for dates, **is before today**, **is today**, **is after today**, **is in the next … days** and **was in the last … days**, worked out fresh every day. Lookups and rollups compare as what they show (a count is a number, a looked-up date is a date), and on a workflow form **Stage** can be used too.
+- Then a colour (six soft tints, red, amber, green, blue, purple and grey, with darker versions in dark mode) and/or **Bold**, for **the whole row** or **just one cell** (any column the view shows, or the title). Each rule says how many records it matches, with a preview.
+- **The first rule that matches a record colours its row**, so order matters: the arrows move a rule up or down. Cell rules colour their cell on top of the row's colour.
+- They show on the Table, Board cards and phone cards (not the Timeline, PDFs or exports).
+- They're part of the view, like its columns and filters: changing them shows "Changed from …" with **Save view** and **Save as new view**. Your own views keep your own rules; an administrator saving a shared view (or **All …**) gives everyone its rules. Up to 20 rules per view, 5 conditions per rule. A rule on a field that's since been deleted loses that condition.
 
 ## Starred records
 
