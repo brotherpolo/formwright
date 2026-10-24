@@ -27,6 +27,7 @@ Wayholm Forms (this app, formerly Formwright) and Wayholm Plan (formerly Cadence
 - **Appearance:** Wayholm is the default colour scheme; Indigo (the old colours), Spruce and Sand are still there to pick under Appearance.
 - **Colours:** Granite text (#1E2528), Sand background (#F5F1EA), Lichen for quiet text, each with a dark-mode partner. Pass, fail and overdue colours are unchanged.
 - **Fonts:** Bricolage Grotesque (logo, titles), Instrument Sans (text), JetBrains Mono (numbers).
+- **App switcher:** ⋮⋮ beside the logo in the sidebar (also when it's collapsed), and on phones the stones at the right of the top bar, list **Forms** (here) and **Plan** (opens it). Plan shows for administrators and anyone with **Can use Plan**; for others it says to ask an administrator.
 - **Icons:** app icons in the app's colour with cream stones (`icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `apple-touch-icon.png`, favicon).
 
 ## How permissions work

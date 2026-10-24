@@ -19,6 +19,7 @@ import { runImport, rewriteValues, moveStage, watchStages } from './store.js';
 import { canUseTasks } from './store.js';
 import { store, uploadFile, deleteFormCascade, loadExamples as writeExamples, watchTasks, setTaskDone, saveRecordBundle, recomputeAllAccess, attachRecords } from './store.js';
 import { cadenceUrl } from './firebase.js';
+import { DOTS, toggleApps, closeApps } from './switcher.js';
 import { parseRoute, routeFor, routeOf, parsePath } from './route.js';
 import { effectiveHome, viewStarterHome, applyShared } from './dash.js';
 import { afterDashRender } from './dashanim.js';
@@ -551,7 +552,7 @@ function renderSide(){
   const tip=label=>rail?` title="${esc(label)}" aria-label="${esc(label)}"`:'';
   const navBtn=(act,on,label,glyph,extra='')=>`<button class="nav${on?' on':''}" data-act="${act}"${on?' aria-current="page"':''}${tip(label)}><span class="glyph navg">${glyph}</span><span class="t">${label}</span>${extra}</button>`;
   $('#side').innerHTML=`
-    <div class="brand">${BRAND}<button type="button" class="ibtn side-tog" data-act="side-rail" aria-pressed="${rail}" aria-keyshortcuts="Alt+B" aria-label="${rail?'Expand the sidebar':'Collapse the sidebar'}" title="${rail?'Expand the sidebar':'Collapse the sidebar'} (Alt+B)">${rail?'»':'«'}</button></div>
+    <div class="brand">${BRAND}<button type="button" class="ibtn wh-btn" data-act="apps" aria-haspopup="menu" aria-expanded="false" aria-label="Wayholm apps" title="Wayholm apps">${DOTS}</button><button type="button" class="ibtn side-tog" data-act="side-rail" aria-pressed="${rail}" aria-keyshortcuts="Alt+B" aria-label="${rail?'Expand the sidebar':'Collapse the sidebar'}" title="${rail?'Expand the sidebar':'Collapse the sidebar'} (Alt+B)">${rail?'»':'«'}</button></div>
     ${rail?`<button type="button" class="nav nav-find" data-act="palette"${tip('Search everything (Ctrl K)')}><span class="glyph navg"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></span><span class="t">Search</span></button>`:''}
     <div class="fsearch">
       <svg class="fs-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
@@ -2669,6 +2670,7 @@ document.addEventListener('click',async e=>{
   if(ui.recMore&&a!=='rec-more'&&a!=='del-record')ui.recMore=false;
   switch(a){
     case 'menu':$('#side').classList.add('open');$('#scrim').classList.add('open');break;
+    case 'apps':toggleApps(el,store.me,cadenceUrl);break;
     case 'close-menu':closeMenu();break;
     case 'fs-open':{ui.fq='';ui.fi=0;ui.fsOpen=false;if(document.activeElement?.id==='fs-q')document.activeElement.blur();const f=formById(id);if(!f)break;if(canCreate(store.me,id))goRec(newRecordDraft(f,null),{name:'record',formId:id,recordId:null});else go({name:'records',formId:id});break;}
     case 'nav-form':ui.fq='';ui.fi=0;ui.fsOpen=false;if(document.activeElement?.id==='fs-q')document.activeElement.blur();go({name:'records',formId:id});break;
