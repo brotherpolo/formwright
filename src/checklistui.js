@@ -85,7 +85,7 @@ function taskRows(x, scope, fid, edit) {
     return `<button type="button" class="cl-tk${t.done ? ' done' : ''}" data-clr="task-open" ${at} data-t="${esc(t.id)}"><span class="cl-tkc" aria-hidden="true"></span><span class="cl-tkt">${esc(t.title)}</span>${t._held ? '<span class="cl-onsave" title="Goes to Plan when you save">on save</span>' : ''}<small>${esc([who, when].filter(Boolean).join(' · '))}</small></button>`;
   }).join('');
   const can = !ts.off && !(ts.held && !edit);
-  const btn = can ? `<button type="button" class="btn sm cl-tadd" data-clr="task-add" ${at}${ts.loading || scope === 'preview' ? ' disabled' : ''}>＋ Add a task${x.onFail.task === 'req' && edit && !list.length ? ' (required)' : ''}</button>` : '';
+  const btn = can ? `<button type="button" class="btn sm cl-taskadd" data-clr="task-add" ${at}${ts.loading || scope === 'preview' ? ' disabled' : ''}>＋ Add a task${x.onFail.task === 'req' && edit && !list.length ? ' (required)' : ''}</button>` : '';
   return rows || btn ? `${rows ? `<div class="cl-tks">${rows}</div>` : ''}${btn}` : '';
 }
 const tasksBox = (x, scope, fid, edit) => `<div class="cl-tasks" id="cltk-${scope}-${esc(fid)}-${esc(x.id)}" data-scope="${scope}" data-clf="${esc(fid)}" data-item="${esc(x.id)}">${taskRows(x, scope, fid, edit)}</div>`;
@@ -108,7 +108,7 @@ function itemHTML(x, v, scope, fid, errs, edit, upNames) {
         ${x.onFail.photo ? `<div class="cl-phs">${ph.map((p, i) => photoTile(p, i, at, true)).join('')}${(upNames || []).map((n) => `<span class="cl-ph up" title="${esc(n)}"><span class="cl-ph0">…</span></span>`).join('')}${ph.length < 10 ? `<label class="btn sm cl-addph">+ Photo${x.onFail.photo === 'req' ? ' (required)' : ''}<input type="file" accept="image/*" capture="environment" data-clr="photo" ${at} hidden></label>` : ''}</div>` : ''}${x.onFail.task ? tasksBox(x, scope, fid, true) : ''}</div>`;
     } else {
       const tk = x.onFail.task ? tasksBox(x, scope, fid, false) : '';
-      if (note || ph.length || /cl-t(k|add)/.test(tk)) extra = `<div class="cl-fail">${note ? `<p class="cl-notev">${esc(note)}</p>` : ''}${ph.length ? `<div class="cl-phs">${ph.map((p, i) => photoTile(p, i, at, false)).join('')}</div>` : ''}${tk}</div>`;
+      if (note || ph.length || /cl-t(k|askadd)/.test(tk)) extra = `<div class="cl-fail">${note ? `<p class="cl-notev">${esc(note)}</p>` : ''}${ph.length ? `<div class="cl-phs">${ph.map((p, i) => photoTile(p, i, at, false)).join('')}</div>` : ''}${tk}</div>`;
     }
   }
   return `<div class="cl-q${fail ? ' fail' : ''}${err ? ' bad' : ''}${edit ? '' : ' rd'}" id="clq-${scope}-${esc(fid)}-${esc(x.id)}">

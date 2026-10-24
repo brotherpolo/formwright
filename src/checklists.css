@@ -430,7 +430,7 @@
 .cl-tk.done .cl-tkt{text-decoration:line-through;color:var(--muted)}
 .cl-tkt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cl-tk small{margin-left:auto;color:var(--muted);white-space:nowrap;padding-left:6px}
-.cl-tadd{border-style:dashed}
+.cl-taskadd{border-style:dashed}
 .cl-tnote{margin:0}
 .cl-fhelp{margin:6px 0 0;font-size:12px}
 .cl-onsave,.tk-onsave,.tt-onsave{flex:none;font-size:11px;font-weight:700;letter-spacing:.02em;border-radius:999px;padding:1px 7px;background:var(--accent-soft);color:var(--accent);vertical-align:middle}
