@@ -94,6 +94,7 @@ export const store = {
   pendingSends: [], // admins: scheduled automations waiting for an OK (approve first)
   mentions: [], // My work → Mentions: comments where someone @mentioned you, newest first
   checklists: [], answerSets: [], checklistTypes: [], checklistsReady: false, // Settings › Checklists (checklistlogic.js)
+  checklistQuestions: [], checklistCats: [], // the question pool and its categories (poollogic.js)
   clVersions: {}, // checklistVersions/{id}@{ver} loaded so far (older versions records were filled in on)
   recordsLoading: new Set(),
   onChange: () => {},
@@ -194,8 +195,8 @@ export function startData(user) {
   // roles: everyone with access reads their names (a workflow stage or a stage history line names them)
   const onRoles = (docs) => { store.roles = docs.map((d) => ({ ...d.data(), id: d.id })).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))); changed(); };
   // Checklists: the library everyone fills in from (older rules: none, quietly)
-  const clReady = { checklists: false, answerSets: false, checklistTypes: false };
-  ['checklists', 'answerSets', 'checklistTypes'].forEach((col) => {
+  const clReady = { checklists: false, answerSets: false, checklistTypes: false, checklistQuestions: false, checklistCats: false };
+  ['checklists', 'answerSets', 'checklistTypes', 'checklistQuestions', 'checklistCats'].forEach((col) => {
     const on = (docs) => { store[col] = docs.map((d) => ({ ...d.data(), id: d.id })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.name || '').localeCompare(String(b.name || ''))); clReady[col] = true; store.checklistsReady = Object.values(clReady).every(Boolean); changed(); };
     memberParts.push({ start: () => onSnapshot(collection(db, col), (s) => on(s.docs), (err) => { console.warn('[formwright] ' + col, err?.code || err); on([]); }), empty: () => on([]) });
   });
@@ -264,7 +265,7 @@ export function stopData() {
   if (assignedSub) { assignedSub(); assignedSub = null; }
   roleSubs.forEach((u) => u()); roleSubs.clear(); roleRecs.clear();
   assigned = [];
-  Object.assign(store, { checklists: [], answerSets: [], checklistTypes: [], checklistsReady: false, clVersions: {} });
+  Object.assign(store, { checklists: [], answerSets: [], checklistTypes: [], checklistQuestions: [], checklistCats: [], checklistsReady: false, clVersions: {} });
   Object.assign(store, { ready: false, user: null, me: null, forms: [], records: [], profiles: {}, groups: [], users: [], reports: [], reportsReady: false, listViews: [], listViewsReady: false, imports: [], reportDefs: [], dashboards: [], dashReady: false, homeDefault: '', homeDefaultReady: false, mentions: [], problems: [], problemNotify: [], backup: null, starred: [] });
   store.recordsLoading.clear();
 }
@@ -494,6 +495,22 @@ export async function saveChecklist(id, data) {
   b.set(doc(db, 'checklists', id), plain({ ...data, ...stamp() }));
   b.set(doc(db, 'checklistVersions', id + '@' + data.ver), plain({ clId: id, ver: data.ver, snap: data.snap, ...stamp() }));
   await b.commit();
+}
+/**
+ * Pool work in one go: questions and categories saved or deleted, and checklists saved as their next
+ * versions (each with its copy in checklistVersions). [{ id, data }] lists; dels: [ids].
+ */
+export async function savePoolWork({ questions = [], cats = [], checklists = [], delQuestions = [], delCats = [] }) {
+  const ops = [];
+  cats.forEach((x) => ops.push((b) => b.set(doc(db, 'checklistCats', x.id), plain({ ...x.data, ...stamp() }))));
+  questions.forEach((x) => ops.push((b) => b.set(doc(db, 'checklistQuestions', x.id), plain({ ...x.data, ...stamp() }))));
+  checklists.forEach((c) => {
+    ops.push((b) => b.set(doc(db, 'checklists', c.id), plain({ ...c.data, ...stamp() })));
+    ops.push((b) => b.set(doc(db, 'checklistVersions', c.id + '@' + c.data.ver), plain({ clId: c.id, ver: c.data.ver, snap: c.data.snap, ...stamp() })));
+  });
+  delQuestions.forEach((id) => ops.push((b) => b.delete(doc(db, 'checklistQuestions', id))));
+  delCats.forEach((id) => ops.push((b) => b.delete(doc(db, 'checklistCats', id))));
+  for (let i = 0; i < ops.length; i += 400) { const b = writeBatch(db); ops.slice(i, i + 400).forEach((f) => f(b)); await b.commit(); }
 }
 export async function deleteChecklist(id) { await deleteDoc(doc(db, 'checklists', id)); }
 /** A checklist as it was at version ver: the current one, one loaded already, or loaded now (then store.onChange). */

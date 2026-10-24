@@ -18,9 +18,9 @@ const head = (rows) => [COLS, ...rows];
 test('export: one row per item, the answer sets it uses, a guide', () => {
   const sh = exportSheets(existing);
   assert.deepEqual(sh.map((s) => s.name), ['Checklists', 'Answer sets', 'How to fill this in']);
-  assert.deepEqual(sh[0].rows[1], ['Safety inspections', 'Daily site walk', 80, 'Access', 'Walkways clear', 'Pass / Fail / N/A', 'Yes', '', 'comment required, photo', 'Stairs', '']);
-  assert.equal(sh[0].rows[2][10], 'Walkways clear = Fail');
-  assert.equal(sh[0].rows[2][5], 'Date');
+  assert.deepEqual(sh[0].rows[1], ['Safety inspections', 'Daily site walk', 80, 'Access', 'Walkways clear', '', 'Pass / Fail / N/A', 'Yes', '', 'comment required, photo', 'Stairs', '']);
+  assert.equal(sh[0].rows[2][11], 'Walkways clear = Fail');
+  assert.equal(sh[0].rows[2][6], 'Date');
   assert.equal(sh[1].rows.length, 4, 'Pass / Fail / N/A: three answers');
   assert.deepEqual(sh[1].rows[3], ['Pass / Fail / N/A', 'N/A', '', '']);
 });
@@ -59,12 +59,12 @@ test('the template reads back: new types, new answer sets, nothing to fix', () =
 
 test('problems point to the row, and those rows are left out', () => {
   const plan = planImport([{ name: 'Checklists', rows: head([
-    ['Safety inspections', 'Walk', 'lots', '', 'Q1', 'Pass / Fail / N/A', 'yes', '', '', '', ''],
-    ['Safety inspections', 'Walk', '', '', 'Q2', 'Yes / Maybe', '', '', '', '', ''],
-    ['Safety inspections', 'Walk', '', '', '', 'Text', '', '', '', '', ''],
-    ['Safety inspections', 'Walk', '', '', 'Q3', 'Text', '', 'Yes', 'comment', '', 'Q9 = Fail'],
-    ['Safety inspections', 'Walk', '', '', 'Q4', 'Text', '', '', '', '', 'Q1 = Maybe'],
-    ['', '', '', '', '', '', '', '', '', '', ''],
+    ['Safety inspections', 'Walk', 'lots', '', 'Q1', '', 'Pass / Fail / N/A', 'yes', '', '', '', ''],
+    ['Safety inspections', 'Walk', '', '', 'Q2', '', 'Yes / Maybe', '', '', '', '', ''],
+    ['Safety inspections', 'Walk', '', '', '', '', 'Text', '', '', '', '', ''],
+    ['Safety inspections', 'Walk', '', '', 'Q3', '', 'Text', '', 'Yes', 'comment', '', 'Q9 = Fail'],
+    ['Safety inspections', 'Walk', '', '', 'Q4', '', 'Text', '', '', '', '', 'Q1 = Maybe'],
+    ['', '', '', '', '', '', '', '', '', '', '', ''],
   ]) }], existing, { uid });
   const rows = plan.problems.map((p) => p.row);
   assert.deepEqual(rows, [2, 3, 4, 5, 5, 6]);
@@ -86,4 +86,25 @@ test('into one type: the Type column can be left out; a changed answer set is no
   assert.match(planImport([{ name: 'X', rows: [['Checklist', 'Question']] }], existing, { uid }).error, /Type column/);
   assert.match(planImport([{ name: 'X', rows: [['Nothing']] }], existing, { uid }).error, /no Checklists sheet/);
   assert.equal(copyName('Daily site walk', ['Daily site walk', 'Daily site walk (2)']), 'Daily site walk (3)');
+});
+
+test('the question pool: rows link to pool questions by wording and answers; categories by name', () => {
+  const ex = { ...existing, questions: [{ id: 'q9', label: 'Walkways clear', help: '', set: 'as_pfn', onFail: { comment: '', photo: '' }, catId: 'k1' }], cats: [{ id: 'k1', name: 'Housekeeping' }] };
+  const plan = planImport([{ name: 'Checklists', rows: [
+    ['Type', 'Checklist', 'Question', 'Category', 'Answers'],
+    ['Safety inspections', 'New walk', 'walkways clear', 'Anything', 'Pass / Fail / N/A'],
+    ['Safety inspections', 'New walk', 'Ladder footed', 'Height', 'Pass / Fail / N/A'],
+    ['Safety inspections', 'Other walk', 'Ladder footed', 'Height', 'Pass / Fail / N/A'],
+    ['Safety inspections', 'Other walk', 'Ladder footed', '', 'Pass / Fail / N/A'],
+  ] }], ex, { uid });
+  const [a, b] = plan.checklists;
+  assert.equal(a.items[0].id, 'q9', 'linked to the pool, not copied');
+  assert.equal(a.items[1].id, b.items[0].id, 'the same new question in two checklists of the file is one question');
+  assert.deepEqual(plan.questions.map((q) => q.id), [a.items[1].id]);
+  assert.deepEqual(plan.cats.map((c) => c.name), ['Height'], 'a new category for the new question (the pool question keeps its own)');
+  assert.equal(plan.questions[0].catId, plan.cats[0].id);
+  assert.equal(plan.linked, 1);
+  assert.match(plan.problems[0].msg, /twice/);
+  const sh = exportSheets({ ...ex, checklists: [{ id: 'c', name: 'New walk', typeId: 't1', items: [{ id: 'q9', kind: 'item', label: 'Walkways clear', set: 'as_pfn' }] }] });
+  assert.equal(sh[0].rows[1][5], 'Housekeeping', 'export writes the category');
 });

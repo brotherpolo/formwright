@@ -2,18 +2,19 @@
 // on the Checklists sheet; new answer sets on the Answer sets sheet. Export writes the same layout,
 // so a checklist can go out to Excel and come back. Pure functions (no DOM, no Firebase).
 //
-//   Checklists:  Type | Checklist | Pass at | Section | Question | Answers | Required | Critical | On fail | Help | Show only if
+//   Checklists:  Type | Checklist | Pass at | Section | Question | Category | Answers | Required | Critical | On fail | Help | Show only if
 //   Answer sets: Answer set | Answer | Score | Fail
 //
 //   Answers       an answer set's name, or Text, Date, Decimal, Percent
 //   On fail       "comment", "comment required", "photo", "photo required", or both: "comment required, photo"
 //   Show only if  "<an earlier question> = Fail" (several answers: "= Fail, N/A")
 import { BUILT_IN, isBuiltIn, cleanSet, setIssues, checklistIssues, MAX_ITEMS, MAX_OPTIONS } from './checklistlogic.js';
+import { poolMatch } from './poollogic.js';
 
-export const COLS = ['Type', 'Checklist', 'Pass at', 'Section', 'Question', 'Answers', 'Required', 'Critical', 'On fail', 'Help', 'Show only if'];
+export const COLS = ['Type', 'Checklist', 'Pass at', 'Section', 'Question', 'Category', 'Answers', 'Required', 'Critical', 'On fail', 'Help', 'Show only if'];
 export const SET_COLS = ['Answer set', 'Answer', 'Score', 'Fail'];
 export const MAX_ROWS = 5000;
-const KEYS = ['type', 'checklist', 'passAt', 'section', 'question', 'answers', 'required', 'critical', 'onFail', 'help', 'showIf'];
+const KEYS = ['type', 'checklist', 'passAt', 'section', 'question', 'category', 'answers', 'required', 'critical', 'onFail', 'help', 'showIf'];
 const SET_KEYS = ['set', 'answer', 'score', 'fail'];
 
 const txt = (v) => (v == null ? '' : String(v)).replace(/\s+/g, ' ').trim();
@@ -28,7 +29,8 @@ const onFailText = (o) => [o?.comment ? 'comment' + (o.comment === 'req' ? ' req
 const head = (cols) => cols.map((c) => ({ v: c, s: 'head' }));
 
 /** The workbook for these checklists: [{ name, rows, cols, freeze }] for xlsx.js writeXlsx. */
-export function exportSheets({ checklists, types, sets }) {
+export function exportSheets({ checklists, types, sets, questions = [], cats = [] }) {
+  const catName = new Map(questions.map((q) => [q.id, (cats.find((c) => c.id === q.catId) || {}).name || '']));
   const typeName = new Map((types || []).map((t) => [t.id, t.name]));
   const setById = new Map((sets || []).map((s) => [s.id, s]));
   const used = new Set();
@@ -41,14 +43,14 @@ export function exportSheets({ checklists, types, sets }) {
       const s = setById.get(x.set);
       if (s) used.add(s.id);
       const showIf = x.showIf && labels.get(x.showIf.item) ? `${labels.get(x.showIf.item)} = ${(x.showIf.any || []).map((id) => (setById.get((c.items.find((y) => y.id === x.showIf.item) || {}).set)?.options || []).find((o) => o.id === id)?.label).filter(Boolean).join(', ')}` : '';
-      rows.push([typeName.get(c.typeId) || '', c.name, first && c.passAt != null ? c.passAt : '', sec, x.label, isBuiltIn(x.set) ? BUILT_IN.find((b) => b[0] === x.set)[1] : s ? s.name : '', x.required ? 'Yes' : '', x.critical ? 'Yes' : '', onFailText(x.onFail), x.help || '', showIf]);
+      rows.push([typeName.get(c.typeId) || '', c.name, first && c.passAt != null ? c.passAt : '', sec, x.label, catName.get(x.id) || '', isBuiltIn(x.set) ? BUILT_IN.find((b) => b[0] === x.set)[1] : s ? s.name : '', x.required ? 'Yes' : '', x.critical ? 'Yes' : '', onFailText(x.onFail), x.help || '', showIf]);
       first = false;
     });
   });
   const setRows = [head(SET_COLS)];
   (sets || []).filter((s) => used.has(s.id)).forEach((s) => (s.options || []).forEach((o) => setRows.push([s.name, o.label, o.score ?? '', o.fail ? 'Yes' : ''])));
   return [
-    { name: 'Checklists', rows, freeze: 1, cols: [18, 24, 8, 18, 40, 20, 9, 8, 22, 30, 30].map((width) => ({ width })) },
+    { name: 'Checklists', rows, freeze: 1, cols: [18, 24, 8, 18, 40, 16, 20, 9, 8, 22, 30, 30].map((width) => ({ width })) },
     { name: 'Answer sets', rows: setRows, freeze: 1, cols: [24, 20, 8, 6].map((width) => ({ width })) },
     { name: 'How to fill this in', rows: GUIDE.map((r) => [r[0] ? { v: r[0], s: 'bold' } : '', r[1] || '']), cols: [{ width: 16 }, { width: 100 }] },
   ];
@@ -59,7 +61,8 @@ const GUIDE = [
   ['Checklist', 'The checklist’s name. If that type already has one with this name, you choose: update it (a new version), add a copy, or skip.'],
   ['Pass at', 'A percent from 0 to 100 on any of its rows (the first one counts). Empty: no pass mark.'],
   ['Section', 'A heading. Items with the same section in a row go under it.'],
-  ['Question', 'What to check. Needed on every row.'],
+  ['Question', 'What to check. Needed on every row. A question already in the question pool (the same words and answers) is linked, not copied, so it trends across checklists.'],
+  ['Category', 'The question’s category in the pool, like Fire. A new name makes a new category. (For a question already in the pool, its category there stays.)'],
   ['Answers', 'An answer set by name (one you have, or one on the Answer sets sheet), or Text, Date, Decimal, Percent.'],
   ['Required', 'Yes: it must be answered to save the record.'],
   ['Critical', 'Yes: a fail here fails the whole checklist.'],
@@ -73,11 +76,11 @@ const GUIDE = [
 export function templateSheets() {
   const sheets = exportSheets({ checklists: [], types: [], sets: [] });
   sheets[0].rows.push(
-    ['Safety inspections', 'Daily site walk', 80, 'Access', 'Walkways clear of materials', 'Pass / Fail / N/A', 'Yes', '', 'comment required', 'Stairs, corridors and exits', ''],
-    ['Safety inspections', 'Daily site walk', '', 'Access', 'Fire extinguishers in date', 'Pass / Fail / N/A', 'Yes', 'Yes', 'photo', '', ''],
-    ['Safety inspections', 'Daily site walk', '', 'Access', 'Extinguisher expiry date', 'Date', '', '', '', '', 'Fire extinguishers in date = Fail'],
-    ['Safety inspections', 'Daily site walk', '', 'Working at height', 'Harness condition', 'Condition 1–5', 'Yes', '', '', '', ''],
-    ['Vehicle checks', 'Pre-trip', 90, '', 'Tyres', 'Good / Worn / Replace', 'Yes', '', 'comment', '', ''],
+    ['Safety inspections', 'Daily site walk', 80, 'Access', 'Walkways clear of materials', 'Housekeeping', 'Pass / Fail / N/A', 'Yes', '', 'comment required', 'Stairs, corridors and exits', ''],
+    ['Safety inspections', 'Daily site walk', '', 'Access', 'Fire extinguishers in date', 'Fire', 'Pass / Fail / N/A', 'Yes', 'Yes', 'photo', '', ''],
+    ['Safety inspections', 'Daily site walk', '', 'Access', 'Extinguisher expiry date', 'Fire', 'Date', '', '', '', '', 'Fire extinguishers in date = Fail'],
+    ['Safety inspections', 'Daily site walk', '', 'Working at height', 'Harness condition', 'Working at height', 'Condition 1–5', 'Yes', '', '', '', ''],
+    ['Vehicle checks', 'Pre-trip', 90, '', 'Tyres', 'Vehicles', 'Good / Worn / Replace', 'Yes', '', 'comment', '', ''],
   );
   sheets[1].rows.push(['Pass / Fail / N/A', 'Pass', 1, ''], ['Pass / Fail / N/A', 'Fail', 0, 'Yes'], ['Pass / Fail / N/A', 'N/A', '', ''],
     ['Condition 1–5', '1', 0, 'Yes'], ['Condition 1–5', '2', 1, ''], ['Condition 1–5', '3', 2, ''], ['Condition 1–5', '4', 3, ''], ['Condition 1–5', '5', 4, ''],
@@ -122,6 +125,9 @@ const num = (v) => { const t = txt(v).replace('%', ''); if (t === '') return nul
  *   problems   [{ sheet, row, msg }] (rows with a problem are left out)
  */
 export function planImport(sheets, existing, { intoType = '', uid }) {
+  const exPool = existing.questions || [], exCats = existing.cats || [];
+  const fileQs = new Map(), cats = [], catBy = new Map(); // questions new in this file (by wording + answers), new categories
+  const catOf = (name) => { const t = txt(name); if (!t) return ''; const ex = exCats.find((c) => same(c.name, t)); if (ex) return ex.id; let c = catBy.get(norm(t)); if (!c) { c = { id: 'cc' + uid(), name: t.slice(0, 60), status: 'new' }; catBy.set(norm(t), c); cats.push(c); } return c.id; };
   const { items: sh, sets: ssh } = findSheets(sheets);
   if (!sh) return { error: 'This file has no Checklists sheet: a header row with at least Checklist and Question. Download the template to see the layout.' };
   const problems = [];
@@ -211,8 +217,10 @@ export function planImport(sheets, existing, { intoType = '', uid }) {
     const canFail = !!ans.opts && ans.opts.some((o) => o.fail);
     const onFail = parseOnFail(cell('onFail')), critical = yes(cell('critical'));
     if ((onFail.comment || onFail.photo || critical) && !canFail) problems.push({ sheet: sh.name, row, msg: `Critical and On fail need answers that can fail; “${txt(cell('answers'))}” has none, so they were left out.` });
-    const item = { id: c.exItems.find((x) => x.kind === 'item' && same(x.label, q))?.id || 'i' + uid(), kind: 'item', label: q.slice(0, 300), help: txt(cell('help')).slice(0, 300), set: ans.set, required: yes(cell('required')), critical: canFail && critical, onFail: canFail ? onFail : { comment: '', photo: '' }, showIf: null, _opts: ans.opts };
-    if (c.items.some((x) => x.id === item.id)) item.id = 'i' + uid();
+    const inPool = poolMatch(exPool, q, ans.set), fk = norm(q) + '|' + ans.set;
+    if (!inPool && !fileQs.has(fk)) fileQs.set(fk, { id: c.exItems.find((x) => x.kind === 'item' && same(x.label, q) && x.set === ans.set && !exPool.some((p) => p.id === x.id))?.id || 'i' + uid(), catId: catOf(cell('category')) });
+    const item = { id: inPool ? inPool.id : fileQs.get(fk).id, kind: 'item', label: q.slice(0, 300), help: txt(cell('help')).slice(0, 300), set: ans.set, required: yes(cell('required')), critical: canFail && critical, onFail: canFail ? onFail : { comment: '', photo: '' }, showIf: null, _opts: ans.opts };
+    if (c.items.some((x) => x.id === item.id)) { problems.push({ sheet: sh.name, row, msg: `“${q}” is in “${c.name}” twice; the second was left out.` }); return; }
     const si = txt(cell('showIf'));
     if (si) {
       const m = /^(.*?)\s*(?:=|\bis\b|:)\s*(.+)$/i.exec(si);
@@ -237,7 +245,8 @@ export function planImport(sheets, existing, { intoType = '', uid }) {
     if (iss.length) { c.status = 'bad'; problems.push({ sheet: sh.name, row: c.rows[0] || 1, msg: `${c.name}: ${iss.join(' ')}` }); }
   });
   // answer sets in the file that no imported checklist uses still come in (they're useful on their own)
-  return { sets, types, checklists: cls.filter((c) => c.status !== 'bad'), problems: problems.sort((a, b) => (a.sheet === b.sheet ? a.row - b.row : String(a.sheet).localeCompare(b.sheet))), sheet: sh.name };
+  const questions = [...fileQs.values()].map((f) => ({ id: f.id, catId: f.catId }));
+  return { sets, types, questions, cats: cats.filter((c) => questions.some((q) => q.catId === c.id)), linked: cls.reduce((t, c) => t + c.items.filter((x) => x.kind === 'item' && exPool.some((p) => p.id === x.id)).length, 0), checklists: cls.filter((c) => c.status !== 'bad'), problems: problems.sort((a, b) => (a.sheet === b.sheet ? a.row - b.row : String(a.sheet).localeCompare(b.sheet))), sheet: sh.name };
 }
 
 /** "Daily site walk (2)": a name no checklist in that type has. */
